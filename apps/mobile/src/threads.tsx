@@ -6,9 +6,12 @@ import {
   LogOut,
   MessageCircle,
   Monitor,
+  Pin,
+  PinOff,
   Plus,
   RefreshCw,
   Settings2,
+  Tag,
   Users,
 } from "lucide-react-native";
 import {
@@ -25,7 +28,16 @@ import { BRAND } from "../../../packages/domain/src/brand";
 import type { MuseApi } from "./api";
 import { faNumber } from "./locale";
 import { useSession } from "./session";
-import { Button, colors, ErrorNotice, Field, LinkRow, Sheet, s } from "./ui";
+import {
+  LabelBar,
+  LabelPicker,
+  SearchBox,
+  SearchResults,
+  type ThreadLabel,
+  useThreadLabels,
+  useThreadSearch,
+} from "./thread-organizer";
+import { Button, Chip, colors, ErrorNotice, Field, LinkRow, Sheet, s } from "./ui";
 import { useWorkspace } from "./workspace";
 
 function newThreadId() {
@@ -38,7 +50,14 @@ function newThreadId() {
 export type Selection = { id: string; existing: boolean };
 /** intelligence: CopilotKit Rich Threads; local: OpenMuse database; off: single sample history. */
 export type ThreadBackend = "intelligence" | "local" | "off";
-type ThreadSummary = { id: string; name: string | null; archived: boolean };
+type ThreadSummary = {
+  id: string;
+  name: string | null;
+  archived: boolean;
+  /** Local backend only. */
+  pinned?: boolean;
+  labels?: string[];
+};
 /** The subset of CopilotKit useThreads() that the conversation menu relies on. */
 type ThreadList = {
   threads: ThreadSummary[];
@@ -53,10 +72,19 @@ type ThreadList = {
   renameThread: (id: string, name: string) => Promise<void>;
   archiveThread: (id: string) => Promise<void>;
   unarchiveThread: (id: string) => Promise<void>;
+  /** Pins and labels are stored by the local backend only. */
+  pinThread?: (id: string, pinned: boolean) => Promise<void>;
+  setThreadLabels?: (id: string, labels: string[]) => Promise<void>;
 };
 const asError = (e: unknown) => (e instanceof Error ? e : new Error(String(e)));
+/** Pinned threads first; otherwise keep the server's most-recent-first order. */
+const pinnedFirst = (items: ThreadSummary[]) =>
+  items
+    .map((item, index) => ({ item, index }))
+    .sort((a, b) => Number(!!b.item.pinned) - Number(!!a.item.pinned) || a.index - b.index)
+    .map(({ item }) => item);
 /** Thread menu backed by /api/threads when THREADS_BACKEND=local (no CopilotKit cloud). */
-function useLocalThreads(api: MuseApi, enabled: boolean): ThreadList {
+function useLocalThreads(api: MuseApi, enabled: boolean, label: string | null): ThreadList {
   const [threads, setThreads] = useState<ThreadSummary[]>([]);
   const [cursor, setCursor] = useState<string | null>(null);
   const [isLoading, setLoading] = useState(false);
@@ -67,9 +95,9 @@ function useLocalThreads(api: MuseApi, enabled: boolean): ThreadList {
   const page = useCallback(
     (from?: string | null) =>
       api.request<{ threads: ThreadSummary[]; nextCursor: string | null }>(
-        `/api/threads?includeArchived=true&limit=20${from ? `&cursor=${encodeURIComponent(from)}` : ""}`,
+        `/api/threads?includeArchived=true&limit=20${label ? `&label=${encodeURIComponent(label)}` : ""}${from ? `&cursor=${encodeURIComponent(from)}` : ""}`,
       ),
-    [api],
+    [api, label],
   );
   const refetchThreads = useCallback(() => {
     if (!enabled) return;
@@ -84,7 +112,10 @@ function useLocalThreads(api: MuseApi, enabled: boolean): ThreadList {
       .finally(() => setLoading(false));
   }, [enabled, page]);
   useEffect(refetchThreads, [refetchThreads]);
-  async function patch(id: string, body: { name?: string; archived?: boolean }) {
+  async function patch(
+    id: string,
+    body: { name?: string; archived?: boolean; pinned?: boolean; labels?: string[] },
+  ) {
     setMutating(true);
     try {
       const updated = await api.request<ThreadSummary>(
@@ -92,7 +123,7 @@ function useLocalThreads(api: MuseApi, enabled: boolean): ThreadList {
         body,
         "PATCH",
       );
-      setThreads((items) => items.map((item) => (item.id === id ? updated : item)));
+      setThreads((items) => pinnedFirst(items.map((item) => (item.id === id ? updated : item))));
     } finally {
       setMutating(false);
     }
@@ -124,6 +155,8 @@ function useLocalThreads(api: MuseApi, enabled: boolean): ThreadList {
     renameThread: (id, name) => patch(id, { name }),
     archiveThread: (id) => patch(id, { archived: true }),
     unarchiveThread: (id) => patch(id, { archived: false }),
+    pinThread: (id, pinned) => patch(id, { pinned }),
+    setThreadLabels: (id, labels) => patch(id, { labels }),
   };
 }
 const ThreadContext = createContext<{
@@ -234,12 +267,52 @@ export function ThreadsSheet({ onClose }: { onClose: () => void }) {
     includeArchived: true,
     limit: 20,
   });
-  const localThreads = useLocalThreads(api, backend === "local");
-  const threads: ThreadList = backend === "local" ? localThreads : richThreads;
+  const local = backend === "local";
+  const [labelFilter, setLabelFilter] = useState<string | null>(null);
+  const localThreads = useLocalThreads(api, local, labelFilter);
+  const threads: ThreadList = local ? localThreads : richThreads;
+  const labels = useThreadLabels(api, local);
+  const [query, setQuery] = useState("");
+  const search = useThreadSearch(api, query, local, threads.threads);
   const [editing, setEditing] = useState<string>();
+  const [labeling, setLabeling] = useState<string>();
   const [name, setName] = useState("");
   const [error, setError] = useState("");
   const [archived, setArchived] = useState(false);
+  const visible = threads.threads.filter(
+    (thread) =>
+      thread.id !== mainId &&
+      thread.archived === archived &&
+      (!labelFilter || (thread.labels ?? []).includes(labelFilter)),
+  );
+  const pinned = visible.filter((thread) => thread.pinned);
+  const rest = visible.filter((thread) => !thread.pinned);
+  const renderThread = (thread: ThreadSummary) => (
+    <ThreadRow
+      key={thread.id}
+      thread={thread}
+      threads={threads}
+      labels={labels.labels}
+      selected={selection.id === thread.id}
+      editing={editing === thread.id}
+      labeling={labeling === thread.id}
+      name={name}
+      setName={setName}
+      onOpen={() => {
+        select({ id: thread.id, existing: true });
+        onClose();
+      }}
+      onRename={() => {
+        if (editing === thread.id) void mutate(() => threads.renameThread(thread.id, name.trim()));
+        else {
+          setEditing(thread.id);
+          setName(thread.name || "");
+        }
+      }}
+      onToggleLabels={() => setLabeling(labeling === thread.id ? undefined : thread.id)}
+      mutate={mutate}
+    />
+  );
   async function mutate(action: () => Promise<void>) {
     setError("");
     try {
@@ -261,6 +334,7 @@ export function ThreadsSheet({ onClose }: { onClose: () => void }) {
       drawer
     >
       <View style={{ gap: 14 }}>
+        {enabled && !loading && <SearchBox value={query} onChange={setQuery} />}
         {enabled && loading ? (
           <>
             <ErrorNotice error={mainError} />
@@ -270,6 +344,17 @@ export function ThreadsSheet({ onClose }: { onClose: () => void }) {
               <ActivityIndicator color={colors.blueDark} />
             )}
           </>
+        ) : enabled && search.active ? (
+          <SearchResults
+            query={query}
+            search={search}
+            server={local}
+            mainId={mainId}
+            onOpen={(id) => {
+              select({ id, existing: true });
+              onClose();
+            }}
+          />
         ) : enabled ? (
           <>
             <LinkRow
@@ -297,6 +382,7 @@ export function ThreadsSheet({ onClose }: { onClose: () => void }) {
                 {archived ? "گفت‌وگوهای فعال" : "بایگانی‌شده‌ها"}
               </Button>
             </View>
+            {local && <LabelBar labels={labels} filter={labelFilter} onFilter={setLabelFilter} />}
             {threads.isLoading && <ActivityIndicator color={colors.blueDark} />}
             <ErrorNotice error={error || threads.error?.message} />
             {threads.error && (
@@ -305,6 +391,7 @@ export function ThreadsSheet({ onClose }: { onClose: () => void }) {
               </Button>
             )}
             {!archived &&
+              !labelFilter &&
               visited
                 .filter(
                   (item) =>
@@ -322,81 +409,24 @@ export function ThreadsSheet({ onClose }: { onClose: () => void }) {
                     }}
                   />
                 ))}
-            {threads.threads
-              .filter((thread) => thread.id !== mainId && thread.archived === archived)
-              .map((thread) => (
-                <View
-                  key={thread.id}
-                  style={{
-                    paddingVertical: 12,
-                    borderBottomWidth: 1,
-                    borderBottomColor: colors.line,
-                    gap: 10,
-                  }}
-                >
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel={`باز کردن گفت‌وگو: ${thread.name || "گفت‌وگوی بی‌نام"}`}
-                    accessibilityState={{ selected: selection.id === thread.id }}
-                    onPress={() => {
-                      select({ id: thread.id, existing: true });
-                      onClose();
-                    }}
-                    style={[s.row, { gap: 10 }]}
-                  >
-                    <MessageCircle size={19} color={colors.text} />
-                    <Text
-                      style={[s.text, { flex: 1, textAlign: "auto", writingDirection: "auto" }]}
-                    >
-                      {thread.name || "گفت‌وگوی بی‌نام"}
-                    </Text>
-                  </Pressable>
-                  {editing === thread.id && (
-                    <Field label="نام گفت‌وگو" value={name} onChangeText={setName} />
-                  )}
-                  <View style={[s.row, { gap: 8 }]}>
-                    <Button
-                      small
-                      disabled={threads.isMutating || (editing === thread.id && !name.trim())}
-                      onPress={() => {
-                        if (editing === thread.id)
-                          void mutate(() => threads.renameThread(thread.id, name.trim()));
-                        else {
-                          setEditing(thread.id);
-                          setName(thread.name || "");
-                        }
-                      }}
-                    >
-                      {editing === thread.id ? "ذخیره" : "تغییر نام"}
-                    </Button>
-                    <Button
-                      small
-                      icon={Archive}
-                      disabled={threads.isMutating}
-                      onPress={() =>
-                        void mutate(() =>
-                          thread.archived
-                            ? threads.unarchiveThread(thread.id)
-                            : threads.archiveThread(thread.id),
-                        )
-                      }
-                    >
-                      {thread.archived ? "بازگردانی" : "بایگانی"}
-                    </Button>
-                  </View>
-                </View>
-              ))}
-            {!threads.isLoading &&
-              !threads.error &&
-              !threads.threads.some(
-                (thread) => thread.id !== mainId && thread.archived === archived,
-              ) && (
-                <Text style={s.muted}>
-                  {archived
+            {pinned.length > 0 && (
+              <View style={[s.row, { gap: 6 }]}>
+                <Pin size={14} color={colors.muted} />
+                <Text style={s.label}>سنجاق‌شده</Text>
+              </View>
+            )}
+            {pinned.map(renderThread)}
+            {pinned.length > 0 && rest.length > 0 && <Text style={s.label}>سایر گفت‌وگوها</Text>}
+            {rest.map(renderThread)}
+            {!threads.isLoading && !threads.error && visible.length === 0 && (
+              <Text style={s.muted}>
+                {labelFilter
+                  ? "گفت‌وگویی با این برچسب اینجا نیست. با دکمهٔ «برچسب‌ها» زیر هر گفت‌وگو برچسب بزنید یا «همه» را انتخاب کنید."
+                  : archived
                     ? "گفت‌وگوی بایگانی‌شده‌ای ندارید. گفت‌وگوهای جانبی را با «بایگانی» به اینجا بیاورید."
                     : "هنوز گفت‌وگوی جانبی ندارید. برای موضوعی جداگانه، «گفت‌وگوی جانبی تازه» را بزنید."}
-                </Text>
-              )}
+              </Text>
+            )}
             <ErrorNotice error={threads.fetchMoreError?.message} />
             {threads.hasMoreThreads && (
               <Button small busy={threads.isFetchingMoreThreads} onPress={threads.fetchMoreThreads}>
@@ -474,5 +504,115 @@ export function ThreadsSheet({ onClose }: { onClose: () => void }) {
         </Button>
       </View>
     </Sheet>
+  );
+}
+function ThreadRow({
+  thread,
+  threads,
+  labels,
+  selected,
+  editing,
+  labeling,
+  name,
+  setName,
+  onOpen,
+  onRename,
+  onToggleLabels,
+  mutate,
+}: {
+  thread: ThreadSummary;
+  threads: ThreadList;
+  labels: ThreadLabel[];
+  selected: boolean;
+  editing: boolean;
+  labeling: boolean;
+  name: string;
+  setName: (name: string) => void;
+  onOpen: () => void;
+  onRename: () => void;
+  onToggleLabels: () => void;
+  mutate: (action: () => Promise<void>) => Promise<void>;
+}) {
+  const title = thread.name || "گفت‌وگوی بی‌نام";
+  const own = labels.filter((label) => thread.labels?.includes(label.id));
+  const { pinThread, setThreadLabels } = threads;
+  return (
+    <View
+      style={{
+        paddingVertical: 12,
+        borderBottomWidth: 1,
+        borderBottomColor: colors.line,
+        gap: 10,
+      }}
+    >
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`باز کردن گفت‌وگو: ${title}`}
+        accessibilityState={{ selected }}
+        onPress={onOpen}
+        style={[s.row, { gap: 10 }]}
+      >
+        {thread.pinned ? (
+          <Pin size={19} color={colors.blueDark} />
+        ) : (
+          <MessageCircle size={19} color={colors.text} />
+        )}
+        <Text style={[s.text, { flex: 1, textAlign: "auto", writingDirection: "auto" }]}>
+          {title}
+        </Text>
+      </Pressable>
+      {own.length > 0 && (
+        <View style={[s.row, { gap: 6, flexWrap: "wrap" }]}>
+          {own.map((label) => (
+            <Chip key={label.id} tint={colors.lavender}>
+              {label.name}
+            </Chip>
+          ))}
+        </View>
+      )}
+      {editing && <Field label="نام گفت‌وگو" value={name} onChangeText={setName} />}
+      {labeling && setThreadLabels && (
+        <LabelPicker
+          labels={labels}
+          selected={thread.labels ?? []}
+          disabled={threads.isMutating}
+          onChange={(next) => void mutate(() => setThreadLabels(thread.id, next))}
+        />
+      )}
+      <View style={[s.row, { gap: 8, flexWrap: "wrap" }]}>
+        <Button small disabled={threads.isMutating || (editing && !name.trim())} onPress={onRename}>
+          {editing ? "ذخیره" : "تغییر نام"}
+        </Button>
+        {pinThread && (
+          <Button
+            small
+            icon={thread.pinned ? PinOff : Pin}
+            disabled={threads.isMutating}
+            onPress={() => void mutate(() => pinThread(thread.id, !thread.pinned))}
+          >
+            {thread.pinned ? "برداشتن سنجاق" : "سنجاق"}
+          </Button>
+        )}
+        {setThreadLabels && (
+          <Button small icon={Tag} onPress={onToggleLabels}>
+            {labeling ? "بستن برچسب‌ها" : "برچسب‌ها"}
+          </Button>
+        )}
+        <Button
+          small
+          icon={Archive}
+          disabled={threads.isMutating}
+          onPress={() =>
+            void mutate(() =>
+              thread.archived
+                ? threads.unarchiveThread(thread.id)
+                : threads.archiveThread(thread.id),
+            )
+          }
+        >
+          {thread.archived ? "بازگردانی" : "بایگانی"}
+        </Button>
+      </View>
+    </View>
   );
 }
