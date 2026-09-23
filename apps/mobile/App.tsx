@@ -394,7 +394,7 @@ function WorkspaceShell({
               marginHorizontal: 20,
             }}
           >
-            <View style={{ position: "absolute", start: 0, top: 16 }}>
+            <View style={{ position: "absolute", start: 0, top: 16, zIndex: 1 }}>
               <IconButton
                 icon={Menu}
                 label="باز کردن گفت‌وگوها و منو"
