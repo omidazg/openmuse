@@ -43,6 +43,8 @@ import {
   onUnauthorized,
 } from "./src/api";
 import { ChatScreen, WorkspaceTools } from "./src/chat";
+import { requestComposerFocus } from "./src/composer-keys";
+import { ShortcutsSheet, useWebShortcuts } from "./src/composer-shortcuts";
 import { ComputerEntry } from "./src/computer";
 import { ComputerDraftProvider } from "./src/computer-drafts";
 import { Details } from "./src/details";
@@ -343,8 +345,42 @@ function WorkspaceShell({
     error: threadsError,
     retry: retryThreads,
     enabled: richThreads,
+    start: startThread,
   } = useMuseThread();
   const [threadsOpen, setThreadsOpen] = useState(false);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  // Desktop web: Ctrl/Cmd+K conversations, Ctrl/Cmd+Shift+O new conversation, «?» help.
+  useWebShortcuts(true, (action) => {
+    if (action === "threads") {
+      setShortcutsOpen(false);
+      setThreadsOpen(true);
+      return true;
+    }
+    if (action === "newChat") {
+      setThreadsOpen(false);
+      setShortcutsOpen(false);
+      if (richThreads) startThread();
+      else navigate("chat");
+      setTimeout(requestComposerFocus, 50);
+      return true;
+    }
+    if (action === "escape" && (threadsOpen || shortcutsOpen) && !detail) {
+      // Also closed by the web Modal on keyup; closing here keeps Esc working before it activates.
+      setThreadsOpen(false);
+      setShortcutsOpen(false);
+      return true;
+    }
+    if (action === "help" && !threadsOpen && !detail) {
+      setShortcutsOpen(true);
+      return true;
+    }
+    if (action === "focusInput" && section !== "chat" && !threadsOpen && !detail) {
+      navigate("chat");
+      setTimeout(requestComposerFocus, 50);
+      return true;
+    }
+    return false;
+  });
   const { width } = useWindowDimensions();
   const desktop = width >= 900;
   const pending =
@@ -611,7 +647,16 @@ function WorkspaceShell({
             </View>
           </View>
         )}
-        {threadsOpen && <ThreadsSheet onClose={() => setThreadsOpen(false)} />}
+        {threadsOpen && (
+          <ThreadsSheet
+            onClose={() => setThreadsOpen(false)}
+            onShortcuts={() => {
+              setThreadsOpen(false);
+              setShortcutsOpen(true);
+            }}
+          />
+        )}
+        {shortcutsOpen && <ShortcutsSheet onClose={() => setShortcutsOpen(false)} />}
         {detail && (
           <Details
             key={
