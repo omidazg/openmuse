@@ -37,6 +37,13 @@ x-app-env: &app-env
   BROWSER_WORKER_URL: http://browser-worker:8790
   WORKER_TOKEN: ${WORKER_TOKEN:?Set WORKER_TOKEN to a random secret of at least 32 characters}
   COMPUTER_ENABLED: "false"
+  # Daily limits per non-admin user (0 = unlimited); admins can override per user.
+  DAILY_MESSAGE_LIMIT: ${DAILY_MESSAGE_LIMIT:-200}
+  DAILY_TASK_LIMIT: ${DAILY_TASK_LIMIT:-30}
+  # Optional SMS login (Kavenegar Verify Lookup); off unless both are set.
+  KAVENEGAR_API_KEY: ${KAVENEGAR_API_KEY:-}
+  KAVENEGAR_TEMPLATE: ${KAVENEGAR_TEMPLATE:-}
+  OTP_SIGNUP: ${OTP_SIGNUP:-false}
 
 services:
   postgres:
