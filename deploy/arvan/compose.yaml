@@ -37,6 +37,11 @@ x-app-env: &app-env
   BROWSER_WORKER_URL: http://browser-worker:8790
   WORKER_TOKEN: ${WORKER_TOKEN:?Set WORKER_TOKEN to a random secret of at least 32 characters}
   COMPUTER_ENABLED: "false"
+  # Optional error tracking (Sentry-compatible, e.g. self-hosted GlitchTip). Empty = off.
+  SENTRY_DSN: ${SENTRY_DSN:-}
+  SENTRY_ENVIRONMENT: ${SENTRY_ENVIRONMENT:-production}
+  # deploy.sh exports GIT_SHA so events carry the deployed commit.
+  SENTRY_RELEASE: ${SENTRY_RELEASE:-${GIT_SHA:-}}
 
 services:
   postgres:
@@ -155,6 +160,94 @@ services:
     depends_on:
       - app
 
+  # Daily pg_dump (00:00 UTC = 03:30 Asia/Tehran) + app-data archive; 7 daily and
+  # 4 weekly copies in the `backups` volume, optional upload to ArvanCloud Object Storage.
+  # Manual run: docker compose exec backup /bin/sh /opt/backup/backup.sh once
+  backup:
+    build:
+      context: ./backup
+      args:
+        REGISTRY_MIRROR: ${REGISTRY_MIRROR:-}
+    image: openmuse-backup:latest
+    restart: unless-stopped
+    environment:
+      PGHOST: postgres
+      PGUSER: openmuse
+      PGDATABASE: openmuse
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      HOME: /tmp
+      BACKUP_ENABLED: ${BACKUP_ENABLED:-1}
+      BACKUP_TIME_UTC: ${BACKUP_TIME_UTC:-00:00}
+      BACKUP_KEEP_DAILY: ${BACKUP_KEEP_DAILY:-7}
+      BACKUP_KEEP_WEEKLY: ${BACKUP_KEEP_WEEKLY:-4}
+      BACKUP_WEEKLY_DAY: ${BACKUP_WEEKLY_DAY:-5}
+      BACKUP_APP_DATA: ${BACKUP_APP_DATA:-1}
+      BACKUP_RUN_ON_START: ${BACKUP_RUN_ON_START:-0}
+      BACKUP_S3_ENDPOINT: ${BACKUP_S3_ENDPOINT:-}
+      BACKUP_S3_BUCKET: ${BACKUP_S3_BUCKET:-}
+      BACKUP_S3_ACCESS_KEY: ${BACKUP_S3_ACCESS_KEY:-}
+      BACKUP_S3_SECRET_KEY: ${BACKUP_S3_SECRET_KEY:-}
+      BACKUP_S3_PREFIX: ${BACKUP_S3_PREFIX:-openmuse}
+      BACKUP_S3_RETENTION_DAYS: ${BACKUP_S3_RETENTION_DAYS:-30}
+    volumes:
+      - ./backup/backup.sh:/opt/backup/backup.sh:ro
+      - backups:/backups
+      - app-data:/appdata:ro
+    networks: [backend]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    init: true
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m
+    cap_drop: [ALL]
+    # app-data files belong to the app user (mode 600); reading them needs this one cap.
+    cap_add: [DAC_READ_SEARCH]
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 256m
+
+  # Uptime checks every minute; alerts in Persian via Telegram / Bale / webhook on state
+  # change. Test: docker compose exec monitor sh /opt/monitor/monitor.sh test
+  monitor:
+    image: ${REGISTRY_MIRROR:-}curlimages/curl:${MONITOR_CURL_TAG:-latest}
+    restart: unless-stopped
+    entrypoint: ["/bin/sh", "/opt/monitor/monitor.sh"]
+    command: ["loop"]
+    # root only to read the Docker socket (read-only mount) for container health.
+    user: "0:0"
+    environment:
+      DOMAIN: ${DOMAIN}
+      ALERT_NAME: ${ALERT_NAME:-}
+      ALERT_TELEGRAM_BOT_TOKEN: ${ALERT_TELEGRAM_BOT_TOKEN:-}
+      ALERT_TELEGRAM_CHAT_ID: ${ALERT_TELEGRAM_CHAT_ID:-}
+      ALERT_TELEGRAM_API_URL: ${ALERT_TELEGRAM_API_URL:-}
+      ALERT_BALE_BOT_TOKEN: ${ALERT_BALE_BOT_TOKEN:-}
+      ALERT_BALE_CHAT_ID: ${ALERT_BALE_CHAT_ID:-}
+      ALERT_WEBHOOK_URL: ${ALERT_WEBHOOK_URL:-}
+      MONITOR_INTERVAL: ${MONITOR_INTERVAL:-60}
+      MONITOR_FAIL_THRESHOLD: ${MONITOR_FAIL_THRESHOLD:-2}
+      MONITOR_DISK_ALERT_PCT: ${MONITOR_DISK_ALERT_PCT:-90}
+      MONITOR_CERT_WARN_DAYS: ${MONITOR_CERT_WARN_DAYS:-2}
+      MONITOR_STARTUP_MESSAGE: ${MONITOR_STARTUP_MESSAGE:-1}
+    volumes:
+      - ./monitor/monitor.sh:/opt/monitor/monitor.sh:ro
+      - backups:/backups:ro
+      # Set MONITOR_DOCKER_SOCKET_HOST=/dev/null to skip the container-health check.
+      - ${MONITOR_DOCKER_SOCKET_HOST:-/var/run/docker.sock}:/var/run/docker.sock:ro
+    networks: [backend, frontend]
+    depends_on:
+      - caddy
+    init: true
+    read_only: true
+    tmpfs:
+      - /tmp:size=8m
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 64m
+
 networks:
   frontend:
   # Not `internal`: the API needs outbound access to model providers / Google,
@@ -167,3 +260,4 @@ volumes:
   browser-profiles:
   caddy-data:
   caddy-config:
+  backups:

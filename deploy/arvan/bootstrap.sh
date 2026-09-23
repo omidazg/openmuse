@@ -7,7 +7,8 @@
 #   ssh root@<ip> 'bash -s' < deploy/arvan/bootstrap.sh
 #
 # Installs Docker from the Ubuntu archive, points Docker Hub pulls at ArvanCloud's
-# mirror, enables ufw (22/80/443), clones the fork. It never starts the stack and
+# mirror, enables ufw (22/80/443), clones the fork, installs the weekly Docker cleanup
+# timer (host/install-maintenance.sh). It never starts the stack and
 # contains no secrets: upload .env and start with deploy.sh.
 set -eux
 
@@ -49,6 +50,11 @@ fi
 
 if [ ! -d "$REPO_DIR/.git" ]; then
   git clone --branch "$BRANCH" "$REPO_URL" "$REPO_DIR" || echo "clone failed; deploy.sh will retry" >&2
+fi
+
+# Weekly `docker system prune` + old build cache (deploy.sh re-installs it on every deploy).
+if [ -f "$REPO_DIR/deploy/arvan/host/install-maintenance.sh" ]; then
+  bash "$REPO_DIR/deploy/arvan/host/install-maintenance.sh" || echo "prune timer not installed" >&2
 fi
 
 echo "OpenMuse bootstrap finished"

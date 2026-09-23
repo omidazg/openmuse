@@ -3,8 +3,10 @@ import { BRAND } from "../../../packages/domain/src/brand.ts";
 import { createApp } from "./app.ts";
 import { assertApiDeploymentConfig, readConfig } from "./config.ts";
 import { createStore } from "./db.ts";
+import { installProcessErrorReporting } from "./errors-report.ts";
 import { withStaticWeb } from "./static.ts";
 
+installProcessErrorReporting("api");
 const config = readConfig();
 assertApiDeploymentConfig(config);
 const db = await createStore({
