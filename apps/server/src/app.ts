@@ -115,10 +115,10 @@ export async function createApp(
     if (++loginAttempts > 30)
       throw new AppError("تلاش‌های ورود بیش از حد بوده است. یک دقیقهٔ دیگر دوباره تلاش کنید.", 429);
     const body = z.object({ accessKey: z.string().optional() }).parse(await c.req.json());
-    const session = await auth.session(body.accessKey);
-    await workspace.ensureSample("local-user", actions);
-    await agent.ensure("local-user");
-    if (config.mode === "sample") await agent.refreshIdeas("local-user");
+    const { owner, ...session } = await auth.session(body.accessKey);
+    await workspace.ensureSample(owner, actions);
+    await agent.ensure(owner);
+    if (config.mode === "sample") await agent.refreshIdeas(owner);
     return c.json(session);
   });
   app.get("/api/google/callback", async (c) => {

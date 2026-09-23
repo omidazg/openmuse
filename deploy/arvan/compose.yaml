@@ -18,6 +18,7 @@ x-app-env: &app-env
   ALLOWED_ORIGINS: https://${DOMAIN}
   DATABASE_URL: postgresql://openmuse:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}@postgres:5432/openmuse
   OPENMUSE_ACCESS_KEY: ${OPENMUSE_ACCESS_KEY:?Set OPENMUSE_ACCESS_KEY (24+ characters)}
+  OPENMUSE_USER_KEYS: ${OPENMUSE_USER_KEYS:-}
   TOKEN_ENCRYPTION_KEY: ${TOKEN_ENCRYPTION_KEY:?Set TOKEN_ENCRYPTION_KEY (32 random bytes, base64)}
   # Optional: empty key => THREADS_BACKEND defaults to local (threads stored in Postgres).
   THREADS_BACKEND: ${THREADS_BACKEND:-}

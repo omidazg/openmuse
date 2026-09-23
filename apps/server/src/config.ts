@@ -7,6 +7,36 @@ applyMetisProvider();
 process.env.DO_NOT_TRACK ??= "1";
 process.env.COPILOTKIT_TELEMETRY_DISABLED ??= "true";
 
+export interface UserKey {
+  owner: string;
+  key: string;
+}
+
+/** OPENMUSE_USER_KEYS="ali:key1,sara:key2" → owners user-ali, user-sara. */
+export function parseUserKeys(raw = ""): UserKey[] {
+  const keys = raw
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter(Boolean)
+    .map((entry) => {
+      const at = entry.indexOf(":");
+      const name = entry.slice(0, at).trim();
+      const key = entry.slice(at + 1).trim();
+      if (at < 1 || !/^[a-z0-9_-]{1,32}$/.test(name))
+        throw new Error(
+          "OPENMUSE_USER_KEYS entries must look like name:key (name: a-z, 0-9, _ or -)",
+        );
+      if (key.length < 24)
+        throw new Error(`OPENMUSE_USER_KEYS key for ${name} must be 24+ characters`);
+      return { owner: `user-${name}`, key };
+    });
+  if (new Set(keys.map((k) => k.owner)).size !== keys.length)
+    throw new Error("OPENMUSE_USER_KEYS names must be unique");
+  if (new Set(keys.map((k) => k.key)).size !== keys.length)
+    throw new Error("OPENMUSE_USER_KEYS keys must be unique");
+  return keys;
+}
+
 export interface Config {
   mode: "sample" | "live";
   port: number;
@@ -15,6 +45,8 @@ export interface Config {
   dataDir: string;
   databaseUrl?: string;
   accessKey?: string;
+  /** Extra per-person access keys; each maps to its own isolated workspace owner. */
+  userKeys?: UserKey[];
   encryptionKey?: string;
   model?: string;
   agentBackend: "sample" | "model" | "agui";
@@ -81,6 +113,7 @@ export function readConfig(): Config {
     dataDir: resolve(process.env.DATA_DIR ?? ".openmuse"),
     databaseUrl: process.env.DATABASE_URL,
     accessKey: process.env.OPENMUSE_ACCESS_KEY,
+    userKeys: parseUserKeys(process.env.OPENMUSE_USER_KEYS),
     encryptionKey: process.env.TOKEN_ENCRYPTION_KEY,
     model: process.env.MODEL,
     agentBackend: backend,

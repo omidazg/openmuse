@@ -13,21 +13,30 @@ export class Auth {
     private readonly config: Config,
     private readonly signingKey: string,
   ) {}
+  /** The admin key owns the original workspace; each OPENMUSE_USER_KEYS entry gets its own. */
+  private ownerFor(accessKey?: string): string | undefined {
+    if (this.config.mode !== "live") return "local-user";
+    if (!accessKey) return undefined;
+    const given = digest(accessKey);
+    let owner: string | undefined;
+    // Compare against every key so timing does not reveal which one matched.
+    for (const { owner: candidate, key } of [
+      ...(this.config.accessKey ? [{ owner: "local-user", key: this.config.accessKey }] : []),
+      ...(this.config.userKeys ?? []),
+    ])
+      if (timingSafeEqual(given, digest(key))) owner ??= candidate;
+    return owner;
+  }
   async session(accessKey?: string) {
-    if (
-      this.config.mode === "live" &&
-      (!accessKey ||
-        !this.config.accessKey ||
-        !timingSafeEqual(digest(accessKey), digest(this.config.accessKey)))
-    )
-      throw new AppError("کلید دسترسی نادرست است", 401);
+    const owner = this.ownerFor(accessKey);
+    if (!owner) throw new AppError("کلید دسترسی نادرست است", 401);
     const token = randomBytes(32).toString("base64url");
     await this.db.put("system", "sessions", {
       id: digest(token).toString("hex"),
-      owner: "local-user",
+      owner,
       expiresAt: Date.now() + 24 * 60 * 60 * 1000,
     });
-    return { token, mode: this.config.mode };
+    return { token, mode: this.config.mode, owner };
   }
   async owner(authorization?: string) {
     if (!authorization?.startsWith("Bearer ")) throw new AppError(`وارد ${BRAND.nameFa} شوید`, 401);
