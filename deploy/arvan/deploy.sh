@@ -9,7 +9,8 @@
 #   BRANCH      git branch to deploy (default: fa-arvan)
 #   REPO_URL    git remote (default: https://github.com/omidazg/openmuse.git)
 #   REPO_DIR    checkout on the server (default: /opt/openmuse)
-#   ENV_FILE    local env file to upload (default: deploy/arvan/.env, uploaded only if it exists)
+#   ENV_FILE    local env file to upload (default: deploy/arvan/.env); only when the server has none
+#   FORCE_ENV   1 = overwrite the server's .env with ENV_FILE
 set -euo pipefail
 
 : "${SERVER:?Set SERVER=user@host}"
@@ -26,7 +27,7 @@ echo "==> Preparing $REPO_DIR on $SERVER ($BRANCH)"
 ssh "${SSH_OPTS[@]}" "$SERVER" sudo bash -s -- "$REPO_URL" "$BRANCH" "$REPO_DIR" <<'REMOTE'
 set -euo pipefail
 repo_url="$1"; branch="$2"; dir="$3"
-command -v docker >/dev/null || { echo "Docker is not installed (did cloud-init finish? see /var/log/cloud-init-output.log)" >&2; exit 1; }
+command -v docker >/dev/null || { echo "Docker is not installed (run deploy/arvan/bootstrap.sh on the server first)" >&2; exit 1; }
 if [ ! -d "$dir/.git" ]; then
   git clone --branch "$branch" "$repo_url" "$dir"
 fi
@@ -37,7 +38,9 @@ git merge --ff-only "origin/$branch"
 git log -1 --oneline
 REMOTE
 
-if [ -f "$ENV_FILE" ]; then
+# The server's .env is the source of truth once it exists (keys, domain and model are edited
+# there). Set FORCE_ENV=1 to replace it with the local file.
+if [ -f "$ENV_FILE" ] && { [ "${FORCE_ENV:-0}" = 1 ] || ! ssh "${SSH_OPTS[@]}" "$SERVER" "test -f '$REPO_DIR/deploy/arvan/.env'"; }; then
   echo "==> Uploading $(basename "$ENV_FILE")"
   scp "${SSH_OPTS[@]}" "$ENV_FILE" "$SERVER:/tmp/openmuse.env"
   ssh "${SSH_OPTS[@]}" "$SERVER" "sudo install -m 600 -o root -g root /tmp/openmuse.env '$REPO_DIR/deploy/arvan/.env' && rm -f /tmp/openmuse.env"
