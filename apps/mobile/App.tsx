@@ -8,6 +8,7 @@ import {
   type LucideIcon,
   Menu,
   MessageCircle,
+  Minimize2,
   PanelsTopLeft,
   Shapes,
   SquareCheck,
@@ -46,6 +47,7 @@ import { ChatScreen, WorkspaceTools } from "./src/chat";
 import { ComputerEntry } from "./src/computer";
 import { ComputerDraftProvider } from "./src/computer-drafts";
 import { Details } from "./src/details";
+import { useDisplay } from "./src/display";
 import { Landing } from "./src/landing";
 import { faNumber, fw, useAppFonts } from "./src/locale";
 import { PhoneLogin } from "./src/login";
@@ -387,13 +389,24 @@ function WorkspaceShell({
                   ? GoalsScreen
                   : AppsScreen;
   const utility = ["mail", "calendar", "browser", "files"].includes(section);
+  const { prefs, update } = useDisplay();
+  // Focus mode: in chat, only the messages and the composer remain.
+  const focused = prefs.focus && section === "chat";
   return (
     <>
       <WorkspaceTools />
       <SafeAreaView style={{ flex: 1, backgroundColor: colors.canvas }} edges={["top", "bottom"]}>
         <View style={{ flex: 1, width: "100%", maxWidth: 760, alignSelf: "center" }}>
+          {focused && (
+            <View style={{ alignItems: "flex-end", marginHorizontal: 20, paddingVertical: 8 }}>
+              <Button small icon={Minimize2} onPress={() => update({ focus: false })}>
+                خروج از حالت تمرکز
+              </Button>
+            </View>
+          )}
           <View
             style={{
+              display: focused ? "none" : "flex",
               height: desktop ? 146 : 122,
               paddingTop: desktop ? 14 : 2,
               marginHorizontal: 20,
@@ -514,7 +527,7 @@ function WorkspaceShell({
                 paddingHorizontal: desktop ? 42 : 17,
               }}
             >
-              <AgentStatus />
+              {!focused && <AgentStatus />}
               {richThreads ? (
                 <>
                   <ErrorNotice error={threadsError} />
@@ -548,6 +561,7 @@ function WorkspaceShell({
           </View>
           <View
             style={{
+              display: focused ? "none" : "flex",
               paddingHorizontal: 22,
               paddingTop: 10,
               paddingBottom: desktop ? 22 : 7,

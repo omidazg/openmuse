@@ -39,6 +39,7 @@ import { browserAddress, browserSite } from "./browser-address";
 import { ComputerSheet } from "./computer";
 import DateTimeEditor from "./DateTimeEditor";
 import { localDateTime, zonedInstant } from "./date-time";
+import { DisplaySheet } from "./display-settings";
 import { fileExtent, isPdf } from "./file-kind";
 import { faDate, faDateTime, faNumber, LOCALE, toLatinDigits } from "./locale";
 import PdfReader from "./PdfReader";
@@ -144,6 +145,7 @@ function kilobytes(size: number) {
 export function Details({ detail }: { detail: Detail }) {
   const { close, navigate } = useWorkspace();
   if (detail.type === "computer") return <ComputerSheet />;
+  if (detail.type === "display") return <DisplaySheet />;
   if (detail.type === "task") return <TaskDetail taskId={detail.taskId} />;
   if (detail.type === "delegate") return <DelegateSheet />;
   if (detail.type === "notifications") return <NotificationsSheet />;

@@ -27,6 +27,7 @@ import {
 import { ActivityIndicator, Pressable, Text, View } from "react-native";
 import { BRAND } from "../../../packages/domain/src/brand";
 import type { MuseApi } from "./api";
+import { DisplayMenuRows } from "./display-settings";
 import { faNumber } from "./locale";
 import { usePreferences } from "./preferences";
 import { useSession } from "./session";
@@ -516,6 +517,7 @@ export function ThreadsSheet({ onClose }: { onClose: () => void }) {
             openWhatsNew();
           }}
         />
+        <DisplayMenuRows onClose={onClose} />
         {me?.role === "admin" && (
           <LinkRow
             icon={Users}

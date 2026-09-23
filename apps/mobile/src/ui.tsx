@@ -18,6 +18,8 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { BRAND } from "../../../packages/domain/src/brand";
+import { useDisplay } from "./display";
+import { motionDuration, touchTarget } from "./display-prefs";
 import { FONT, faDate, faNumber, fw } from "./locale";
 import { colors } from "./theme";
 
@@ -134,6 +136,7 @@ export function Button({
   style?: ViewStyle;
 }) {
   const color = danger ? colors.danger : colors.text;
+  const { prefs, reduceMotion } = useDisplay();
   return (
     <Pressable
       accessibilityRole="button"
@@ -144,8 +147,9 @@ export function Button({
         s.button,
         primary ? s.primary : s.secondary,
         small && { minHeight: 38, paddingVertical: 7, paddingHorizontal: 13 },
+        prefs.simple && { minHeight: touchTarget(small ? 38 : 42, prefs) },
         (disabled || busy) && { opacity: 0.5 },
-        pressed && { transform: [{ scale: 0.98 }] },
+        pressed && !reduceMotion && { transform: [{ scale: 0.98 }] },
         style,
       ]}
     >
@@ -167,6 +171,7 @@ export function IconButton({
   label: string;
   onPress: () => void;
 }) {
+  const size = touchTarget(44, useDisplay().prefs);
   return (
     <Pressable
       accessibilityRole="button"
@@ -174,11 +179,11 @@ export function IconButton({
       onPress={onPress}
       style={({ pressed }) => [
         {
-          width: 44,
-          height: 44,
+          width: size,
+          height: size,
           alignItems: "center",
           justifyContent: "center",
-          borderRadius: 22,
+          borderRadius: size / 2,
           backgroundColor: pressed ? colors.line : colors.card,
         },
       ]}
@@ -261,6 +266,7 @@ export function Sheet({
 }) {
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
+  const { reduceMotion } = useDisplay();
   const compact = width < 600;
   if (drawer)
     return (
@@ -269,7 +275,12 @@ export function Sheet({
       </Drawer>
     );
   return (
-    <Modal transparent animationType={compact ? "slide" : "fade"} visible onRequestClose={onClose}>
+    <Modal
+      transparent
+      animationType={reduceMotion ? "none" : compact ? "slide" : "fade"}
+      visible
+      onRequestClose={onClose}
+    >
       <View style={[s.modalShade, compact && { padding: 0, justifyContent: "flex-end" }]}>
         <View
           accessibilityViewIsModal
@@ -332,18 +343,26 @@ function Drawer({
 }) {
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
-  const panelWidth = Math.min(380, Math.round(width * 0.88));
+  const { reduceMotion, scale } = useDisplay();
+  // On web the text scale is a CSS zoom, so the window is `width / scale` CSS pixels wide.
+  const visible = Platform.OS === "web" ? width / scale : width;
+  const panelWidth = Math.min(380, Math.round(visible * 0.88));
   // The app is always RTL, so the start edge is the physical right; transforms are not mirrored.
-  const offset = useRef(new Animated.Value(panelWidth)).current;
+  const offset = useRef(new Animated.Value(reduceMotion ? 0 : panelWidth)).current;
   useEffect(() => {
     Animated.timing(offset, {
       toValue: 0,
-      duration: 220,
+      duration: motionDuration(220, reduceMotion),
       useNativeDriver: Platform.OS !== "web",
     }).start();
   }, [offset]);
   return (
-    <Modal transparent animationType="fade" visible onRequestClose={onClose}>
+    <Modal
+      transparent
+      animationType={reduceMotion ? "none" : "fade"}
+      visible
+      onRequestClose={onClose}
+    >
       <View style={{ flex: 1, flexDirection: "row" }}>
         <Animated.View
           accessibilityViewIsModal
@@ -397,6 +416,7 @@ export function CheckRow({
   return (
     <Pressable
       accessibilityRole="checkbox"
+      accessibilityLabel={label}
       accessibilityState={{ checked }}
       onPress={onPress}
       style={[s.row, { gap: 10, paddingVertical: 9 }]}
