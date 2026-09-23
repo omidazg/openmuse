@@ -16,6 +16,7 @@ import {
   RefreshCw,
   RotateCcw,
   Square,
+  Upload,
   X,
 } from "lucide-react-native";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
@@ -35,6 +36,15 @@ import { useAgentWorkspace } from "./agent-workspace";
 import { friendlyError } from "./api";
 import { BackgroundUpdates } from "./background-updates";
 import { BrowserRunContext, BrowserToolCard } from "./browser-tool-card";
+import {
+  DropOverlay,
+  UploadChips,
+  useComposerUploads,
+  useWebFileDrop,
+  useWebPasteFiles,
+} from "./composer-attach";
+import { isSendKey, type KeyLike, onComposerFocusRequest } from "./composer-keys";
+import { modalOpen, useWebShortcuts } from "./composer-shortcuts";
 import { BrowserThreadCard } from "./computer";
 import { ConversationQueue, type QueuedMessage } from "./conversation-queue";
 import { runConversationTurn } from "./conversation-run";
@@ -220,6 +230,20 @@ export function ChatScreen({
   const [loaded, setLoaded] = useState(false);
   const [picking, setPicking] = useState(false);
   const [attachments, setAttachments] = useState<string[]>([]);
+  const input = useRef<TextInput>(null);
+  // Picker, drag and drop and paste all upload here; finished files join the next message.
+  const uploads = useComposerUploads({
+    api,
+    refresh,
+    onUploaded: (artifact) =>
+      setAttachments((ids) => (ids.includes(artifact.id) ? ids : [...ids, artifact.id])),
+  });
+  const dragging = useWebFileDrop(active, uploads.addFiles);
+  useWebPasteFiles(input, uploads.addFiles);
+  useEffect(
+    () => (active ? onComposerFocusRequest(() => input.current?.focus()) : undefined),
+    [active],
+  );
   const list = useRef<ScrollView>(null);
   const [queue] = useState(() => new ConversationQueue());
   const outbox = useSyncExternalStore(queue.subscribe, queue.getSnapshot, queue.getSnapshot);
@@ -361,7 +385,7 @@ export function ChatScreen({
   }
   function send() {
     const text = draft.trim();
-    if (!text || !isReady || !loaded) return;
+    if (!text || !isReady || !loaded || uploads.uploading) return;
     // A new submission can continue after Stop; held follow-ups still need explicit resume.
     if (!busy && !agent.isRunning && !saveError && !queue.getSnapshot().pending.length)
       queue.resume();
@@ -377,6 +401,7 @@ export function ChatScreen({
     setInputHeight(44);
     setAttachments([]);
     setPicking(false);
+    uploads.clearError();
   }
   const messages = agent.messages || [];
   const latestUserIndex = messages.reduce(
@@ -408,6 +433,25 @@ export function ChatScreen({
     if (!text || index < 0) return;
     rewind(index, { id: `user-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, text });
   }
+  // Desktop web: «/» focuses the composer; Esc closes the document picker or stops the reply.
+  useWebShortcuts(active, (action) => {
+    if (modalOpen()) return false;
+    if (action === "focusInput") {
+      input.current?.focus();
+      return true;
+    }
+    if (action === "escape") {
+      if (picking) {
+        setPicking(false);
+        return true;
+      }
+      if (replying) {
+        void stop();
+        return true;
+      }
+    }
+    return false;
+  });
   return (
     <View style={{ flex: 1 }}>
       <ScrollView
@@ -800,13 +844,14 @@ export function ChatScreen({
                 </Text>
               )}
             </ScrollView>
-            <Button
-              small
-              onPress={() => setPicking(false)}
-              style={{ alignSelf: "flex-end", marginTop: 8 }}
-            >
-              تمام
-            </Button>
+            <View style={[s.row, { gap: 8, marginTop: 8, justifyContent: "flex-end" }]}>
+              <Button small icon={Upload} onPress={() => void uploads.pick()}>
+                بارگذاری سند تازه
+              </Button>
+              <Button small onPress={() => setPicking(false)}>
+                تمام
+              </Button>
+            </View>
           </Card>
         )}
         <View
@@ -825,6 +870,12 @@ export function ChatScreen({
         >
           <ModelPicker api={api} />
           <VoiceStatus state={voice.state} seconds={voice.seconds} error={voice.error} />
+          <UploadChips uploads={uploads.uploads} />
+          {!!uploads.error && (
+            <View style={{ paddingHorizontal: 9, paddingTop: 9 }}>
+              <ErrorNotice error={uploads.error} />
+            </View>
+          )}
           {attachments.length > 0 && (
             <View style={[s.row, { gap: 6, flexWrap: "wrap", padding: 9 }]}>
               {w.files
@@ -885,6 +936,7 @@ export function ChatScreen({
               </Text>
             </Pressable>
             <TextInput
+              ref={input}
               accessibilityLabel={`پیام به ${BRAND.nameFa}`}
               value={draft}
               onChangeText={setDraft}
@@ -925,10 +977,8 @@ export function ChatScreen({
               onKeyPress={
                 Platform.OS === "web"
                   ? (event) => {
-                      if (
-                        event.nativeEvent.key === "Enter" &&
-                        !("shiftKey" in event.nativeEvent && event.nativeEvent.shiftKey)
-                      ) {
+                      // Enter sends; Shift+Enter (or an IME still composing) adds a new line.
+                      if (isSendKey(event.nativeEvent as unknown as KeyLike)) {
                         event.preventDefault();
                         send();
                       }
@@ -946,7 +996,7 @@ export function ChatScreen({
             <Pressable
               accessibilityRole="button"
               accessibilityLabel={replying ? "توقف پاسخ" : "ارسال پیام"}
-              disabled={!replying && (!draft.trim() || !loaded || !isReady)}
+              disabled={!replying && (!draft.trim() || !loaded || !isReady || uploads.uploading)}
               onPress={replying ? () => void stop() : send}
               style={({ pressed }) => ({
                 width: 44,
@@ -971,6 +1021,7 @@ export function ChatScreen({
           </View>
         </View>
       </KeyboardAvoidingView>
+      {dragging && <DropOverlay />}
     </View>
   );
 }

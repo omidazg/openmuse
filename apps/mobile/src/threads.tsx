@@ -3,6 +3,7 @@ import {
   Archive,
   CalendarDays,
   FileText,
+  Keyboard,
   LogOut,
   MessageCircle,
   Monitor,
@@ -27,6 +28,7 @@ import {
 import { ActivityIndicator, Pressable, Text, View } from "react-native";
 import { BRAND } from "../../../packages/domain/src/brand";
 import type { MuseApi } from "./api";
+import { hasPhysicalKeyboard } from "./composer-shortcuts";
 import { DisplayMenuRows } from "./display-settings";
 import { faNumber } from "./locale";
 import { usePreferences } from "./preferences";
@@ -249,7 +251,14 @@ export function useMuseThread() {
   if (!context) throw new Error("ThreadsProvider is missing.");
   return context;
 }
-export function ThreadsSheet({ onClose }: { onClose: () => void }) {
+export function ThreadsSheet({
+  onClose,
+  onShortcuts,
+}: {
+  onClose: () => void;
+  /** Opens the «میان‌برها» sheet; offered only on desktop web with a physical keyboard. */
+  onShortcuts?: () => void;
+}) {
   const {
     enabled,
     backend,
@@ -518,6 +527,14 @@ export function ThreadsSheet({ onClose }: { onClose: () => void }) {
           }}
         />
         <DisplayMenuRows onClose={onClose} />
+        {onShortcuts && hasPhysicalKeyboard() && (
+          <LinkRow
+            icon={Keyboard}
+            title="میان‌برها"
+            detail="میان‌برهای صفحه‌کلید؛ با «?» هم باز می‌شود"
+            onPress={onShortcuts}
+          />
+        )}
         {me?.role === "admin" && (
           <LinkRow
             icon={Users}
