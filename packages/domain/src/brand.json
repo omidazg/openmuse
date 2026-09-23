@@ -1,0 +1,16 @@
+{
+  "name": "OpenMuse",
+  "nameFa": "OpenMuse",
+  "tagline": "فضایی کوچک برای همه‌چیز",
+  "taglineEn": "A little room for everything",
+  "mascotName": "کاپیبارا",
+  "mascotNameEn": "capybara",
+  "attribution": "Based on OpenMuse by CopilotKit (MIT)",
+  "technical": {
+    "_comment": "WARNING: changing any value below breaks existing installs, deep links and store listings (new app identity). Change only deliberately; see docs/REBRAND.md.",
+    "slug": "openmuse",
+    "scheme": "openmuse",
+    "iosBundleIdentifier": "app.openmuse.mobile",
+    "androidPackage": "app.openmuse.mobile"
+  }
+}

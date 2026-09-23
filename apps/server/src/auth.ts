@@ -1,6 +1,7 @@
 import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { BRAND } from "../../../packages/domain/src/brand.ts";
 import type { Config } from "./config.ts";
 import type { Store } from "./db.ts";
 import { AppError } from "./errors.ts";
@@ -29,7 +30,7 @@ export class Auth {
     return { token, mode: this.config.mode };
   }
   async owner(authorization?: string) {
-    if (!authorization?.startsWith("Bearer ")) throw new AppError("وارد OpenMuse شوید", 401);
+    if (!authorization?.startsWith("Bearer ")) throw new AppError(`وارد ${BRAND.nameFa} شوید`, 401);
     const session = await this.db.get<{ owner: string; expiresAt: number }>(
       "system",
       "sessions",

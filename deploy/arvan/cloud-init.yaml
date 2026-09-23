@@ -1,4 +1,6 @@
 #cloud-config
+# NOTE: ArvanCloud runs `init_script` as a shell script and does NOT parse this as
+# cloud-config; create-server.sh sends bootstrap.sh instead. Kept for other clouds.
 # User data for an ArvanCloud cloud server (Ubuntu 24.04).
 # Installs Docker from the Ubuntu archive (reachable through ArvanCloud's Ubuntu mirror
 # in every region), clones the OpenMuse fork, and starts the stack once deploy/arvan/.env
@@ -17,6 +19,7 @@ write_files:
     permissions: "0644"
     content: |
       {
+        "registry-mirrors": ["https://docker.arvancloud.ir"],
         "log-driver": "local",
         "log-opts": { "max-size": "20m", "max-file": "5" }
       }

@@ -15,6 +15,7 @@ import {
   rgb,
   StandardFonts,
 } from "pdf-lib";
+import { BRAND } from "../../domain/src/brand.ts";
 
 const MAX_PDF_BYTES = 10 * 1024 * 1024;
 const MAX_PDF_PAGES = 500;
@@ -156,7 +157,7 @@ export async function createSamplePdf(): Promise<Uint8Array> {
   return pdfOperation(async () => {
     const doc = await PDFDocument.create();
     doc.setTitle("Community visit - permission form");
-    doc.setAuthor("OpenMuse");
+    doc.setAuthor(BRAND.name);
     const regular = await doc.embedFont(StandardFonts.Helvetica);
     const bold = await doc.embedFont(StandardFonts.HelveticaBold);
     const ink = rgb(0.12, 0.19, 0.2);
@@ -165,7 +166,7 @@ export async function createSamplePdf(): Promise<Uint8Array> {
     const pages = [doc.addPage([612, 792]), doc.addPage([612, 792])];
     for (const [index, page] of pages.entries()) {
       page.drawRectangle({ x: 0, y: 682, width: 612, height: 110, color: rgb(0.9, 0.95, 0.93) });
-      page.drawText("OPENMUSE / COMMUNITY VISIT", {
+      page.drawText(`${BRAND.name.toUpperCase()} / COMMUNITY VISIT`, {
         x: 48,
         y: 750,
         size: 10,

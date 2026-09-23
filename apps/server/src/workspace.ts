@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { BRAND } from "../../../packages/domain/src/brand.ts";
 import type {
   ActionProposal,
   ActivityEntry,
@@ -13,11 +14,12 @@ import { GoogleClient } from "../../../packages/integrations/src/google.ts";
 import { createSamplePdf } from "../../../packages/integrations/src/pdf.ts";
 import type { ActionService } from "./actions.ts";
 import { agentConfigured } from "./agent.ts";
-import type { Config } from "./config.ts";
+import { type Config, threadsBackend } from "./config.ts";
 import type { Store } from "./db.ts";
 import { AppError } from "./errors.ts";
 import type { Files } from "./files.ts";
 import type { GoogleAuth } from "./google-auth.ts";
+import { localThreadsEnabled } from "./threads.ts";
 
 const sampleTimeZone = "Asia/Tehran";
 
@@ -193,7 +195,7 @@ export class WorkspaceService {
         from: "stay@niloufar.example",
         to: ["arash@example.com"],
         subject: "آخر هفته‌تان آماده است",
-        body: "رزرو شما در رامسر تأیید شد.\n\nورود: پنجشنبه، ساعت ۱۴\nخروج: شنبه، ساعت ۱۲\n\nاین رزرو خیالی نشان می‌دهد OpenMuse چطور جزئیات سفر را مرتب می‌کند.",
+        body: `رزرو شما در رامسر تأیید شد.\n\nورود: پنجشنبه، ساعت ۱۴\nخروج: شنبه، ساعت ۱۲\n\nاین رزرو خیالی نشان می‌دهد ${BRAND.nameFa} چطور جزئیات سفر را مرتب می‌کند.`,
         date: at(7, 30),
         unread: false,
         label: "سفر",
@@ -301,11 +303,15 @@ export class WorkspaceService {
         {
           id: "google",
           name: "Google",
+          // Live workspaces may run without Google OAuth (e.g. where Google is unreachable);
+          // report that as unconfigured so the UI does not offer a connect flow that must fail.
           status: connected
             ? this.config.mode === "sample"
               ? "sample"
               : "connected"
-            : "disconnected",
+            : this.config.mode === "live" && !this.googleAuth.configured()
+              ? "unconfigured"
+              : "disconnected",
           account:
             tokens?.account ?? (this.config.mode === "sample" ? "arash@example.com" : undefined),
           capabilities: this.config.mode === "sample" ? ["Gmail", "تقویم"] : (tokens?.scopes ?? []),
@@ -327,7 +333,10 @@ export class WorkspaceService {
         provider: this.config.agentBackend === "sample" ? "sample" : "model",
         configured: agentConfigured(this.config),
         openbotConfigured: false,
-        richThreads: Boolean(this.config.intelligenceApiKey),
+        richThreads:
+          threadsBackend(this.config) === "intelligence" &&
+          Boolean(this.config.intelligenceApiKey?.trim()),
+        localThreads: localThreadsEnabled(this.config),
       },
     };
   }

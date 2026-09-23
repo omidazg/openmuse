@@ -1,4 +1,5 @@
 import { Platform } from "react-native";
+import { BRAND } from "../../../packages/domain/src/brand";
 import { faDigits } from "./locale";
 
 export const API_URL = (
@@ -21,7 +22,7 @@ async function send(
     response = await fetch(input, init);
   } catch {
     throw new Error(
-      "اتصال به سرور OpenMuse برقرار نشد. اتصال اینترنت را بررسی کنید و دوباره تلاش کنید.",
+      `اتصال به سرور ${BRAND.nameFa} برقرار نشد. اتصال اینترنت را بررسی کنید و دوباره تلاش کنید.`,
     );
   }
   let payload: any = {};

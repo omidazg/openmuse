@@ -9,8 +9,18 @@ import {
   RefreshCw,
   Settings2,
 } from "lucide-react-native";
-import { createContext, type ReactNode, useContext, useEffect, useRef, useState } from "react";
+import {
+  createContext,
+  type ReactNode,
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { ActivityIndicator, Pressable, Text, View } from "react-native";
+import { BRAND } from "../../../packages/domain/src/brand";
+import type { MuseApi } from "./api";
 import { faNumber } from "./locale";
 import { Button, colors, ErrorNotice, Field, LinkRow, Sheet, s } from "./ui";
 import { useWorkspace } from "./workspace";
@@ -23,8 +33,99 @@ function newThreadId() {
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 export type Selection = { id: string; existing: boolean };
+/** intelligence: CopilotKit Rich Threads; local: OpenMuse database; off: single sample history. */
+export type ThreadBackend = "intelligence" | "local" | "off";
+type ThreadSummary = { id: string; name: string | null; archived: boolean };
+/** The subset of CopilotKit useThreads() that the conversation menu relies on. */
+type ThreadList = {
+  threads: ThreadSummary[];
+  isLoading: boolean;
+  error: Error | null;
+  isMutating: boolean;
+  hasMoreThreads: boolean;
+  isFetchingMoreThreads: boolean;
+  fetchMoreError: Error | null;
+  refetchThreads: () => void;
+  fetchMoreThreads: () => void;
+  renameThread: (id: string, name: string) => Promise<void>;
+  archiveThread: (id: string) => Promise<void>;
+  unarchiveThread: (id: string) => Promise<void>;
+};
+const asError = (e: unknown) => (e instanceof Error ? e : new Error(String(e)));
+/** Thread menu backed by /api/threads when THREADS_BACKEND=local (no CopilotKit cloud). */
+function useLocalThreads(api: MuseApi, enabled: boolean): ThreadList {
+  const [threads, setThreads] = useState<ThreadSummary[]>([]);
+  const [cursor, setCursor] = useState<string | null>(null);
+  const [isLoading, setLoading] = useState(false);
+  const [error, setError] = useState<Error | null>(null);
+  const [isMutating, setMutating] = useState(false);
+  const [isFetchingMoreThreads, setFetchingMore] = useState(false);
+  const [fetchMoreError, setFetchMoreError] = useState<Error | null>(null);
+  const page = useCallback(
+    (from?: string | null) =>
+      api.request<{ threads: ThreadSummary[]; nextCursor: string | null }>(
+        `/api/threads?includeArchived=true&limit=20${from ? `&cursor=${encodeURIComponent(from)}` : ""}`,
+      ),
+    [api],
+  );
+  const refetchThreads = useCallback(() => {
+    if (!enabled) return;
+    setLoading(true);
+    setError(null);
+    void page()
+      .then((result) => {
+        setThreads(result.threads);
+        setCursor(result.nextCursor);
+      })
+      .catch((e) => setError(asError(e)))
+      .finally(() => setLoading(false));
+  }, [enabled, page]);
+  useEffect(refetchThreads, [refetchThreads]);
+  async function patch(id: string, body: { name?: string; archived?: boolean }) {
+    setMutating(true);
+    try {
+      const updated = await api.request<ThreadSummary>(
+        `/api/threads/${encodeURIComponent(id)}`,
+        body,
+        "PATCH",
+      );
+      setThreads((items) => items.map((item) => (item.id === id ? updated : item)));
+    } finally {
+      setMutating(false);
+    }
+  }
+  return {
+    threads,
+    isLoading,
+    error,
+    isMutating,
+    hasMoreThreads: cursor !== null,
+    isFetchingMoreThreads,
+    fetchMoreError,
+    refetchThreads,
+    fetchMoreThreads: () => {
+      if (!cursor || isFetchingMoreThreads) return;
+      setFetchingMore(true);
+      setFetchMoreError(null);
+      void page(cursor)
+        .then((result) => {
+          setThreads((items) => [
+            ...items,
+            ...result.threads.filter((t) => !items.some((i) => i.id === t.id)),
+          ]);
+          setCursor(result.nextCursor);
+        })
+        .catch((e) => setFetchMoreError(asError(e)))
+        .finally(() => setFetchingMore(false));
+    },
+    renameThread: (id, name) => patch(id, { name }),
+    archiveThread: (id) => patch(id, { archived: true }),
+    unarchiveThread: (id) => patch(id, { archived: false }),
+  };
+}
 const ThreadContext = createContext<{
   enabled: boolean;
+  backend: ThreadBackend;
   selection: Selection;
   visited: Selection[];
   mainId: string;
@@ -38,7 +139,13 @@ const ThreadContext = createContext<{
 export function ThreadsProvider({ children }: { children: ReactNode }) {
   const { workspace, navigate, api } = useWorkspace();
   const handledPrompt = useRef(0);
-  const enabled = workspace.runtime.richThreads === true;
+  const backend: ThreadBackend =
+    workspace.runtime.richThreads === true
+      ? "intelligence"
+      : workspace.runtime.localThreads === true
+        ? "local"
+        : "off";
+  const enabled = backend !== "off";
   const [selection, setSelection] = useState<Selection>({ id: "local", existing: false });
   const [visited, setVisited] = useState<Selection[]>([]);
   const [mainId, setMainId] = useState("local");
@@ -81,6 +188,7 @@ export function ThreadsProvider({ children }: { children: ReactNode }) {
           return true;
         },
         enabled,
+        backend,
         mainId,
         visited,
         loading,
@@ -103,6 +211,7 @@ export function useMuseThread() {
 export function ThreadsSheet({ onClose }: { onClose: () => void }) {
   const {
     enabled,
+    backend,
     selection,
     visited,
     mainId,
@@ -112,8 +221,15 @@ export function ThreadsSheet({ onClose }: { onClose: () => void }) {
     select,
     start,
   } = useMuseThread();
-  const { workspace, open, navigate, refresh } = useWorkspace();
-  const threads = useThreads({ agentId: "default", enabled, includeArchived: true, limit: 20 });
+  const { workspace, open, navigate, refresh, api } = useWorkspace();
+  const richThreads = useThreads({
+    agentId: "default",
+    enabled: backend === "intelligence",
+    includeArchived: true,
+    limit: 20,
+  });
+  const localThreads = useLocalThreads(api, backend === "local");
+  const threads: ThreadList = backend === "local" ? localThreads : richThreads;
   const [editing, setEditing] = useState<string>();
   const [name, setName] = useState("");
   const [error, setError] = useState("");
@@ -133,7 +249,7 @@ export function ThreadsSheet({ onClose }: { onClose: () => void }) {
   }
   return (
     <Sheet
-      title="OpenMuse"
+      title={BRAND.nameFa}
       subtitle={workspace.mode === "sample" ? "فضای کار شما" : workspace.profile.name}
       onClose={onClose}
       drawer

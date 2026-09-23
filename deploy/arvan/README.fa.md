@@ -11,7 +11,7 @@
 | `caddy` | HTTPS خودکار (Let's Encrypt) برای `DOMAIN` |
 
 فایل‌ها: `Dockerfile` (ریشهٔ مخزن)، `deploy/arvan/compose.yaml`، `Caddyfile`، `env.example`،
-`cloud-init.yaml`، `create-server.sh`، `deploy.sh`.
+`bootstrap.sh`، `cloud-init.yaml` (فقط مرجع)، `create-server.sh`، `deploy.sh`.
 
 > چرا سرور ابری و نه «ابر کانتینر» (PaaS)؟ ابر کانتینر فقط در دیتاسنترهای ایران است، دسترسی به
 > Docker socket / تنظیمات امنیتی مرورگر (`cap_drop`, `shm_size`) محدود است و کلید API فعلی به
@@ -60,6 +60,32 @@ OPENAI_BASE_URL=https://<درگاه-شما>/v1
 ابرآروان آن را پوشش نمی‌دهد؛ در ایران ممکن است لازم باشد آن را جداگانه منتقل کنید
 (`docker save` / `docker load`).
 
+### درگاه متیس (Metis AI) برای سرورهای ایران
+
+[متیس](https://docs.metisai.ir/) درگاهی ایرانی است که مدل‌های OpenAI، Anthropic و Gemini را از
+IP ایران در دسترس می‌گذارد. کافی است در `deploy/arvan/.env` کلید متیس را بگذارید:
+
+```bash
+METIS_API_KEY=<کلید متیس از پنل metisai.ir>
+MODEL=openai/gpt-4.1          # پیش‌فرض اگر MODEL خالی باشد
+# METIS_BASE_URL=https://api.metisai.ir   # فقط اگر نشانی دیگری لازم است
+```
+
+با وجود `METIS_API_KEY`، سرور خودش کلید و نشانی هر سه ارائه‌دهنده را روی متیس تنظیم می‌کند
+(`OPENAI_API_KEY`/`OPENAI_BASE_URL` و مانند آن‌ها لازم نیست و در صورت وجود نادیده گرفته می‌شوند):
+
+| پیشوند `MODEL` | نشانی متیس | نمونهٔ آزموده‌شده (پخش زنده + فراخوانی ابزار) |
+| --- | --- | --- |
+| `openai/` | `https://api.metisai.ir/openai/v1` | `openai/gpt-4.1`، `openai/gpt-5.4` |
+| `anthropic/` | `https://api.metisai.ir/anthropic/v1` | `anthropic/claude-sonnet-5` |
+| `google/` | `https://api.metisai.ir/v1beta` | `google/gemini-2.5-flash` |
+
+گفتگو، اجرای کارهای پس‌زمینه و ابزارهای رایانه همگی از همین تنظیم استفاده می‌کنند. بررسی سریع روی سرور:
+
+```bash
+curl -s https://api.metisai.ir/openai/v1/models -H "Authorization: Bearer $METIS_API_KEY" | head -c 300
+```
+
 ## ۳. اندازهٔ سرور و هزینه (قیمت‌های API، ریال)
 
 | منطقه | Flavor | مشخصات | ماهانه (ریال) | ≈ تومان |
@@ -86,7 +112,7 @@ echo "TOKEN_ENCRYPTION_KEY=$(openssl rand -base64 32)"
 echo "WORKER_TOKEN=$(openssl rand -hex 32)"
 echo "POSTGRES_PASSWORD=$(openssl rand -hex 24)"   # فقط hex؛ داخل URL قرار می‌گیرد
 ```
-مقادیر را در `deploy/arvan/.env` بگذارید و `DOMAIN`، `CPK_INTELLIGENCE_API_KEY`، `MODEL` و کلید
+مقادیر را در `deploy/arvan/.env` بگذارید و `DOMAIN`، `MODEL` و کلید
 مدل را پر کنید. `OPENMUSE_ACCESS_KEY` همان رمزی است که هنگام ورود در اپ وارد می‌کنید.
 فایل `.env` در git نادیده گرفته می‌شود؛ هرگز آن را commit نکنید.
 
@@ -99,11 +125,19 @@ echo "POSTGRES_PASSWORD=$(openssl rand -hex 24)"   # فقط hex؛ داخل URL �
 | `TOKEN_ENCRYPTION_KEY` | ✔ | ۳۲ بایت تصادفی base64 |
 | `WORKER_TOKEN` | ✔ | مشترک بین API و browser-worker، حداقل ۳۲ کاراکتر |
 | `POSTGRES_PASSWORD` | ✔ | رمز پایگاه داده |
-| `CPK_INTELLIGENCE_API_KEY` | ✔ | CopilotKit Intelligence |
+| `THREADS_BACKEND` | – | `local` (پیش‌فرض بدون کلید CPK): گفت‌وگوها در Postgres همین سرور؛ `intelligence`: CopilotKit Cloud |
+| `CPK_INTELLIGENCE_API_KEY` | – | فقط برای `THREADS_BACKEND=intelligence` |
 | `MODEL` + `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` / `GOOGLE_API_KEY` | ✔ | مدل عامل؛ مثل `openai/<model-id>` |
 | `OPENAI_BASE_URL` | – | درگاه سازگار با OpenAI |
+| `METIS_API_KEY` / `METIS_BASE_URL` | – | درگاه متیس برای سرورهای ایران؛ جایگزین کلیدهای بالا (بخش ۲) |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | – | اتصال Google؛ Redirect URI: `https://DOMAIN/api/google/callback` |
 | `REGISTRY_MIRROR` / `NPM_REGISTRY` | – | آینه‌ها برای سرورهای ایران |
+
+> **حالت خودمیزبان (بدون CopilotKit Cloud و Google):** با `THREADS_BACKEND=local` گفت‌وگوی اصلی،
+> گفت‌وگوهای جانبی، تغییر نام، بایگانی و بازگردانی در همان پایگاه‌دادهٔ Postgres ذخیره می‌شوند و
+> سرور به `copilotkit.ai` نیازی ندارد. `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` هم اختیاری‌اند؛
+> اگر خالی باشند Gmail و تقویم در اپ «پیکربندی نشده» نمایش داده می‌شوند. تله‌متری CopilotKit با
+> `COPILOTKIT_TELEMETRY_DISABLED=true` و `DO_NOT_TRACK=1` (در Dockerfile و خود سرور) خاموش است.
 
 ## ۵. DNS و CDN ابرآروان
 
@@ -121,7 +155,7 @@ echo "POSTGRES_PASSWORD=$(openssl rand -hex 24)"   # فقط hex؛ داخل URL �
 
 ### روش الف: پنل
 پنل ← سرور ابری ← ایجاد سرور: منطقه `eu-west1-a`، Ubuntu 24.04، اندازهٔ `g1-4-2-0`، کلید SSH
-خودتان، و محتوای `deploy/arvan/cloud-init.yaml` را در «اسکریپت اولیه» (User data) بچسبانید.
+خودتان، و محتوای `deploy/arvan/bootstrap.sh` را در «اسکریپت اولیه» (User data) بچسبانید. ابرآروان فرمت cloud-config را اجرا نمی‌کند و این فیلد را اسکریپت شل در نظر می‌گیرد.
 
 ### روش ب: API (اسکریپت)
 ابتدا کلید SSH خود را در همان منطقه در پنل ثبت کنید، سپس:
@@ -138,10 +172,10 @@ curl -s -H "Authorization: apikey $ARVAN_API_KEY" \
   https://napi.arvancloud.ir/ecc/v1/regions/$REGION/servers | jq '.data[] | {name,status,addresses}'
 ```
 
-cloud-init این کارها را انجام می‌دهد: نصب Docker و Compose از مخزن Ubuntu، فعال‌کردن ufw
+bootstrap.sh این کارها را انجام می‌دهد: نصب Docker و Compose از مخزن Ubuntu، فعال‌کردن ufw
 (فقط پورت‌های ۲۲، ۸۰ و ۴۴۳)، کلون شاخهٔ `fa-arvan` از `https://github.com/omidazg/openmuse`
 در `/opt/openmuse`. تا `.env` بارگذاری نشود، کانتینری اجرا نمی‌شود.
-پیشرفت: `ssh ubuntu@IP sudo tail -f /var/log/cloud-init-output.log`
+اگر User data اجرا نشد، همان اسکریپت را دستی اجرا کنید: `ssh root@IP "bash -s" < deploy/arvan/bootstrap.sh`
 
 > گروه امنیتی پیش‌فرض ابرآروان همهٔ پورت‌های TCP را باز می‌گذارد؛ ufw روی خود سرور آن را
 > محدود می‌کند. در صورت امکان یک گروه امنیتی با فقط ۲۲/۸۰/۴۴۳ بسازید و `SECURITY_GROUP` را
@@ -150,9 +184,9 @@ cloud-init این کارها را انجام می‌دهد: نصب Docker و Com
 ## ۷. استقرار (Deploy)
 
 ```bash
-SERVER=ubuntu@<IP> ./deploy/arvan/deploy.sh
+SERVER=root@<IP> ./deploy/arvan/deploy.sh
 # با کلید مشخص:
-SERVER=ubuntu@<IP> SSH_KEY=~/.ssh/arvan ./deploy/arvan/deploy.sh
+SERVER=root@<IP> SSH_KEY=~/.ssh/arvan ./deploy/arvan/deploy.sh
 ```
 اسکریپت idempotent است: مخزن را کلون/به‌روز می‌کند (`git merge --ff-only`)، `.env` محلی را با
 مجوز 600 بارگذاری می‌کند و `docker compose up -d --build` را اجرا می‌کند.
@@ -160,14 +194,14 @@ SERVER=ubuntu@<IP> SSH_KEY=~/.ssh/arvan ./deploy/arvan/deploy.sh
 بررسی:
 ```bash
 curl -fsS https://<DOMAIN>/api/health
-ssh ubuntu@<IP> 'cd /opt/openmuse/deploy/arvan && sudo docker compose ps && sudo docker compose logs --tail=50 app'
+ssh root@<IP> 'cd /opt/openmuse/deploy/arvan && sudo docker compose ps && sudo docker compose logs --tail=50 app'
 ```
 
 ## ۸. به‌روزرسانی
 
 تغییرات را به شاخهٔ `fa-arvan` در fork بفرستید و دوباره اجرا کنید:
 ```bash
-SERVER=ubuntu@<IP> ./deploy/arvan/deploy.sh
+SERVER=root@<IP> ./deploy/arvan/deploy.sh
 ```
 توجه: آدرس API داخل باندل وب هنگام build ثابت می‌شود؛ اگر `DOMAIN` عوض شد، حتماً دوباره
 build کنید (deploy.sh این کار را انجام می‌دهد).

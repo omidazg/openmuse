@@ -25,6 +25,7 @@ import {
 } from "react-native";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import type { Section, Workspace } from "../../packages/domain/src";
+import { BRAND } from "../../packages/domain/src/brand";
 import {
   AgentActivityScreen,
   AgentStatus,
@@ -121,7 +122,7 @@ export default function App() {
                 ...fw("500"),
               }}
             >
-              به OpenMuse خوش آمدید.
+              به {BRAND.nameFa} خوش آمدید.
             </Text>
             <Text style={[s.muted, { textAlign: "center" }]}>فضایی کوچک برای روزتان.</Text>
             {busy ? (
@@ -140,8 +141,8 @@ export default function App() {
                   باز کردن فضای کار
                 </Button>
                 <Text style={[s.small, { marginTop: 15 }]}>
-                  فضاهای کار محلی بدون کلید باز می‌شوند. مطمئن شوید سرور OpenMuse در این نشانی در حال
-                  اجراست: <Text style={{ writingDirection: "ltr" }}>{API_URL}</Text>
+                  فضاهای کار محلی بدون کلید باز می‌شوند. مطمئن شوید سرور {BRAND.nameFa} در این نشانی
+                  در حال اجراست: <Text style={{ writingDirection: "ltr" }}>{API_URL}</Text>
                 </Text>
               </Card>
             )}
@@ -274,7 +275,7 @@ function WorkspaceShell({
     data?.tasks.find(
       (task) => task.status === "waiting_approval" || task.status === "waiting_input",
     ) || data?.tasks.find((task) => task.status === "running");
-  const agentName = data?.identity.name || "OpenMuse";
+  const agentName = data?.identity.name || BRAND.nameFa;
   const status = activeTask
     ? activeTask.status === "waiting_approval"
       ? `آمادهٔ بررسی · ${activeTask.title}`

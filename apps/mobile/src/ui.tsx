@@ -17,6 +17,7 @@ import {
   type ViewStyle,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { BRAND } from "../../../packages/domain/src/brand";
 import { FONT, faDate, faNumber, fw } from "./locale";
 export const colors = {
   canvas: "#FCFCFC",
@@ -478,7 +479,7 @@ export function LinkRow({
     </Pressable>
   );
 }
-/** OpenMuse's original capybara, shared by every assistant surface. */
+/** The brand mascot (BRAND.mascotNameEn), shared by every assistant surface. */
 export function Mascot({
   size = 42,
   variant = "sky",
@@ -492,7 +493,10 @@ export function Mascot({
     lilac: "#F1ECF9",
   }[variant];
   return (
-    <View accessibilityLabel="کاپیبارای OpenMuse" style={{ width: size, height: size }}>
+    <View
+      accessibilityLabel={`${BRAND.mascotName}، نماد ${BRAND.nameFa}`}
+      style={{ width: size, height: size }}
+    >
       <View
         style={{
           position: "absolute",

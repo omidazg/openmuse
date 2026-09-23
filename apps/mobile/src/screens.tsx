@@ -38,6 +38,7 @@ import type {
   CalendarEvent,
   EmailDraft,
 } from "../../../packages/domain/src";
+import { BRAND } from "../../../packages/domain/src/brand";
 import { API_URL } from "./api";
 import { localDateTime, zonedInstant } from "./date-time";
 import { faDate, faDigits, faNumber, fw } from "./locale";
@@ -1226,6 +1227,7 @@ export function ConnectionsScreen({ query = "" }: { query?: string }) {
   }
   const google = w.connections.find((c) => c.id === "google");
   const connected = google?.status === "connected" || google?.status === "sample";
+  const googleUnconfigured = google?.status === "unconfigured";
   const rows = [
     { id: "gmail", name: "Gmail", icon: Mail, color: "#EA5B4D", connected, group: "google" },
     {
@@ -1311,7 +1313,11 @@ export function ConnectionsScreen({ query = "" }: { query?: string }) {
                         color: row.group === "google" ? colors.blueDark : colors.muted,
                       }}
                     >
-                      {row.group === "google" ? "اتصال" : "راه‌اندازی"}
+                      {row.group === "google"
+                        ? googleUnconfigured
+                          ? "پیکربندی نشده"
+                          : "اتصال"
+                        : "راه‌اندازی"}
                     </Text>
                   )}
                 </Pressable>
@@ -1340,11 +1346,27 @@ export function ConnectionsScreen({ query = "" }: { query?: string }) {
                   <Chip key={cap}>{capabilityLabel(cap)}</Chip>
                 ))}
               </View>
+              {googleUnconfigured && (
+                <Text style={s.muted}>
+                  Google روی این سرور پیکربندی نشده است. برای فعال‌سازی Gmail و تقویم، مدیر سرور باید
+                  GOOGLE_CLIENT_ID و GOOGLE_CLIENT_SECRET را تنظیم کند.
+                </Text>
+              )}
               <ErrorNotice error={error} />
-              <Button busy={busy} primary icon={Link2} onPress={() => void connect("read")}>
+              <Button
+                busy={busy}
+                primary
+                icon={Link2}
+                disabled={googleUnconfigured}
+                onPress={() => void connect("read")}
+              >
                 اتصال Google
               </Button>
-              <Button busy={busy} onPress={() => void connect("write")}>
+              <Button
+                busy={busy}
+                disabled={googleUnconfigured}
+                onPress={() => void connect("write")}
+              >
                 فعال‌سازی ارسال و ویرایش
               </Button>
               {connected && (
@@ -1368,7 +1390,13 @@ export function ConnectionsScreen({ query = "" }: { query?: string }) {
               />
               <SettingsLine
                 label="رشته‌گفت‌وگوهای غنی"
-                value={w.runtime.richThreads ? "CopilotKit Intelligence" : "متصل نیست"}
+                value={
+                  w.runtime.richThreads
+                    ? "CopilotKit Intelligence"
+                    : w.runtime.localThreads
+                      ? "پایگاه‌دادهٔ همین سرور"
+                      : "متصل نیست"
+                }
               />
               <Button
                 small
@@ -1385,8 +1413,8 @@ export function ConnectionsScreen({ query = "" }: { query?: string }) {
                 OpenBot پیکربندی نشده است.
               </Text>
               <Text style={s.muted}>
-                رایانهٔ فعلی شما از کارگزار ماندگار Chromium در OpenMuse استفاده می‌کند. یکپارچه‌سازی
-                OpenBot بک‌اند اجرا را گسترش می‌دهد و همین رابط را حفظ می‌کند.
+                رایانهٔ فعلی شما از کارگزار ماندگار Chromium در {BRAND.nameFa} استفاده می‌کند.
+                یکپارچه‌سازی OpenBot بک‌اند اجرا را گسترش می‌دهد و همین رابط را حفظ می‌کند.
               </Text>
             </View>
           )}

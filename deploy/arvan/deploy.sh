@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Idempotent deploy/update of OpenMuse on an ArvanCloud server over SSH.
 #
-#   SERVER=ubuntu@1.2.3.4 ./deploy/arvan/deploy.sh
+#   SERVER=root@1.2.3.4 SSH_KEY=~/.ssh/openmuse_arvan ./deploy/arvan/deploy.sh   (Arvan images log in as root)
 #
 # Env:
 #   SERVER      (required) SSH target, e.g. ubuntu@<server-ip>

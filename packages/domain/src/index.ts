@@ -204,6 +204,8 @@ export interface Workspace {
     configured: boolean;
     openbotConfigured: boolean;
     richThreads?: boolean;
+    /** Multi-thread history stored in OpenMuse's own database (THREADS_BACKEND=local). */
+    localThreads?: boolean;
   };
 }
 
@@ -214,4 +216,5 @@ export interface ExecutionBackend {
   health(): Promise<{ available: boolean; detail: string }>;
 }
 
+export { BRAND, type Brand } from "./brand.ts";
 export type { ComputerCommand, ComputerDirectory, ComputerSnapshot } from "./computer.ts";

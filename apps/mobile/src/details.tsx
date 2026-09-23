@@ -32,6 +32,7 @@ import {
   type Mail,
   type ProposalInput,
 } from "../../../packages/domain/src";
+import { BRAND } from "../../../packages/domain/src/brand";
 import { DelegateSheet, NotificationsSheet, TaskDetail } from "./agent-ui";
 import BrowserConsole from "./BrowserConsole";
 import { browserAddress, browserSite } from "./browser-address";
@@ -336,7 +337,7 @@ function EmailEditor({ draft }: { draft?: Partial<EmailDraft> & { id?: string } 
           ...(draft?.id ? { id: draft.id } : {}),
         });
         await refresh();
-        notify("پیش‌نویس در OpenMuse ذخیره شد.");
+        notify(`پیش‌نویس در ${BRAND.nameFa} ذخیره شد.`);
         close();
       }
     } catch (e) {
@@ -348,7 +349,7 @@ function EmailEditor({ draft }: { draft?: Partial<EmailDraft> & { id?: string } 
   return (
     <Sheet
       title={draft?.threadId ? "نوشتن پاسخ" : "پیام تازه"}
-      subtitle={`از ${w.profile.email} · به‌صورت خصوصی در OpenMuse ذخیره می‌شود`}
+      subtitle={`از ${w.profile.email} · به‌صورت خصوصی در ${BRAND.nameFa} ذخیره می‌شود`}
       onClose={close}
     >
       <Field
@@ -854,7 +855,7 @@ function FileDetail({ file: f }: { file: Artifact }) {
         await Sharing.shareAsync(target, { mimeType: "application/pdf", UTI: "com.adobe.pdf" });
       else
         throw new Error(
-          "اشتراک‌گذاری در این دستگاه پشتیبانی نمی‌شود. فایل را از نسخهٔ وب OpenMuse دانلود کنید.",
+          `اشتراک‌گذاری در این دستگاه پشتیبانی نمی‌شود. فایل را از نسخهٔ وب ${BRAND.nameFa} دانلود کنید.`,
         );
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));

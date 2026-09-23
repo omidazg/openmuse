@@ -16,6 +16,7 @@ import {
   monitorInputSchema,
   type RunEvent,
 } from "../../../../packages/domain/src/agent.ts";
+import { BRAND } from "../../../../packages/domain/src/brand.ts";
 import type {
   ActionProposal,
   Artifact,
@@ -134,7 +135,7 @@ export class AgentService {
   async ensure(owner: string) {
     await this.db.insertIfAbsent(owner, "agent-settings", {
       id: "identity",
-      name: "OpenMuse",
+      name: BRAND.nameFa,
       tone: "warm",
     });
   }
@@ -160,7 +161,7 @@ export class AgentService {
       memories,
       artifacts,
       notifications,
-      identity: identity ?? { name: "OpenMuse", tone: "warm" },
+      identity: identity ?? { name: BRAND.nameFa, tone: "warm" },
       worker: {
         running:
           this.worker.running ||

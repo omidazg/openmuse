@@ -1,3 +1,4 @@
+import { BRAND } from "../../../packages/domain/src/brand.ts";
 import "./config.ts";
 import { HttpAgent } from "@ag-ui/client";
 import {
@@ -55,7 +56,7 @@ export function makeRuntime(
         intelligence,
         identifyUser: async (request) => ({
           id: await auth.owner(request.headers.get("authorization") ?? undefined),
-          name: "کاربر OpenMuse",
+          name: `کاربر ${BRAND.nameFa}`,
         }),
         generateThreadNames: false,
       })

@@ -1,3 +1,6 @@
+// Loads .env and disables CopilotKit telemetry before @copilotkit/runtime evaluates; its
+// telemetry client reads COPILOTKIT_TELEMETRY_DISABLED/DO_NOT_TRACK once at import time.
+import "./config.ts";
 import { randomUUID } from "node:crypto";
 import { MessageSchema } from "@ag-ui/core";
 import { CopilotKitIntelligence } from "@copilotkit/runtime/v2";
@@ -5,6 +8,7 @@ import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { cors } from "hono/cors";
 import { z } from "zod";
+import { BRAND } from "../../../packages/domain/src/brand.ts";
 import { emailDraftSchema, proposalSchema } from "../../../packages/domain/src/index.ts";
 import { ActionService } from "./actions.ts";
 import { agentConfigured, makeRuntime } from "./agent.ts";
@@ -12,13 +16,14 @@ import { createAuth } from "./auth.ts";
 import { BrowserService } from "./browser.ts";
 import { ComputerService, type DockerRunner } from "./computer.ts";
 import { computerRoutes } from "./computer-routes.ts";
-import type { Config } from "./config.ts";
+import { type Config, threadsBackend } from "./config.ts";
 import type { Store } from "./db.ts";
 import { agentRoutes } from "./engine/routes.ts";
 import { AgentService } from "./engine/service.ts";
 import { AppError } from "./errors.ts";
 import { Files } from "./files.ts";
 import { GoogleAuth } from "./google-auth.ts";
+import { localThreadRoutes, localThreadsEnabled } from "./threads.ts";
 import { WorkspaceService } from "./workspace.ts";
 
 export async function createApp(
@@ -40,9 +45,11 @@ export async function createApp(
   const browser = new BrowserService(db, config, auth, files);
   const computer = new ComputerService(db, config, options.docker);
   const agent = new AgentService(db, config, workspace, files, actions, browser, computer);
-  const intelligence = config.intelligenceApiKey
-    ? new CopilotKitIntelligence({ apiKey: config.intelligenceApiKey })
-    : undefined;
+  const intelligence =
+    threadsBackend(config) === "intelligence" && config.intelligenceApiKey?.trim()
+      ? new CopilotKitIntelligence({ apiKey: config.intelligenceApiKey })
+      : undefined;
+  const localThreads = localThreadsEnabled(config);
   const runtime = makeRuntime(config, agent, auth, intelligence);
   const app = new Hono<{ Variables: { owner: string } }>();
   const origins = new Set([...config.allowedOrigins, new URL(config.publicUrl).origin]);
@@ -117,7 +124,7 @@ export async function createApp(
   app.get("/api/google/callback", async (c) => {
     if (c.req.query("error"))
       return c.html(
-        '<!doctype html><html lang="fa" dir="rtl"><meta charset="utf-8"><h1>اتصال گوگل لغو شد</h1><p>می‌توانید به OpenMuse برگردید.</p></html>',
+        `<!doctype html><html lang="fa" dir="rtl"><meta charset="utf-8"><h1>اتصال گوگل لغو شد</h1><p>می‌توانید به ${BRAND.nameFa} برگردید.</p></html>`,
         400,
       );
     const state = c.req.query("state"),
@@ -125,7 +132,7 @@ export async function createApp(
     if (!state || !code) throw new AppError("پاسخ بازگشتی گوگل ناقص است");
     await google.callback(state, code);
     return c.html(
-      '<!doctype html><html lang="fa" dir="rtl"><meta charset="utf-8"><h1>گوگل متصل شد</h1><p>به OpenMuse برگردید و فضای کاری خود را تازه کنید.</p></html>',
+      `<!doctype html><html lang="fa" dir="rtl"><meta charset="utf-8"><h1>گوگل متصل شد</h1><p>به ${BRAND.nameFa} برگردید و فضای کاری خود را تازه کنید.</p></html>`,
     );
   });
   app.use("/api/*", async (c, next) => {
@@ -146,6 +153,7 @@ export async function createApp(
     return c.json(snapshot);
   });
   app.route("/api/agent", agentRoutes(agent));
+  if (localThreads) app.route("/api/threads", localThreadRoutes(db));
   app.route("/api/computer", computerRoutes(computer, files));
   app.get("/api/calendars", async (c) => c.json(await workspace.calendars(c.get("owner"))));
   app.get("/api/calendar/events", async (c) => {
@@ -221,7 +229,7 @@ export async function createApp(
         );
       }
     }
-    return c.json({ threadId: main.threadId, existing: Boolean(intelligence) });
+    return c.json({ threadId: main.threadId, existing: Boolean(intelligence) || localThreads });
   });
   app.get("/api/conversation", async (c) =>
     c.json((await db.get(c.get("owner"), "conversations", "default")) ?? { messages: [] }),
@@ -343,7 +351,7 @@ export async function createApp(
     return new Response(body, { status: response.status, headers: response.headers });
   });
   app.get("/", (c) =>
-    c.json({ name: "OpenMuse", app: "http://localhost:8081", health: "/api/health" }),
+    c.json({ name: BRAND.name, app: "http://localhost:8081", health: "/api/health" }),
   );
   return { app, auth, files, actions, workspace, agent, computer };
 }

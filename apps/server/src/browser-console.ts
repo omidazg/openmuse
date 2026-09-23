@@ -1,8 +1,9 @@
+import { BRAND } from "../../../packages/domain/src/brand.ts";
 /** The console renders only a screenshot; remote page code never runs in this document. */
 export function browserConsole(previewUrl: string) {
   const preview = JSON.stringify(previewUrl).replace(/</g, "\\u003c");
   return `<!doctype html><html lang="fa" dir="rtl"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>مرورگر OpenMuse</title><style>
+<title>مرورگر ${BRAND.nameFa}</title><style>
 *{box-sizing:border-box}body{margin:0;background:#fcfcfc;color:#172125;font:14px/1.7 Vazirmatn,Tahoma,-apple-system,BlinkMacSystemFont,system-ui,sans-serif}
 header{padding:12px;display:flex;align-items:center;justify-content:space-between;gap:12px}#status{color:#697176;font-size:12px}#status.live{color:#248258}
 button,input{font:inherit;border:1px solid #e9edef;border-radius:24px;padding:10px 14px;background:white;color:inherit;min-height:42px}
@@ -21,7 +22,7 @@ let refreshing=false,sending=false,imageUrl,live=false,previewError=false;
 function controls(){document.querySelectorAll('nav button,#type').forEach(button=>button.disabled=sending||!live);image.classList.toggle('stale',!live||sending);}
 async function refresh(){if(refreshing||sending||document.hidden)return;refreshing=true;try{
 const r=await fetch(${preview},{cache:'no-store',signal:AbortSignal.timeout(20000)});
-if(!r.ok)throw new Error(r.status===401?'دسترسی نشست منقضی شده است. این صفحه را ببندید و مرورگر را دوباره باز کنید.':'اتصال مرورگر قطع شد. نشست را از OpenMuse دوباره باز کنید.');
+if(!r.ok)throw new Error(r.status===401?'دسترسی نشست منقضی شده است. این صفحه را ببندید و مرورگر را دوباره باز کنید.':'اتصال مرورگر قطع شد. نشست را از ${BRAND.nameFa} دوباره باز کنید.');
 const blob=await r.blob();const next=URL.createObjectURL(blob);await new Promise((resolve,reject)=>{const probe=new Image();probe.onload=resolve;probe.onerror=()=>{URL.revokeObjectURL(next);reject(new Error('نمایش پیش‌نمایش مرورگر ممکن نشد. دوباره تازه کنید.'));};probe.src=next;});
 if(imageUrl)URL.revokeObjectURL(imageUrl);imageUrl=next;image.src=next;live=true;status.textContent='زنده';status.className='live';if(previewError){error.textContent='';previewError=false;}
 }catch(e){live=false;previewError=true;status.textContent='قطع';status.className='';error.textContent=e.message;}finally{refreshing=false;controls();}}

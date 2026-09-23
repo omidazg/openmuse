@@ -33,6 +33,7 @@ import type {
   Monitor,
   RunEvent,
 } from "../../../packages/domain/src/agent";
+import { BRAND } from "../../../packages/domain/src/brand";
 import { useAgentWorkspace } from "./agent-workspace";
 import { FONT, faDate, faDateTime, faDigits, faNumber, fw, LOCALE, toLatinDigits } from "./locale";
 import { ActivityScreen, ConnectionsScreen } from "./screens";
@@ -1033,7 +1034,7 @@ export function DelegateSheet() {
   return (
     <Sheet
       title="سپردن یک کار"
-      subtitle="OpenMuse برنامه‌ای ذخیره می‌کند و روی سرور به کار ادامه می‌دهد."
+      subtitle={`${BRAND.nameFa} برنامه‌ای ذخیره می‌کند و روی سرور به کار ادامه می‌دهد.`}
       onClose={close}
     >
       <View style={[s.row, { flexWrap: "wrap", gap: 8, marginBottom: 20 }]}>
@@ -1241,7 +1242,7 @@ function IdeaCard({ idea }: { idea: Idea }) {
           <EvidenceList items={idea.evidence} />
           {editing && (
             <Field
-              label="OpenMuse چه کاری انجام دهد؟"
+              label={`${BRAND.nameFa} چه کاری انجام دهد؟`}
               value={prompt}
               onChangeText={setPrompt}
               multiline
@@ -1663,7 +1664,7 @@ function MonitorForm({ onDone }: { onDone: () => void }) {
       <Text style={[s.small, { marginBottom: 14 }]}>
         {sample
           ? "تغییرات این صفحه‌ی داخلی در فضای کاری شما می‌ماند."
-          : "OpenMuse این صفحه‌ی عمومی را روی سرور بررسی می‌کند و تغییرات مهم را در «اعلان‌ها» ذخیره می‌کند."}
+          : `${BRAND.nameFa} این صفحه‌ی عمومی را روی سرور بررسی می‌کند و تغییرات مهم را در «اعلان‌ها» ذخیره می‌کند.`}
       </Text>
       <ErrorNotice error={error} />
       <Button
@@ -1823,7 +1824,7 @@ export function AppsScreen() {
   const { data, mutate } = useAgentWorkspace();
   const [query, setQuery] = useState("");
   const [settings, setSettings] = useState(false);
-  const [name, setName] = useState(data?.identity.name || "OpenMuse");
+  const [name, setName] = useState(data?.identity.name || BRAND.nameFa);
   const [tone, setTone] = useState(data?.identity.tone || "warm");
   const [avatar, setAvatar] = useState(data?.identity.avatar || "sky");
   const [showChatUpdates, setShowChatUpdates] = useState(data?.identity.showChatUpdates !== false);
