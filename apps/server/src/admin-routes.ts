@@ -1,5 +1,7 @@
 import { Hono } from "hono";
 import { z } from "zod";
+import type { Billing } from "./billing.ts";
+import { publicPayment } from "./billing-routes.ts";
 import type { Config } from "./config.ts";
 import { AppError } from "./errors.ts";
 import type { Usage } from "./usage.ts";
@@ -46,7 +48,14 @@ const patchSchema = z.object({
 });
 
 /** /api/admin: user management and usage, for admin sessions only. */
-export function adminRoutes(users: Users, usage: Usage, config: Config) {
+const grantSchema = z.object({
+  planId: z.string().min(1).max(32),
+  days: z.number().int().min(1).max(3660).optional(),
+  amount: z.number().int().min(0).max(1_000_000_000).optional(),
+  note: z.string().trim().max(200).optional(),
+});
+
+export function adminRoutes(users: Users, usage: Usage, config: Config, billing: Billing) {
   const app = new Hono<Env>();
   app.use("*", async (c, next) => {
     if (c.get("role") !== "admin")
@@ -61,6 +70,10 @@ export function adminRoutes(users: Users, usage: Usage, config: Config) {
         sessions: sessions.get(user.id) ?? 0,
         usage: await usage.today(user.id),
         limits: await usage.limits(user.id),
+        subscription: await usage.subscription(user.id).then((sub) => ({
+          plan: { id: sub.plan.id, name: sub.plan.name },
+          currentPeriodEnd: sub.currentPeriodEnd,
+        })),
       })),
     );
     rows.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
@@ -70,6 +83,8 @@ export function adminRoutes(users: Users, usage: Usage, config: Config) {
         messages: config.dailyMessageLimit ?? 200,
         tasks: config.dailyTaskLimit ?? 30,
       },
+      plans: billing.plans().map(({ id, name, days, price }) => ({ id, name, days, price })),
+      billingEnabled: billing.enabled,
     });
   });
   app.post("/users", async (c) => {
@@ -92,6 +107,30 @@ export function adminRoutes(users: Users, usage: Usage, config: Config) {
   app.delete("/users/:id/sessions", async (c) =>
     c.json({ deleted: await users.deleteSessions(c.req.param("id")) }),
   );
+  /** Grant or extend a plan by hand (cash or bank transfer); "free" ends the subscription. */
+  app.post("/users/:id/plan", async (c) => {
+    const body = grantSchema.parse(await c.req.json());
+    const result = await billing.grant({ ...body, owner: c.req.param("id"), by: c.get("owner") });
+    return c.json({
+      plan: { id: result.plan.id, name: result.plan.name },
+      periodEnd: result.periodEnd,
+    });
+  });
+  app.get("/payments", async (c) => {
+    const [payments, list] = await Promise.all([billing.payments(), users.list()]);
+    const names = new Map(list.map((user) => [user.id, user.label || user.name]));
+    const plans = billing.plans();
+    return c.json({
+      payments: payments.slice(0, 200).map((payment) => ({
+        ...publicPayment(payment, plans),
+        owner: payment.owner,
+        ownerName: names.get(payment.owner) ?? payment.owner,
+        code: payment.code ?? null,
+        grantedBy: payment.grantedBy ?? null,
+        note: payment.note ?? null,
+      })),
+    });
+  });
   app.get("/users/:id/usage", async (c) => {
     const days = z.coerce.number().int().min(1).max(90).catch(30).parse(c.req.query("days"));
     const id = c.req.param("id");

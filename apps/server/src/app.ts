@@ -16,6 +16,8 @@ import { ActionService } from "./actions.ts";
 import { adminRoutes } from "./admin-routes.ts";
 import { agentConfigured, makeRuntime } from "./agent.ts";
 import { createAuth } from "./auth.ts";
+import { Billing, type PaymentGateway } from "./billing.ts";
+import { billingCallback, billingRoutes } from "./billing-routes.ts";
 import { botRoutes } from "./bot/routes.ts";
 import { BrowserService } from "./browser.ts";
 import { ComputerService, type DockerRunner } from "./computer.ts";
@@ -29,7 +31,7 @@ import { reportError } from "./errors-report.ts";
 import { Files, fileKind } from "./files.ts";
 import { GoogleAuth } from "./google-auth.ts";
 import { MailboxService } from "./mailbox.ts";
-import { configCatalog, modelOptions, saveSelectedModel, selectedModel } from "./models.ts";
+import { modelOptions, saveSelectedModel, selectedModel } from "./models.ts";
 import { OtpService } from "./otp.ts";
 import { PdfRenderer } from "./pdf-render.ts";
 import { clientIp, RateLimiter } from "./rate-limit.ts";
@@ -42,7 +44,13 @@ import { purposeOf, WorkspaceService } from "./workspace.ts";
 export async function createApp(
   db: Store,
   config: Config,
-  options: { docker?: DockerRunner; fetch?: typeof fetch; mailbox?: MailboxDeps } = {},
+  options: {
+    docker?: DockerRunner;
+    fetch?: typeof fetch;
+    mailbox?: MailboxDeps;
+    gateway?: PaymentGateway;
+    now?: () => number;
+  } = {},
 ) {
   const auth = await createAuth(db, config),
     files = new Files(db, config, auth, new PdfRenderer(config)),
@@ -60,9 +68,14 @@ export async function createApp(
   const computer = new ComputerService(db, config, options.docker);
   const agent = new AgentService(db, config, workspace, files, actions, browser, computer);
   const users = auth.users;
-  const usage = new Usage(db, config, users);
+  const usage = new Usage(db, config, users, options.now);
   agent.usage = usage;
   const otp = new OtpService(db, config, users, auth, options.fetch);
+  const billing = new Billing(db, config, users, {
+    fetch: options.fetch,
+    gateway: options.gateway,
+    now: options.now,
+  });
   const intelligence =
     threadsBackend(config) === "intelligence" && config.intelligenceApiKey?.trim()
       ? new CopilotKitIntelligence({ apiKey: config.intelligenceApiKey })
@@ -128,8 +141,11 @@ export async function createApp(
       browserConfigured: Boolean(config.workerUrl && config.workerToken),
       transcriptionEnabled: transcriptionEnabled(),
       otpEnabled: otpEnabled(config),
+      billingEnabled: billing.enabled,
     }),
   );
+  // The gateway redirect carries no session; it must stay ahead of the auth middleware.
+  app.route("/api/billing/callback", billingCallback(billing, config));
   // Key logins: 10 attempts per client address every 10 minutes, plus a global safety cap.
   const loginsPerIp = new RateLimiter(10, 10 * 60 * 1000);
   const loginsGlobal = new RateLimiter(120, 60 * 1000);
@@ -199,6 +215,7 @@ export async function createApp(
   app.get("/api/me", async (c) => {
     const owner = c.get("owner");
     const user = await users.get(owner);
+    const subscription = await usage.subscription(owner);
     return c.json({
       owner,
       role: c.get("role"),
@@ -206,9 +223,15 @@ export async function createApp(
       usage: await usage.today(owner),
       limits: await usage.limits(owner),
       otpEnabled: otpEnabled(config),
+      billingEnabled: billing.enabled,
+      subscription: {
+        plan: { id: subscription.plan.id, name: subscription.plan.name },
+        currentPeriodEnd: subscription.currentPeriodEnd,
+      },
     });
   });
-  app.route("/api/admin", adminRoutes(users, usage, config));
+  app.route("/api/admin", adminRoutes(users, usage, config, billing));
+  app.route("/api/billing", billingRoutes(billing, usage, config));
   app.get("/api/workspace", async (c) => {
     const snapshot = await workspace.snapshot(c.get("owner"), c.req.query("q"));
     snapshot.browsers = snapshot.browsers.map((s) => browser.decorate(c.get("owner"), s));
@@ -219,7 +242,7 @@ export async function createApp(
   if (localThreads) app.route("/api/threads", localThreadRoutes(db));
   app.route("/api/computer", computerRoutes(computer, files));
   app.get("/api/models", async (c) => {
-    const catalog = configCatalog(config);
+    const catalog = await usage.catalog(c.get("owner"));
     return c.json({
       models: modelOptions(catalog),
       selected: (await selectedModel(db, catalog, c.get("owner"))) ?? catalog.defaultModel ?? null,
@@ -227,7 +250,8 @@ export async function createApp(
   });
   app.put("/api/models/selected", async (c) => {
     const body = z.object({ model: z.string().min(1).max(200) }).parse(await c.req.json());
-    const selected = await saveSelectedModel(db, configCatalog(config), c.get("owner"), body.model);
+    const owner = c.get("owner");
+    const selected = await saveSelectedModel(db, await usage.catalog(owner), owner, body.model);
     return c.json({ selected });
   });
   const transcribes = new RateLimiter(20, 10 * 60 * 1000);
@@ -476,7 +500,20 @@ export async function createApp(
   app.get("/", (c) =>
     c.json({ name: BRAND.name, app: "http://localhost:8081", health: "/api/health" }),
   );
-  return { app, auth, files, actions, workspace, agent, computer, usage, users, otp, mailbox };
+  return {
+    app,
+    auth,
+    files,
+    actions,
+    workspace,
+    agent,
+    computer,
+    usage,
+    users,
+    otp,
+    mailbox,
+    billing,
+  };
 }
 
 /** A chat turn: REST `POST …/agent/:id/run` or a single-endpoint `{"method":"agent/run"}` call. */

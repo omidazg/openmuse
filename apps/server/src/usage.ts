@@ -1,6 +1,8 @@
 import type { Config } from "./config.ts";
 import type { Store } from "./db.ts";
 import { AppError } from "./errors.ts";
+import { configCatalog, type ModelCatalog, restrictCatalog } from "./models.ts";
+import { activeSubscription, configPlans, type Subscription } from "./plans.ts";
 import type { Users } from "./users.ts";
 
 export const QUOTA_EXCEEDED = "سقف استفادهٔ امروز شما تمام شده است. فردا دوباره تلاش کنید.";
@@ -64,13 +66,28 @@ export class Usage {
       .map((day) => ({ ...empty(day.date), ...day }))
       .sort((a, b) => b.date.localeCompare(a.date));
   }
+  /** The plan in force for this owner; a lapsed paid plan reads as free. */
+  async subscription(owner: string): Promise<Subscription> {
+    return activeSubscription(configPlans(this.config), await this.users.get(owner), this.now());
+  }
+  /** Admin per-user overrides win, then the active plan, then the server defaults. */
   async limits(owner: string): Promise<Limits> {
     if (await this.users.isAdmin(owner)) return { messages: null, tasks: null };
-    const quota = (await this.users.get(owner))?.quota;
+    const user = await this.users.get(owner);
+    const { plan } = activeSubscription(configPlans(this.config), user, this.now());
     return {
-      messages: limit(quota?.dailyMessages, this.config.dailyMessageLimit ?? 200),
-      tasks: limit(quota?.dailyTasks, this.config.dailyTaskLimit ?? 30),
+      messages: limit(
+        user?.quota?.dailyMessages,
+        plan.dailyMessages ?? this.config.dailyMessageLimit ?? 200,
+      ),
+      tasks: limit(user?.quota?.dailyTasks, plan.dailyTasks ?? this.config.dailyTaskLimit ?? 30),
     };
+  }
+  /** Models this owner may use under their active plan; admins see the whole allowlist. */
+  async catalog(owner: string): Promise<ModelCatalog> {
+    const catalog = configCatalog(this.config);
+    if (await this.users.isAdmin(owner)) return catalog;
+    return restrictCatalog(catalog, (await this.subscription(owner)).plan.models);
   }
   /** Counts one unit of `metric`, or throws a Persian 429 when today's limit is already used. */
   async consume(owner: string, metric: Metric) {
