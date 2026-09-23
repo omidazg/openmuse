@@ -1,6 +1,13 @@
 # Caddy obtains and renews the HTTPS certificate for $DOMAIN automatically.
 # The DNS A record must point at the server (see README.fa.md for the ArvanCloud CDN notes).
+# DOMAIN may also be the bare server IP (e.g. while a domain is filtered or not yet
+# registered): Let's Encrypt issues IP certificates only with ACME_PROFILE=shortlived.
 {$DOMAIN} {
+	tls {
+		issuer acme {
+			profile {$ACME_PROFILE:classic}
+		}
+	}
 	encode zstd gzip
 	header {
 		Strict-Transport-Security "max-age=31536000"
