@@ -33,6 +33,7 @@ import { configCatalog, modelOptions, saveSelectedModel, selectedModel } from ".
 import { OtpService } from "./otp.ts";
 import { PdfRenderer } from "./pdf-render.ts";
 import { clientIp, RateLimiter } from "./rate-limit.ts";
+import { publicShareRoutes, shareRoutes } from "./sharing.ts";
 import { localThreadRoutes, localThreadsEnabled } from "./threads.ts";
 import { transcribeAudio, transcriptionEnabled } from "./transcribe.ts";
 import { Usage } from "./usage.ts";
@@ -177,6 +178,8 @@ export async function createApp(
       `<!doctype html><html lang="fa" dir="rtl"><meta charset="utf-8"><h1>گوگل متصل شد</h1><p>به ${BRAND.nameFa} برگردید و فضای کاری خود را تازه کنید.</p></html>`,
     );
   });
+  // Read-only share pages are public: the unguessable token is the only credential.
+  app.route("/s", publicShareRoutes(db));
   app.use("/api/*", async (c, next) => {
     const signedRoute =
       /^\/api\/files\/[^/]+\/content$|^\/api\/browsers\/[^/]+\/(?:preview|console)$/.test(
@@ -217,6 +220,7 @@ export async function createApp(
   app.route("/api/agent", agentRoutes(agent));
   app.route("/api/bot", botRoutes(db));
   if (localThreads) app.route("/api/threads", localThreadRoutes(db));
+  app.route("/api", shareRoutes(db, config));
   app.route("/api/computer", computerRoutes(computer, files));
   app.get("/api/models", async (c) => {
     const catalog = configCatalog(config);

@@ -31,6 +31,7 @@ import { runConversationTurn } from "./conversation-run";
 import { fw } from "./locale";
 import { MailToolCard } from "./mail-tool-card";
 import { ModelPicker } from "./model-picker";
+import { AnswerActions } from "./share-sheet";
 import { FileThreadCard, TaskThreadCard } from "./thread-artifacts";
 import { type Selection, useMuseThread } from "./threads";
 import { Button, Card, CheckRow, colors, ErrorNotice, s } from "./ui";
@@ -482,6 +483,9 @@ export function ChatScreen({
                       {text}
                     </Text>
                   </View>
+                )}
+                {!user && !!text && !replying && (
+                  <AnswerActions thread={selection.id} messageId={message.id} />
                 )}
                 <BrowserRunContext
                   value={{

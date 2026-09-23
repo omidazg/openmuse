@@ -11,6 +11,7 @@ import {
   Plus,
   RefreshCw,
   Settings2,
+  Share2,
   Tag,
   Users,
 } from "lucide-react-native";
@@ -28,6 +29,7 @@ import { BRAND } from "../../../packages/domain/src/brand";
 import type { MuseApi } from "./api";
 import { faNumber } from "./locale";
 import { useSession } from "./session";
+import { ShareSheet, useShareThreadId } from "./share-sheet";
 import {
   LabelBar,
   LabelPicker,
@@ -279,6 +281,10 @@ export function ThreadsSheet({ onClose }: { onClose: () => void }) {
   const [name, setName] = useState("");
   const [error, setError] = useState("");
   const [archived, setArchived] = useState(false);
+  // undefined: closed; {} lists every share link; threadId opens export and sharing for it.
+  const [sharing, setSharing] = useState<{ threadId?: string }>();
+  const currentShareId = useShareThreadId(selection.id);
+  const canShare = backend !== "intelligence";
   const visible = threads.threads.filter(
     (thread) =>
       thread.id !== mainId &&
@@ -310,6 +316,7 @@ export function ThreadsSheet({ onClose }: { onClose: () => void }) {
         }
       }}
       onToggleLabels={() => setLabeling(labeling === thread.id ? undefined : thread.id)}
+      onShare={canShare ? () => setSharing({ threadId: thread.id }) : undefined}
       mutate={mutate}
     />
   );
@@ -376,6 +383,14 @@ export function ThreadsSheet({ onClose }: { onClose: () => void }) {
             >
               گفت‌وگوی جانبی تازه
             </Button>
+            {currentShareId && (
+              <LinkRow
+                icon={Share2}
+                title="خروجی و اشتراک‌گذاری"
+                detail="گفت‌وگوی باز: دانلود PDF و Word یا پیوند فقط‌خواندنی"
+                onPress={() => setSharing({ threadId: currentShareId })}
+              />
+            )}
             <View style={[s.between, { marginTop: 12 }]}>
               <Text style={s.heading}>گفت‌وگوهای جانبی</Text>
               <Button small onPress={() => setArchived(!archived)}>
@@ -449,6 +464,12 @@ export function ThreadsSheet({ onClose }: { onClose: () => void }) {
                 onClose();
               }}
             />
+            <LinkRow
+              icon={Share2}
+              title="خروجی و اشتراک‌گذاری"
+              detail="دانلود PDF و Word یا پیوند فقط‌خواندنی"
+              onPress={() => setSharing({ threadId: "default" })}
+            />
             <Text style={s.muted}>
               گفت‌وگوی شما در این فضای کار ذخیره می‌شود. اتصال‌ها را می‌توانید در «برنامه‌ها» مدیریت
               کنید.
@@ -477,6 +498,14 @@ export function ThreadsSheet({ onClose }: { onClose: () => void }) {
         <LinkRow icon={CalendarDays} title="تقویم" onPress={() => go("calendar")} />
         <LinkRow icon={FileText} title="فایل‌ها" onPress={() => go("files")} />
         <LinkRow icon={Settings2} title="برنامه‌ها و تنظیمات" onPress={() => go("apps")} />
+        {canShare && (
+          <LinkRow
+            icon={Share2}
+            title="پیوندهای اشتراکی"
+            detail="دیدن و لغو پیوندهای فقط‌خواندنی"
+            onPress={() => setSharing({})}
+          />
+        )}
         {me?.role === "admin" && (
           <LinkRow
             icon={Users}
@@ -503,6 +532,7 @@ export function ThreadsSheet({ onClose }: { onClose: () => void }) {
           خروج از حساب
         </Button>
       </View>
+      {sharing && <ShareSheet threadId={sharing.threadId} onClose={() => setSharing(undefined)} />}
     </Sheet>
   );
 }
@@ -518,6 +548,7 @@ function ThreadRow({
   onOpen,
   onRename,
   onToggleLabels,
+  onShare,
   mutate,
 }: {
   thread: ThreadSummary;
@@ -531,6 +562,7 @@ function ThreadRow({
   onOpen: () => void;
   onRename: () => void;
   onToggleLabels: () => void;
+  onShare?: () => void;
   mutate: (action: () => Promise<void>) => Promise<void>;
 }) {
   const title = thread.name || "گفت‌وگوی بی‌نام";
@@ -612,6 +644,11 @@ function ThreadRow({
         >
           {thread.archived ? "بازگردانی" : "بایگانی"}
         </Button>
+        {onShare && (
+          <Button small icon={Share2} onPress={onShare}>
+            اشتراک‌گذاری
+          </Button>
+        )}
       </View>
     </View>
   );
