@@ -89,7 +89,7 @@ export class Store {
   }
   async recoverInterruptedActions(): Promise<void> {
     await this.db.query(
-      `UPDATE records SET data=data || '{"status":"outcome_unknown","error":"Server restarted during execution. Check the provider before creating another action."}'::jsonb WHERE kind='actions' AND data->>'status'='executing'`,
+      `UPDATE records SET data=data || '{"status":"outcome_unknown","error":"سرور هنگام اجرای این اقدام دوباره راه‌اندازی شد. پیش از ساختن اقدام دیگر، نتیجه را در سرویس مقصد بررسی کنید."}'::jsonb WHERE kind='actions' AND data->>'status'='executing'`,
     );
   }
   async take<T>(owner: string, kind: string, id: string): Promise<T | null> {

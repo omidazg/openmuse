@@ -39,6 +39,7 @@ import { ChatScreen, WorkspaceTools } from "./src/chat";
 import { ComputerEntry } from "./src/computer";
 import { ComputerDraftProvider } from "./src/computer-drafts";
 import { Details } from "./src/details";
+import { Landing } from "./src/landing";
 import { faNumber, fw, useAppFonts } from "./src/locale";
 import { BrowserScreen, CalendarScreen, FilesScreen, MailScreen } from "./src/screens";
 import { ThreadsProvider, ThreadsSheet, useMuseThread } from "./src/threads";
@@ -127,7 +128,7 @@ export default function App() {
   if (!fontsReady) return null;
   return (
     <SafeAreaProvider>
-      <StatusBar style="dark" />
+      <StatusBar style="auto" />
       {token ? (
         <CopilotKitProvider
           runtimeUrl={`${API_URL}/api/copilotkit`}
@@ -136,29 +137,9 @@ export default function App() {
           <WorkspaceApp token={token} />
         </CopilotKitProvider>
       ) : (
-        <SafeAreaView
-          style={{
-            flex: 1,
-            backgroundColor: colors.canvas,
-            justifyContent: "center",
-            alignItems: "center",
-            padding: 24,
-          }}
-        >
+        <Landing>
           <View style={{ width: "100%", maxWidth: 420, gap: 22, alignItems: "center" }}>
-            <Mascot size={72} />
-            <Text
-              style={{
-                fontSize: 32,
-                lineHeight: 44,
-                textAlign: "center",
-                color: colors.text,
-                ...fw("500"),
-              }}
-            >
-              به {BRAND.nameFa} خوش آمدید.
-            </Text>
-            <Text style={[s.muted, { textAlign: "center" }]}>{BRAND.tagline}.</Text>
+            <Text style={[s.heading, { fontSize: 20, lineHeight: 32 }]}>ورود به فضای کار</Text>
             {busy ? (
               <ActivityIndicator color={colors.blueDark} />
             ) : (
@@ -188,7 +169,7 @@ export default function App() {
               </Card>
             )}
           </View>
-        </SafeAreaView>
+        </Landing>
       )}
     </SafeAreaProvider>
   );
@@ -498,7 +479,7 @@ function WorkspaceShell({
                 width: "100%",
                 maxWidth: 370,
                 padding: 5,
-                backgroundColor: "#FFF",
+                backgroundColor: colors.card,
                 borderRadius: 40,
                 shadowColor: "#132631",
                 shadowOffset: { width: 0, height: 2 },
@@ -506,7 +487,7 @@ function WorkspaceShell({
                 shadowRadius: 18,
                 elevation: 3,
                 borderWidth: 1,
-                borderColor: "#F8F8F8",
+                borderColor: colors.line,
               }}
             >
               {nav.map((item) => {
@@ -523,7 +504,7 @@ function WorkspaceShell({
                       height: 47,
                       alignItems: "center",
                       justifyContent: "center",
-                      backgroundColor: active ? "#F0F1F2" : "transparent",
+                      backgroundColor: active ? colors.subtle : "transparent",
                       borderRadius: 28,
                     }}
                   >
@@ -553,7 +534,13 @@ function WorkspaceShell({
             >
               <Check size={16} color={colors.blue} />
               <Text
-                style={{ color: "#FFF", fontSize: 14, lineHeight: 22, flexShrink: 1, ...fw("400") }}
+                style={{
+                  color: colors.canvas,
+                  fontSize: 14,
+                  lineHeight: 22,
+                  flexShrink: 1,
+                  ...fw("400"),
+                }}
               >
                 {toast}
               </Text>
@@ -562,7 +549,7 @@ function WorkspaceShell({
                 accessibilityLabel="بستن اعلان"
                 onPress={clearToast}
               >
-                <X size={16} color="#FFF" />
+                <X size={16} color={colors.canvas} />
               </Pressable>
             </View>
           </View>

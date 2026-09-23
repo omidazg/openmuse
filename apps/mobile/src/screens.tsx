@@ -100,7 +100,7 @@ export function TodayScreen() {
       <View
         style={[
           {
-            backgroundColor: "#E8F2F8",
+            backgroundColor: colors.sky,
             borderRadius: 24,
             padding: 32,
             minHeight: 228,
@@ -124,7 +124,7 @@ export function TodayScreen() {
           >
             روز شما، با کمی{"\n"}فضای بیشتر برای نفس‌کشیدن.
           </Text>
-          <Text style={[s.muted, { maxWidth: 420, color: "#617680" }]}>
+          <Text style={[s.muted, { maxWidth: 420, color: colors.muted }]}>
             {events.length
               ? `${faNumber(events.length)} مورد در تقویم شما`
               : "تقویم‌تان جای خالی دارد"}
@@ -148,7 +148,7 @@ export function TodayScreen() {
                 width: 190,
                 height: 190,
                 borderRadius: 100,
-                backgroundColor: "#DAEAF2",
+                backgroundColor: colors.sky,
               }}
             />
             <View
@@ -158,7 +158,7 @@ export function TodayScreen() {
                 height: 145,
                 borderRadius: 80,
                 borderWidth: 1,
-                borderColor: "#C8DBE6",
+                borderColor: colors.line,
               }}
             />
             <Mascot size={94} />
@@ -171,13 +171,13 @@ export function TodayScreen() {
                   start: -19,
                   padding: 11,
                   gap: 7,
-                  backgroundColor: "#FFF",
+                  backgroundColor: colors.card,
                   borderRadius: 13,
                   transform: [{ rotate: "-7deg" }],
                 },
               ]}
             >
-              <Check size={14} color="#739174" />
+              <Check size={14} color={colors.success} />
               <Text style={s.small}>روزی سبک‌تر</Text>
             </View>
             <View
@@ -189,7 +189,7 @@ export function TodayScreen() {
                   end: -8,
                   padding: 12,
                   gap: 8,
-                  backgroundColor: "#FFF",
+                  backgroundColor: colors.card,
                   borderRadius: 13,
                   transform: [{ rotate: "5deg" }],
                 },
@@ -338,7 +338,7 @@ export function TodayScreen() {
         </Card>
       </View>
       <View style={{ flexDirection: wide ? "row" : "column", gap: 22 }}>
-        <Card style={{ flex: 1, backgroundColor: "#F0F0E7" }}>
+        <Card style={{ flex: 1, backgroundColor: colors.beige }}>
           <SectionHeading title="کمکی در کارهای کوچک" />
           <Text style={[s.muted, { marginBottom: 15 }]}>با یک فکر شروع کنید؛ بقیه‌اش با ما.</Text>
           {[
@@ -351,7 +351,7 @@ export function TodayScreen() {
               onPress={() => ask(prompt)}
               style={[
                 s.between,
-                { borderTopWidth: 1, borderTopColor: "#E1E2D9", paddingVertical: 13 },
+                { borderTopWidth: 1, borderTopColor: colors.line, paddingVertical: 13 },
               ]}
             >
               <Text style={[s.text, { fontSize: 12 }]}>{prompt}</Text>
@@ -496,7 +496,7 @@ export function MailScreen() {
               gap: 9,
               flex: 1,
               minWidth: 200,
-              backgroundColor: "#FFF",
+              backgroundColor: colors.card,
               borderWidth: 1,
               borderColor: colors.line,
               borderRadius: 12,
@@ -1004,7 +1004,7 @@ export function FilesScreen() {
               <View
                 style={{
                   height: 175,
-                  backgroundColor: "#EDEFEA",
+                  backgroundColor: colors.subtle,
                   justifyContent: "center",
                   alignItems: "center",
                 }}
@@ -1014,11 +1014,11 @@ export function FilesScreen() {
                     width: 93,
                     height: 121,
                     borderRadius: 5,
-                    backgroundColor: "#FFF",
+                    backgroundColor: colors.card,
                     padding: 14,
                     transform: [{ rotate: "-4deg" }],
                     borderWidth: 1,
-                    borderColor: "#DDE3DD",
+                    borderColor: colors.line,
                   }}
                 >
                   <View style={[s.row, { gap: 5, marginBottom: 15 }]}>
@@ -1030,7 +1030,7 @@ export function FilesScreen() {
                       key={width}
                       style={{
                         height: 3,
-                        backgroundColor: i === 0 ? "#A4BED0" : "#E3E7E3",
+                        backgroundColor: i === 0 ? "#A4BED0" : colors.line,
                         width: `${width}%`,
                         marginBottom: 7,
                         borderRadius: 3,
@@ -1119,7 +1119,7 @@ export function ActivityScreen() {
               <Chip
                 tint={
                   a.status === "failed"
-                    ? "#FBEFED"
+                    ? colors.dangerSoft
                     : a.status === "awaiting_review"
                       ? colors.lavender
                       : colors.canvas
@@ -1232,7 +1232,7 @@ export function ConnectionsScreen({ query = "" }: { query?: string }) {
     { id: "gmail", name: "Gmail", icon: Mail, color: "#EA5B4D", connected, group: "google" },
     {
       id: "calendar",
-      name: "Google Calendar",
+      name: "تقویم گوگل",
       icon: CalendarDays,
       color: "#4285F4",
       connected,
@@ -1269,7 +1269,9 @@ export function ConnectionsScreen({ query = "" }: { query?: string }) {
                   : "متصل"
                 : "یکپارچه‌سازی‌های در دسترس"}
             </Text>
-            <View style={{ paddingHorizontal: 16, borderRadius: 23, backgroundColor: "#F3F4F5" }}>
+            <View
+              style={{ paddingHorizontal: 16, borderRadius: 23, backgroundColor: colors.subtle }}
+            >
               {group.map((row, index) => (
                 <Pressable
                   key={row.id}
@@ -1284,7 +1286,7 @@ export function ConnectionsScreen({ query = "" }: { query?: string }) {
                       gap: 14,
                       minHeight: 61,
                       borderBottomWidth: index < group.length - 1 ? 1 : 0,
-                      borderBottomColor: "#E5E7E9",
+                      borderBottomColor: colors.line,
                     },
                   ]}
                 >
@@ -1293,7 +1295,7 @@ export function ConnectionsScreen({ query = "" }: { query?: string }) {
                       width: 29,
                       height: 29,
                       borderRadius: 7,
-                      backgroundColor: "#FFF",
+                      backgroundColor: colors.card,
                       alignItems: "center",
                       justifyContent: "center",
                     }}
@@ -1305,7 +1307,7 @@ export function ConnectionsScreen({ query = "" }: { query?: string }) {
                     <Text style={s.small}>داده‌های محلی</Text>
                   )}
                   {row.connected ? (
-                    <ChevronLeft size={18} color="#A4A7AA" />
+                    <ChevronLeft size={18} color={colors.faint} />
                   ) : (
                     <Text
                       style={{
@@ -1338,8 +1340,8 @@ export function ConnectionsScreen({ query = "" }: { query?: string }) {
           {selected === "google" ? (
             <View style={{ gap: 18 }}>
               <Text style={s.muted}>
-                Gmail و Google Calendar را به گفت‌وگوهایتان بیاورید. ابتدا دسترسی خواندن را انتخاب
-                کنید و هر وقت لازم شد، ارسال و ویرایش را فعال کنید.
+                Gmail و تقویم گوگل را به گفت‌وگوهایتان بیاورید. ابتدا دسترسی خواندن را انتخاب کنید و
+                هر وقت لازم شد، ارسال و ویرایش را فعال کنید.
               </Text>
               <View style={[s.row, { gap: 7, flexWrap: "wrap" }]}>
                 {google?.capabilities.map((cap) => (

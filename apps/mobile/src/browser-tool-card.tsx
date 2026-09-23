@@ -94,7 +94,7 @@ export function BrowserToolCard({
       : "";
   return (
     <Card
-      style={{ padding: 13, backgroundColor: "#EEEEF0", gap: 12, width: "100%", maxWidth: 440 }}
+      style={{ padding: 13, backgroundColor: colors.subtle, gap: 12, width: "100%", maxWidth: 440 }}
     >
       <View style={[s.row, { gap: 10 }]}>
         <View style={[s.iconBox, { width: 36, height: 36, borderRadius: 10 }]}>
@@ -123,19 +123,24 @@ export function BrowserToolCard({
         {working ? (
           <ActivityIndicator size="small" color={colors.blueDark} />
         ) : visited ? (
-          <Check size={17} color="#47896C" accessibilityLabel="صفحه خوانده شد" />
+          <Check size={17} color={colors.success} accessibilityLabel="صفحه خوانده شد" />
         ) : null}
       </View>
       {preview ? (
         <Image
           accessibilityLabel={`پیش‌نمایش مرورگر: ${visited?.title}`}
           source={{ uri: api.url(preview) }}
-          style={{ width: "100%", aspectRatio: 1.7, borderRadius: 12, backgroundColor: "#FFF" }}
+          style={{
+            width: "100%",
+            aspectRatio: 1.7,
+            borderRadius: 12,
+            backgroundColor: colors.card,
+          }}
           resizeMode="contain"
           onError={() => setPreviewFailed(true)}
         />
       ) : (
-        <View style={{ backgroundColor: "#FAFAFB", borderRadius: 12, padding: 21, gap: 12 }}>
+        <View style={{ backgroundColor: colors.card, borderRadius: 12, padding: 21, gap: 12 }}>
           <Text
             numberOfLines={2}
             style={[
@@ -150,7 +155,7 @@ export function BrowserToolCard({
               {(["90%", "74%", "84%"] as const).map((width) => (
                 <View
                   key={width}
-                  style={{ height: 7, width, borderRadius: 4, backgroundColor: "#E3E9ED" }}
+                  style={{ height: 7, width, borderRadius: 4, backgroundColor: colors.line }}
                 />
               ))}
             </View>
@@ -175,7 +180,7 @@ export function BrowserToolCard({
           icon={Hand}
           disabled={!browser || running}
           onPress={() => browser && open({ type: "browser", browser })}
-          style={{ backgroundColor: "#F9F9FA", minHeight: 38, paddingVertical: 8 }}
+          style={{ backgroundColor: colors.card, minHeight: 38, paddingVertical: 8 }}
         >
           در دست گرفتن کنترل
         </Button>

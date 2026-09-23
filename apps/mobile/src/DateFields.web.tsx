@@ -16,7 +16,7 @@ export default function DateFields({ label, date, time, allDay, onChange }: Date
     padding: 13,
     fontSize: 16,
     color: colors.text,
-    background: "#FFF",
+    background: colors.card,
     fontFamily: "inherit",
     width: "100%",
     boxSizing: "border-box" as const,

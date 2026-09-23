@@ -182,7 +182,7 @@ export function TaskCard({
           padding: compact ? 15 : 20,
           gap: 11,
           borderRadius: 22,
-          backgroundColor: "#F0F1F2",
+          backgroundColor: colors.subtle,
         }}
       >
         <View style={[s.row, { gap: 10 }]}>
@@ -827,7 +827,7 @@ function FinanceArtifact({ artifact }: { artifact: AgentArtifact }) {
   const period = record(artifact.data.period);
   return (
     <Card
-      style={{ gap: 12, padding: 10, backgroundColor: "#EEEEF0", maxWidth: 440, width: "100%" }}
+      style={{ gap: 12, padding: 10, backgroundColor: colors.subtle, maxWidth: 440, width: "100%" }}
     >
       <Pressable
         accessibilityRole="button"
@@ -936,7 +936,7 @@ function FinanceArtifact({ artifact }: { artifact: AgentArtifact }) {
                   <Text style={s.text}>{String(row.name)}</Text>
                   <Text style={s.text}>{amount(row.amount)}</Text>
                 </View>
-                <View style={{ height: 7, backgroundColor: "#DFE8EB", borderRadius: 8 }}>
+                <View style={{ height: 7, backgroundColor: colors.line, borderRadius: 8 }}>
                   <View
                     style={{
                       width: `${Math.min(100, (Number(row.amount) / spending) * 100)}%`,
@@ -1291,11 +1291,11 @@ export function GoalsScreen() {
                 height: 16,
                 borderRadius: 8,
                 borderWidth: 5,
-                borderColor: "#D9F1E2",
+                borderColor: colors.green,
                 backgroundColor: "#24A46B",
               }}
             />
-            <Text style={[s.heading, { color: "#189A58" }]}>پیگیری‌ها</Text>
+            <Text style={[s.heading, { color: colors.success }]}>پیگیری‌ها</Text>
           </View>
           <Button small icon={Plus} onPress={() => setAdding("Tracking")}>
             افزودن پیگیری
@@ -1309,7 +1309,7 @@ export function GoalsScreen() {
             onPress={() => setSelectedMonitor(item.id)}
             style={[s.row, { gap: 12, paddingVertical: 13 }]}
           >
-            <Square size={21} color="#A7AAAC" />
+            <Square size={21} color={colors.faint} />
             <View style={{ flex: 1, gap: 4 }}>
               <Text style={s.text}>{item.title}</Text>
               <Text numberOfLines={1} style={s.muted}>
@@ -1318,7 +1318,7 @@ export function GoalsScreen() {
                   : statusLabel(item.status)}
               </Text>
             </View>
-            <ChevronLeft size={18} color="#A3A6A8" />
+            <ChevronLeft size={18} color={colors.faint} />
           </Pressable>
         ))}
         {!monitors.length && (
@@ -1342,7 +1342,7 @@ export function GoalsScreen() {
               height: 16,
               borderRadius: 8,
               borderWidth: 5,
-              borderColor: "#D7E9FA",
+              borderColor: colors.sky,
               backgroundColor: "#3D9BDE",
             }}
           />
@@ -1358,7 +1358,7 @@ export function GoalsScreen() {
           >
             <Square
               size={21}
-              color="#A7AAAC"
+              color={colors.faint}
               fill={item.status === "completed" ? colors.green : "transparent"}
             />
             <View style={{ flex: 1, gap: 4 }}>
@@ -1367,7 +1367,7 @@ export function GoalsScreen() {
                 {item.description || statusLabel(item.status)}
               </Text>
             </View>
-            <ChevronLeft size={18} color="#A3A6A8" />
+            <ChevronLeft size={18} color={colors.faint} />
           </Pressable>
         ))}
         {!data?.goals.length && (
@@ -1392,9 +1392,9 @@ export function GoalsScreen() {
           onPress={() => setAdding(item.name)}
           style={[s.row, { gap: 12, minHeight: 38 }]}
         >
-          <item.icon size={23} color="#989C9F" />
-          <Text style={[s.text, { flex: 1, color: "#666A6D" }]}>{item.label}</Text>
-          <Plus size={18} color="#989C9F" />
+          <item.icon size={23} color={colors.faint} />
+          <Text style={[s.text, { flex: 1, color: colors.muted }]}>{item.label}</Text>
+          <Plus size={18} color={colors.faint} />
         </Pressable>
       ))}
       {adding && (
@@ -1893,7 +1893,7 @@ export function AppsScreen() {
       />
       <ConnectionsScreen query={query} />
       <Text style={s.heading}>روی رایانه‌ی شما</Text>
-      <Card style={{ paddingVertical: 3, backgroundColor: "#F4F5F6" }}>
+      <Card style={{ paddingVertical: 3, backgroundColor: colors.subtle }}>
         {shortcuts
           .filter((item) =>
             `${item.title} ${item.detail}`.toLowerCase().includes(query.toLowerCase()),
