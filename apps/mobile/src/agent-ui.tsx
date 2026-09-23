@@ -724,7 +724,23 @@ function display(value: unknown): string {
 }
 export function ArtifactCard({ artifact }: { artifact: AgentArtifact }) {
   const [expanded, setExpanded] = useState(false);
+  const { api, refresh, open } = useWorkspace();
+  const [pdfBusy, setPdfBusy] = useState(false);
+  const [pdfError, setPdfError] = useState("");
   if (artifact.kind === "finance") return <FinanceArtifact artifact={artifact} />;
+  async function exportPdf() {
+    setPdfBusy(true);
+    setPdfError("");
+    try {
+      const file = await api.request<Artifact>(`/api/agent/artifacts/${artifact.id}/pdf`, {});
+      await refresh();
+      open({ type: "file", file });
+    } catch (e) {
+      setPdfError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setPdfBusy(false);
+    }
+  }
   const rows = Object.entries(artifact.data);
   return (
     <Card style={{ gap: 13, backgroundColor: colors.card }}>
@@ -784,9 +800,15 @@ export function ArtifactCard({ artifact }: { artifact: AgentArtifact }) {
           )}
         </View>
       ))}
-      <Button small onPress={() => setExpanded(!expanded)}>
-        {expanded ? "نمایش خلاصه" : "مشاهده نتیجه کامل"}
-      </Button>
+      <View style={[s.row, { gap: 8, flexWrap: "wrap" }]}>
+        <Button small onPress={() => setExpanded(!expanded)}>
+          {expanded ? "نمایش خلاصه" : "مشاهده نتیجه کامل"}
+        </Button>
+        <Button small icon={FileText} busy={pdfBusy} onPress={() => void exportPdf()}>
+          ساخت PDF
+        </Button>
+      </View>
+      <ErrorNotice error={pdfError} />
     </Card>
   );
 }

@@ -41,8 +41,14 @@ import type {
   EmailDraft,
 } from "../../../packages/domain/src";
 import { BRAND } from "../../../packages/domain/src/brand";
+import {
+  holidaysByDate,
+  type IranOccasion,
+  isIranWeekend,
+} from "../../../packages/domain/src/iran-holidays";
 import { API_URL } from "./api";
 import { localDateTime, zonedInstant } from "./date-time";
+import { DOCUMENT_PICKER_TYPES, fileExtent, fileKindLabel, uploadMimeType } from "./file-kind";
 import { faDate, faDigits, faNumber, fw } from "./locale";
 import { MailboxSheet } from "./mailbox-sheet";
 import { MessengerLinkPanel } from "./messenger-link";
@@ -633,6 +639,11 @@ export function CalendarScreen() {
     day.setDate(anchor.getDate() - ((anchor.getDay() + 1) % 7) + i);
     return day;
   });
+  // Official Iranian holidays and occasions for the week strip and the next 30 days.
+  const occasions = holidaysByDate(plusDays(date, -7), plusDays(date, 37));
+  const shownOccasions: IranOccasion[] = all
+    ? [...occasions.values()].flat().filter((o) => o.date >= date && o.date < plusDays(date, 30))
+    : (occasions.get(date) ?? []);
   useEffect(() => {
     let active = true;
     void api
@@ -742,9 +753,16 @@ export function CalendarScreen() {
               day.toISOString(),
               Intl.DateTimeFormat().resolvedOptions().timeZone,
             ).date;
+            const dayOccasions = occasions.get(key) ?? [];
+            const holiday = dayOccasions.find((o) => o.holiday);
+            const off = !!holiday || isIranWeekend(key);
+            const note = holiday ?? dayOccasions[0];
             return (
               <Pressable
                 key={key}
+                accessibilityLabel={`${faDate(day, { weekday: "long", day: "numeric", month: "long" })}${
+                  note ? `، ${note.title}` : ""
+                }${off ? "، تعطیل" : ""}`}
                 onPress={() => {
                   setDate(key);
                   setAll(false);
@@ -753,20 +771,42 @@ export function CalendarScreen() {
                   flex: 1,
                   alignItems: "center",
                   paddingVertical: 17,
+                  paddingHorizontal: 2,
                   gap: 9,
                   borderRadius: 14,
                   backgroundColor: key === date ? colors.sky : "transparent",
                 }}
               >
-                <Text style={s.small}>{faDate(day, { weekday: "short" })}</Text>
+                <Text style={[s.small, off && { color: colors.danger }]}>
+                  {faDate(day, { weekday: "short" })}
+                </Text>
                 <Text
                   style={[
                     s.title,
-                    { fontSize: 22, color: key === date ? colors.blueDark : colors.text },
+                    {
+                      fontSize: 22,
+                      color: off ? colors.danger : key === date ? colors.blueDark : colors.text,
+                    },
                   ]}
                 >
                   {faDate(day, { day: "numeric" })}
                 </Text>
+                {note && (
+                  <Text
+                    numberOfLines={2}
+                    style={[
+                      s.small,
+                      {
+                        fontSize: 10,
+                        lineHeight: 15,
+                        textAlign: "center",
+                        color: note.holiday ? colors.danger : colors.muted,
+                      },
+                    ]}
+                  >
+                    {note.title}
+                  </Text>
+                )}
                 <View
                   style={{
                     height: 4,
@@ -798,6 +838,32 @@ export function CalendarScreen() {
         <Text style={[s.small, { marginTop: 7, marginBottom: 13 }]}>
           {selected?.name || "تقویم شما"} · {zone}. هر رویداد با منطقهٔ زمانی خودش نمایش داده می‌شود.
         </Text>
+        {(shownOccasions.length > 0 || (!all && isIranWeekend(date))) && (
+          <View
+            style={{
+              gap: 6,
+              marginBottom: 13,
+              padding: 12,
+              borderRadius: 14,
+              backgroundColor: colors.orange,
+            }}
+          >
+            {!all && isIranWeekend(date) && !shownOccasions.some((o) => o.holiday) && (
+              <Text style={[s.small, { color: colors.danger }]}>جمعه، تعطیل آخر هفته</Text>
+            )}
+            {shownOccasions.map((o) => (
+              <Text
+                key={`${o.date}-${o.title}`}
+                style={[s.small, { color: o.holiday ? colors.danger : colors.text }]}
+              >
+                {all ? `${faDate(`${o.date}T12:00:00`, { day: "numeric", month: "long" })}: ` : ""}
+                {o.title}
+                {o.holiday ? " · تعطیل رسمی" : ""}
+                {o.estimated ? " · تاریخ تقریبی" : ""}
+              </Text>
+            ))}
+          </View>
+        )}
         <ErrorNotice error={error} />
         {error && (
           <Button small onPress={() => setRetry(retry + 1)}>
@@ -956,7 +1022,7 @@ export function FilesScreen() {
     setBusy(true);
     try {
       const result = await DocumentPicker.getDocumentAsync({
-        type: "application/pdf",
+        type: DOCUMENT_PICKER_TYPES,
         copyToCacheDirectory: true,
       });
       if (result.canceled) return;
@@ -972,12 +1038,12 @@ export function FilesScreen() {
           httpMethod: "POST",
           uploadType: FileSystem.FileSystemUploadType.MULTIPART,
           fieldName: "file",
-          mimeType: "application/pdf",
+          mimeType: uploadMimeType(file.name, file.mimeType),
           headers: { Authorization: `Bearer ${api.token}` },
         });
         const payload = JSON.parse(result.body);
         if (result.status < 200 || result.status >= 300)
-          throw new Error(payload.error || "وارد کردن این PDF ممکن نشد. دوباره تلاش کنید.");
+          throw new Error(payload.error || "وارد کردن این سند ممکن نشد. دوباره تلاش کنید.");
         artifact = payload;
       }
       await refresh();
@@ -993,7 +1059,7 @@ export function FilesScreen() {
       <View style={s.between}>
         <Text style={[s.muted, { flex: 1, marginEnd: 15 }]}>اسناد شما، با کمی فضا برای کار.</Text>
         <Button primary icon={Upload} busy={busy} onPress={() => void upload()}>
-          وارد کردن PDF
+          وارد کردن سند
         </Button>
       </View>
       <ErrorNotice error={error} />
@@ -1043,7 +1109,7 @@ export function FilesScreen() {
                   ))}
                 </View>
                 <View style={{ position: "absolute", bottom: 12, end: 14 }}>
-                  <Chip>PDF</Chip>
+                  <Chip>{fileKindLabel(f)}</Chip>
                 </View>
               </View>
               <View style={{ padding: 21, gap: 6 }}>
@@ -1051,7 +1117,7 @@ export function FilesScreen() {
                   {f.name}
                 </Text>
                 <Text style={s.small}>
-                  {`${faNumber(f.pageCount)} صفحه · ${faNumber(Math.max(1, Math.round(f.size / 1024)))} کیلوبایت`}
+                  {`${fileExtent(f)} · ${faNumber(Math.max(1, Math.round(f.size / 1024)))} کیلوبایت`}
                 </Text>
                 <View style={[s.between, { marginTop: 9 }]}>
                   <Chip>{f.source}</Chip>
@@ -1067,7 +1133,7 @@ export function FilesScreen() {
           <Empty
             icon={FileText}
             title="اسناد شما اینجا هستند"
-            detail="یک PDF وارد کنید یا پیوست یک ایمیل را باز کنید تا آن را بخوانید، فیلدهای فرم پشتیبانی‌شده را پر کنید و نسخه‌ای از آن را به اشتراک بگذارید."
+            detail="یک PDF، سند Word، فایل Excel یا CSV وارد کنید یا پیوست یک ایمیل را باز کنید. دستیار متن اسناد را می‌خواند و فیلدهای فرم‌های PDF را پر می‌کند."
           />
         </Card>
       )}

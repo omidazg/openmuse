@@ -38,7 +38,7 @@ export function computerRoutes(computer: ComputerService, files: Files) {
       .extend({ fileId: z.string().min(1) })
       .parse(await c.req.json());
     return c.json(
-      await computer.writePdf(c.get("owner"), path, await files.bytes(c.get("owner"), fileId)),
+      await computer.writePdf(c.get("owner"), path, await files.pdfBytes(c.get("owner"), fileId)),
     );
   });
   app.post("/files/export", async (c) => {

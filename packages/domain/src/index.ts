@@ -65,6 +65,9 @@ export interface Artifact {
   source: string;
   parentId?: string;
   fields?: { name: string; value: string; type: "text" | "checkbox" | "unsupported" }[];
+  /** Word, Excel and CSV files: characters of extracted plain text available to the agent. */
+  textLength?: number;
+  textTruncated?: boolean;
 }
 export interface BrowserSession {
   id: string;

@@ -39,6 +39,7 @@ import { browserAddress, browserSite } from "./browser-address";
 import { ComputerSheet } from "./computer";
 import DateTimeEditor from "./DateTimeEditor";
 import { localDateTime, zonedInstant } from "./date-time";
+import { fileExtent, isPdf } from "./file-kind";
 import { faDate, faDateTime, faNumber, LOCALE, toLatinDigits } from "./locale";
 import PdfReader from "./PdfReader";
 import {
@@ -827,6 +828,23 @@ function FileDetail({ file: f }: { file: Artifact }) {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const url = api.url(f.url || `/api/files/${f.id}/content`);
+  const pdf = isPdf(f);
+  const [preview, setPreview] = useState<{ text: string; more: boolean } | null>(null);
+  useEffect(() => {
+    if (pdf) return;
+    let active = true;
+    api
+      .request<{ text: string; more: boolean }>(`/api/files/${f.id}/text`)
+      .then((result) => {
+        if (active) setPreview(result);
+      })
+      .catch((e) => {
+        if (active) setError(e instanceof Error ? e.message : String(e));
+      });
+    return () => {
+      active = false;
+    };
+  }, [api, f.id, pdf]);
   async function fill() {
     setBusy(true);
     setError("");
@@ -847,12 +865,16 @@ function FileDetail({ file: f }: { file: Artifact }) {
         await Linking.openURL(url);
         return;
       }
-      const target = `${FileSystem.cacheDirectory}${f.id}.pdf`;
+      const extension = (f.name.includes(".") && f.name.split(".").at(-1)?.toLowerCase()) || "pdf";
+      const target = `${FileSystem.cacheDirectory}${f.id}.${extension}`;
       await FileSystem.downloadAsync(url, target, {
         headers: { Authorization: `Bearer ${api.token}` },
       });
       if (await Sharing.isAvailableAsync())
-        await Sharing.shareAsync(target, { mimeType: "application/pdf", UTI: "com.adobe.pdf" });
+        await Sharing.shareAsync(target, {
+          mimeType: f.mimeType || "application/pdf",
+          ...(pdf ? { UTI: "com.adobe.pdf" } : {}),
+        });
       else
         throw new Error(
           `اشتراک‌گذاری در این دستگاه پشتیبانی نمی‌شود. فایل را از نسخهٔ وب ${BRAND.nameFa} دانلود کنید.`,
@@ -864,11 +886,31 @@ function FileDetail({ file: f }: { file: Artifact }) {
   return (
     <Sheet
       title={f.name}
-      subtitle={`${faNumber(f.pageCount)} صفحه · ${kilobytes(f.size)} · ${f.source}`}
+      subtitle={`${fileExtent(f)} · ${kilobytes(f.size)} · ${f.source}`}
       onClose={close}
       wide
     >
-      <PdfReader url={url} token={api.token} pageCount={f.pageCount} />
+      {pdf ? (
+        <PdfReader url={url} token={api.token} pageCount={f.pageCount} />
+      ) : (
+        <Card>
+          <SectionHeading title="متن سند" />
+          {preview ? (
+            <>
+              <Text selectable style={s.text}>
+                {preview.text || "متنی در این سند پیدا نشد."}
+              </Text>
+              {preview.more && (
+                <Text style={[s.muted, { marginTop: 12 }]}>
+                  فقط بخش نخست سند نمایش داده می‌شود. برای خواندن همهٔ آن، فایل را دانلود کنید.
+                </Text>
+              )}
+            </>
+          ) : (
+            !error && <ActivityIndicator />
+          )}
+        </Card>
+      )}
       <View style={[s.row, { gap: 10, marginVertical: 18, flexWrap: "wrap" }]}>
         <Button icon={Download} onPress={() => void share()}>
           {Platform.OS === "web" ? "دانلود فایل" : "اشتراک‌گذاری فایل"}

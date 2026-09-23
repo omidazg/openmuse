@@ -2,17 +2,34 @@ import { randomUUID } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Artifact } from "../../../packages/domain/src/index.ts";
-import { fillPdf, inspectPdf } from "../../../packages/integrations/src/pdf.ts";
+import {
+  DOCUMENT_TYPES,
+  type DocumentKind,
+  detectDocumentKind,
+  extractDocumentText,
+} from "../../../packages/integrations/src/office.ts";
+import { fillPdf, inspectPdf, type RenderHtml } from "../../../packages/integrations/src/pdf.ts";
 import type { Auth } from "./auth.ts";
 import type { Config } from "./config.ts";
 import type { Store } from "./db.ts";
 import { AppError } from "./errors.ts";
+import type { PdfRenderer } from "./pdf-render.ts";
+
+const kindByMime = new Map(
+  Object.entries(DOCUMENT_TYPES).map(([kind, type]) => [type.mimeType, kind as DocumentKind]),
+);
+
+export function fileKind(file: Pick<Artifact, "mimeType">): DocumentKind {
+  return kindByMime.get(file.mimeType) ?? "pdf";
+}
 
 export class Files {
   constructor(
     private readonly db: Store,
     private readonly config: Config,
     private readonly auth: Auth,
+    /** Chromium renderer for Persian PDFs; optional so pdf-lib paths keep working without it. */
+    readonly renderer?: PdfRenderer,
   ) {}
   async import(
     owner: string,
@@ -20,23 +37,45 @@ export class Files {
     bytes: Uint8Array,
     source: string,
     parentId?: string,
+    mimeType?: string,
   ): Promise<Artifact> {
     if (bytes.length > 10 * 1024 * 1024)
-      throw new AppError("حجم PDF باید حداکثر ۱۰ مگابایت باشد", 413);
-    const metadata = await inspectPdf(bytes);
-    if (metadata.pageCount > 500) throw new AppError("PDF باید حداکثر ۵۰۰ صفحه داشته باشد", 422);
+      throw new AppError("حجم سند باید حداکثر ۱۰ مگابایت باشد", 413);
+    const kind = detectDocumentKind(name, bytes, mimeType);
+    if (!kind)
+      throw new AppError(
+        "این نوع فایل پشتیبانی نمی‌شود. یک PDF، سند Word ‏(docx)، فایل Excel ‏(xlsx) یا CSV انتخاب کنید.",
+        422,
+      );
+    const type = DOCUMENT_TYPES[kind];
+    let pageCount = 1;
+    let fields: Artifact["fields"];
+    let text: string | undefined;
+    let textTruncated = false;
+    if (kind === "pdf") {
+      const metadata = await inspectPdf(bytes);
+      if (metadata.pageCount > 500) throw new AppError("PDF باید حداکثر ۵۰۰ صفحه داشته باشد", 422);
+      pageCount = metadata.pageCount;
+      fields = metadata.fields;
+    } else {
+      const extracted = extractDocumentText(kind, bytes);
+      pageCount = extracted.parts;
+      text = extracted.text;
+      textTruncated = extracted.truncated;
+    }
     const id = randomUUID();
-    const safeName = Array.from(name.split(/[\\/]/).at(-1) ?? "document.pdf")
+    const safeName = Array.from(name.split(/[\\/]/).at(-1) || `document.${type.extension}`)
       .filter((character) => character.charCodeAt(0) >= 32 && character.charCodeAt(0) !== 127)
       .join("")
       .slice(0, 180);
     const artifact: Artifact = {
       id,
       name: safeName,
-      mimeType: "application/pdf",
+      mimeType: type.mimeType,
       size: bytes.length,
-      pageCount: metadata.pageCount,
-      fields: metadata.fields,
+      pageCount,
+      ...(fields ? { fields } : {}),
+      ...(text !== undefined ? { textLength: text.length, textTruncated } : {}),
       url: "",
       createdAt: new Date().toISOString(),
       source,
@@ -44,9 +83,34 @@ export class Files {
     };
     const directory = join(this.config.dataDir, "files");
     await mkdir(directory, { recursive: true, mode: 0o700 });
-    await writeFile(join(directory, `${id}.pdf`), bytes, { mode: 0o600, flag: "wx" });
+    await writeFile(join(directory, `${id}.${type.extension}`), bytes, {
+      mode: 0o600,
+      flag: "wx",
+    });
+    if (text !== undefined)
+      await writeFile(join(directory, `${id}.txt`), text, { mode: 0o600, flag: "wx" });
     await this.db.put(owner, "files", artifact);
     return this.signed(owner, artifact);
+  }
+  /** Chromium HTML-to-PDF function when the browser worker is configured. */
+  get renderHtml(): RenderHtml | undefined {
+    const renderer = this.renderer;
+    return renderer?.available ? (html) => renderer.render(html) : undefined;
+  }
+  /** Render a Persian HTML fragment (see pdf-html.ts) to a new PDF in Files. */
+  async createPdf(owner: string, name: string, html: string, source: string, title = name) {
+    if (!this.renderer?.available)
+      throw new AppError(
+        "ساخت PDF فارسی به سرویس مرورگر نیاز دارد و این سرویس روی سرور فعال نیست. از مدیر سرور بخواهید آن را راه‌اندازی کند.",
+        503,
+      );
+    const bytes = await this.renderer.render(html, { title });
+    const base =
+      name
+        .replace(/\.pdf$/i, "")
+        .replace(/[\\/:*?"<>|]+/g, " ")
+        .trim() || "سند";
+    return this.import(owner, `${base.slice(0, 150)}.pdf`, bytes, source);
   }
   signed(owner: string, file: Artifact): Artifact {
     return { ...file, url: this.auth.sign(owner, `/api/files/${file.id}/content`) };
@@ -60,13 +124,51 @@ export class Files {
     return file;
   }
   async bytes(owner: string, id: string) {
-    await this.get(owner, id);
-    return readFile(join(this.config.dataDir, "files", `${id}.pdf`));
+    const file = await this.get(owner, id);
+    return readFile(
+      join(this.config.dataDir, "files", `${id}.${DOCUMENT_TYPES[fileKind(file)].extension}`),
+    );
+  }
+  /** Bytes of an owned PDF; other document types are rejected with a Persian error. */
+  async pdfBytes(owner: string, id: string) {
+    const file = await this.get(owner, id);
+    if (fileKind(file) !== "pdf")
+      throw new AppError(`«${file.name}» یک PDF نیست. این کار فقط برای فایل‌های PDF است.`, 422);
+    return this.bytes(owner, id);
+  }
+  /** Extracted plain text of a Word, Excel or CSV file. */
+  async text(owner: string, id: string, offset = 0, limit = 30_000) {
+    const file = await this.get(owner, id);
+    const kind = fileKind(file);
+    if (kind === "pdf")
+      return {
+        id: file.id,
+        name: file.name,
+        kind,
+        pageCount: file.pageCount,
+        fields: file.fields,
+        text: "",
+        note: "Text extraction is not available for PDFs; use the listed form fields.",
+      };
+    const all = await readFile(join(this.config.dataDir, "files", `${id}.txt`), "utf8");
+    const start = Math.max(0, Math.min(offset, all.length));
+    const text = all.slice(start, start + Math.max(1, Math.min(limit, 100_000)));
+    return {
+      id: file.id,
+      name: file.name,
+      kind,
+      parts: file.pageCount,
+      offset: start,
+      totalChars: all.length,
+      text,
+      more: start + text.length < all.length,
+      sourceTruncated: !!file.textTruncated,
+    };
   }
   async fill(owner: string, id: string, values: Record<string, string | boolean>) {
     const file = await this.get(owner, id);
-    const bytes = await this.bytes(owner, id);
-    const output = await fillPdf(bytes, values);
+    const bytes = await this.pdfBytes(owner, id);
+    const output = await fillPdf(bytes, values, { renderHtml: this.renderHtml });
     return this.import(
       owner,
       `${file.name.replace(/\.pdf$/i, "")} (تکمیل‌شده).pdf`,

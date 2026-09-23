@@ -11,6 +11,7 @@ import { z } from "zod";
 import { BRAND } from "../../../packages/domain/src/brand.ts";
 import { emailDraftSchema, proposalSchema } from "../../../packages/domain/src/index.ts";
 import type { MailboxDeps } from "../../../packages/integrations/src/mailbox.ts";
+import { documentHtml } from "../../../packages/integrations/src/pdf-html.ts";
 import { ActionService } from "./actions.ts";
 import { adminRoutes } from "./admin-routes.ts";
 import { agentConfigured, makeRuntime } from "./agent.ts";
@@ -25,11 +26,12 @@ import { agentRoutes } from "./engine/routes.ts";
 import { AgentService } from "./engine/service.ts";
 import { AppError } from "./errors.ts";
 import { reportError } from "./errors-report.ts";
-import { Files } from "./files.ts";
+import { Files, fileKind } from "./files.ts";
 import { GoogleAuth } from "./google-auth.ts";
 import { MailboxService } from "./mailbox.ts";
 import { configCatalog, modelOptions, saveSelectedModel, selectedModel } from "./models.ts";
 import { OtpService } from "./otp.ts";
+import { PdfRenderer } from "./pdf-render.ts";
 import { clientIp, RateLimiter } from "./rate-limit.ts";
 import { localThreadRoutes, localThreadsEnabled } from "./threads.ts";
 import { transcribeAudio, transcriptionEnabled } from "./transcribe.ts";
@@ -43,7 +45,7 @@ export async function createApp(
   options: { docker?: DockerRunner; fetch?: typeof fetch; mailbox?: MailboxDeps } = {},
 ) {
   const auth = await createAuth(db, config),
-    files = new Files(db, config, auth),
+    files = new Files(db, config, auth, new PdfRenderer(config)),
     google = new GoogleAuth(db, config),
     mailbox = new MailboxService(db, config, options.mailbox),
     workspace = new WorkspaceService(db, config, files, google, mailbox);
@@ -91,14 +93,18 @@ export async function createApp(
     bodyLimit({
       maxSize: 12 * 1024 * 1024,
       onError: (c) =>
-        c.json({ error: "درخواست خیلی بزرگ است؛ حجم PDF باید حداکثر ۱۰ مگابایت باشد" }, 413),
+        c.json({ error: "درخواست خیلی بزرگ است؛ حجم سند باید حداکثر ۱۰ مگابایت باشد" }, 413),
     }),
   );
   app.onError((error, c) => {
     if (error instanceof z.ZodError)
       return c.json({ error: error.issues.map((i) => i.message).join("; ") }, 422);
     if (error instanceof AppError) return c.json({ error: error.message }, error.status);
-    if (error.name === "PdfError" || error.name === "RecurringEventError")
+    if (
+      error.name === "PdfError" ||
+      error.name === "DocumentError" ||
+      error.name === "RecurringEventError"
+    )
       return c.json({ error: error.message }, 422);
     if (error instanceof SyntaxError) return c.json({ error: "داده‌های درخواست نامعتبر است" }, 400);
     // Provider and document errors are useful, but raw stack traces and token-bearing responses are not.
@@ -320,22 +326,49 @@ export async function createApp(
   app.post("/api/files", async (c) => {
     const data = await c.req.parseBody();
     const file = data.file;
-    if (!(file instanceof File)) throw new AppError("یک فایل PDF انتخاب کنید");
+    if (!(file instanceof File)) throw new AppError("یک سند PDF، Word، Excel یا CSV انتخاب کنید");
     return c.json(
       await files.import(
         c.get("owner"),
         file.name,
         new Uint8Array(await file.arrayBuffer()),
         "بارگذاری‌شده توسط شما",
+        undefined,
+        file.type,
+      ),
+      201,
+    );
+  });
+  app.post("/api/files/pdf", async (c) => {
+    const body = z
+      .object({ title: z.string().trim().min(1).max(160), content: z.string().max(200_000) })
+      .parse(await c.req.json());
+    return c.json(
+      await files.createPdf(
+        c.get("owner"),
+        body.title,
+        documentHtml({ title: body.title, body: body.content }),
+        "ساخته‌شده توسط شما",
+        body.title,
       ),
       201,
     );
   });
   app.get("/api/files/:id/content", async (c) => {
     const file = await files.get(c.get("owner"), c.req.param("id"));
-    c.header("Content-Type", "application/pdf");
-    c.header("Content-Disposition", `inline; filename*=UTF-8''${encodeURIComponent(file.name)}`);
+    const pdf = fileKind(file) === "pdf";
+    c.header("Content-Type", pdf ? "application/pdf" : file.mimeType);
+    c.header(
+      "Content-Disposition",
+      `${pdf ? "inline" : "attachment"}; filename*=UTF-8''${encodeURIComponent(file.name)}`,
+    );
     return c.body(await files.bytes(c.get("owner"), file.id));
+  });
+  app.get("/api/files/:id/text", async (c) => {
+    const offset = Number(c.req.query("offset") ?? 0);
+    return c.json(
+      await files.text(c.get("owner"), c.req.param("id"), Number.isFinite(offset) ? offset : 0),
+    );
   });
   app.post("/api/files/:id/fill", async (c) => {
     const body = z

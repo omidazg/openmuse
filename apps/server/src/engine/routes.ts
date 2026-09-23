@@ -53,6 +53,9 @@ export function agentRoutes(service: AgentService): Hono<{ Variables: { owner: s
       await service.answer(c.get("owner"), c.req.param("id"), body.answer, body.fields),
     );
   });
+  app.post("/artifacts/:id/pdf", async (c) =>
+    c.json(await service.exportArtifactPdf(c.get("owner"), c.req.param("id")), 201),
+  );
   app.post("/goals", async (c) =>
     c.json(await service.createGoal(c.get("owner"), await c.req.json()), 201),
   );

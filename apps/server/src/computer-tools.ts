@@ -99,7 +99,8 @@ export function computerTools(
       "import_computer_pdf",
       "Copy an owned app PDF into the computer without network access",
       computerPathSchema.extend({ fileId: z.string().min(1) }),
-      async ({ path, fileId }) => computer.writePdf(owner, path, await files.bytes(owner, fileId)),
+      async ({ path, fileId }) =>
+        computer.writePdf(owner, path, await files.pdfBytes(owner, fileId)),
     ),
     tool(
       "export_computer_pdf",
