@@ -1,0 +1,13 @@
+# Caddy obtains and renews the HTTPS certificate for $DOMAIN automatically.
+# The DNS A record must point at the server (see README.fa.md for the ArvanCloud CDN notes).
+{$DOMAIN} {
+	encode zstd gzip
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		-Server
+	}
+	# Agent chat uses SSE; never buffer it.
+	reverse_proxy app:8787 {
+		flush_interval -1
+	}
+}

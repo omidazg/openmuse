@@ -1,9 +1,11 @@
-import { ArrowUpRight, Check, ChevronRight, type LucideIcon, X } from "lucide-react-native";
-import type { ReactNode } from "react";
+import { ArrowUpLeft, Check, ChevronLeft, type LucideIcon, X } from "lucide-react-native";
+import { type ReactNode, useEffect, useRef } from "react";
 import {
   ActivityIndicator,
+  Animated,
   Image,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -15,6 +17,7 @@ import {
   type ViewStyle,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { FONT, faDate, faNumber, fw } from "./locale";
 export const colors = {
   canvas: "#FCFCFC",
   card: "#FFFFFF",
@@ -32,18 +35,17 @@ export const colors = {
 export const s = StyleSheet.create({
   row: { flexDirection: "row", alignItems: "center" },
   between: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  text: { color: colors.text, fontSize: 15, lineHeight: 23 },
-  muted: { color: colors.muted, fontSize: 14, lineHeight: 21 },
-  small: { color: colors.muted, fontSize: 11, lineHeight: 17 },
+  text: { fontFamily: FONT, color: colors.text, fontSize: 15, lineHeight: 26 },
+  muted: { fontFamily: FONT, color: colors.muted, fontSize: 14, lineHeight: 24 },
+  small: { fontFamily: FONT, color: colors.muted, fontSize: 12, lineHeight: 20 },
   label: {
     color: colors.muted,
-    fontSize: 10,
-    fontWeight: "700",
-    letterSpacing: 1.4,
-    textTransform: "uppercase",
+    fontSize: 12,
+    lineHeight: 18,
+    ...fw("700"),
   },
-  title: { color: colors.text, fontSize: 23, fontWeight: "600", letterSpacing: -0.7 },
-  heading: { color: colors.text, fontSize: 16, fontWeight: "600", letterSpacing: -0.25 },
+  title: { color: colors.text, fontSize: 23, lineHeight: 38, ...fw("600") },
+  heading: { color: colors.text, fontSize: 16, lineHeight: 27, ...fw("600") },
   card: {
     backgroundColor: colors.card,
     borderRadius: 23,
@@ -53,6 +55,7 @@ export const s = StyleSheet.create({
   },
   divider: { height: 1, backgroundColor: colors.line, marginVertical: 18 },
   input: {
+    fontFamily: FONT,
     borderWidth: 1,
     borderColor: colors.line,
     borderRadius: 19,
@@ -60,6 +63,7 @@ export const s = StyleSheet.create({
     paddingVertical: 12,
     color: colors.text,
     fontSize: 16,
+    lineHeight: 26,
     backgroundColor: "#FFF",
     minHeight: 45,
   },
@@ -76,7 +80,7 @@ export const s = StyleSheet.create({
   },
   primary: { backgroundColor: colors.blue },
   secondary: { backgroundColor: "#F1F2F3" },
-  buttonText: { fontSize: 14, fontWeight: "600" },
+  buttonText: { fontSize: 14, lineHeight: 21, ...fw("600") },
   chip: {
     paddingHorizontal: 10,
     paddingVertical: 4,
@@ -84,7 +88,7 @@ export const s = StyleSheet.create({
     alignSelf: "flex-start",
     backgroundColor: colors.canvas,
   },
-  chipText: { fontSize: 10, fontWeight: "600", color: colors.muted },
+  chipText: { fontSize: 11, lineHeight: 17, ...fw("600"), color: colors.muted },
   iconBox: {
     width: 42,
     height: 42,
@@ -200,7 +204,7 @@ export function Chip({ children, tint }: { children: ReactNode; tint?: string })
 export function Field({ label, ...props }: TextInputProps & { label: string }) {
   return (
     <View style={s.field}>
-      <Text style={[s.small, { fontWeight: "600", color: colors.text }]}>{label}</Text>
+      <Text style={[s.small, { ...fw("600"), color: colors.text }]}>{label}</Text>
       <TextInput
         placeholderTextColor={colors.muted}
         accessibilityLabel={label}
@@ -249,16 +253,25 @@ export function Sheet({
   children,
   onClose,
   wide,
+  drawer,
 }: {
   title: string;
   subtitle?: string;
   children: ReactNode;
   onClose: () => void;
   wide?: boolean;
+  /** Full-height side drawer that slides in from the start (right, in RTL) edge. */
+  drawer?: boolean;
 }) {
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const compact = width < 600;
+  if (drawer)
+    return (
+      <Drawer title={title} subtitle={subtitle} onClose={onClose}>
+        {children}
+      </Drawer>
+    );
   return (
     <Modal transparent animationType={compact ? "slide" : "fade"} visible onRequestClose={onClose}>
       <View style={[s.modalShade, compact && { padding: 0, justifyContent: "flex-end" }]}>
@@ -268,8 +281,8 @@ export function Sheet({
             s.sheet,
             wide && { maxWidth: 1050 },
             compact && {
-              borderBottomLeftRadius: 0,
-              borderBottomRightRadius: 0,
+              borderBottomStartRadius: 0,
+              borderBottomEndRadius: 0,
               paddingBottom: Math.max(insets.bottom, 12),
               maxHeight: "94%",
             },
@@ -297,7 +310,7 @@ export function Sheet({
               <Text style={s.title}>{title}</Text>
               {subtitle && <Text style={s.muted}>{subtitle}</Text>}
             </View>
-            <IconButton icon={X} label="Close details" onPress={onClose} />
+            <IconButton icon={X} label="بستن" onPress={onClose} />
           </View>
           <ScrollView
             keyboardShouldPersistTaps="handled"
@@ -306,6 +319,72 @@ export function Sheet({
             {children}
           </ScrollView>
         </View>
+      </View>
+    </Modal>
+  );
+}
+function Drawer({
+  title,
+  subtitle,
+  children,
+  onClose,
+}: {
+  title: string;
+  subtitle?: string;
+  children: ReactNode;
+  onClose: () => void;
+}) {
+  const { width } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+  const panelWidth = Math.min(380, Math.round(width * 0.88));
+  // The app is always RTL, so the start edge is the physical right; transforms are not mirrored.
+  const offset = useRef(new Animated.Value(panelWidth)).current;
+  useEffect(() => {
+    Animated.timing(offset, {
+      toValue: 0,
+      duration: 220,
+      useNativeDriver: Platform.OS !== "web",
+    }).start();
+  }, [offset]);
+  return (
+    <Modal transparent animationType="fade" visible onRequestClose={onClose}>
+      <View style={{ flex: 1, flexDirection: "row" }}>
+        <Animated.View
+          accessibilityViewIsModal
+          style={{
+            width: panelWidth,
+            height: "100%",
+            backgroundColor: colors.canvas,
+            borderTopEndRadius: 26,
+            borderBottomEndRadius: 26,
+            paddingTop: insets.top,
+            paddingBottom: Math.max(insets.bottom, 12),
+            overflow: "hidden",
+            transform: [{ translateX: offset }],
+          }}
+        >
+          <View
+            style={[
+              s.between,
+              { padding: 20, borderBottomWidth: 1, borderBottomColor: colors.line },
+            ]}
+          >
+            <View style={{ flex: 1, gap: 4 }}>
+              <Text style={s.title}>{title}</Text>
+              {subtitle && <Text style={s.muted}>{subtitle}</Text>}
+            </View>
+            <IconButton icon={X} label="بستن" onPress={onClose} />
+          </View>
+          <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding: 20 }}>
+            {children}
+          </ScrollView>
+        </Animated.View>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="بستن"
+          onPress={onClose}
+          style={{ flex: 1, backgroundColor: "rgba(35,48,44,0.25)" }}
+        />
       </View>
     </Modal>
   );
@@ -359,7 +438,7 @@ export function SectionHeading({
       {action && onPress && (
         <Pressable accessibilityRole="button" onPress={onPress} style={[s.row, { gap: 5 }]}>
           <Text style={[s.small, { color: colors.text }]}>{action}</Text>
-          <ArrowUpRight size={13} color={colors.muted} />
+          <ArrowUpLeft size={13} color={colors.muted} />
         </Pressable>
       )}
     </View>
@@ -392,10 +471,10 @@ export function LinkRow({
         <Icon size={19} color={colors.text} />
       </View>
       <View style={{ flex: 1, gap: 3 }}>
-        <Text style={[s.text, { fontWeight: "500" }]}>{title}</Text>
+        <Text style={[s.text, { ...fw("500") }]}>{title}</Text>
         {detail && <Text style={s.small}>{detail}</Text>}
       </View>
-      <ChevronRight size={15} color={colors.muted} />
+      <ChevronLeft size={15} color={colors.muted} />
     </Pressable>
   );
 }
@@ -413,12 +492,12 @@ export function Mascot({
     lilac: "#F1ECF9",
   }[variant];
   return (
-    <View accessibilityLabel="OpenMuse capybara" style={{ width: size, height: size }}>
+    <View accessibilityLabel="کاپیبارای OpenMuse" style={{ width: size, height: size }}>
       <View
         style={{
           position: "absolute",
           top: size * 0.15,
-          left: size * 0.12,
+          start: size * 0.12,
           width: size * 0.76,
           height: size * 0.76,
           borderRadius: size,
@@ -434,31 +513,36 @@ export function Mascot({
     </View>
   );
 }
+/** Jalali date for display, e.g. «۲۹ شهریور». */
 export function dateLabel(value: string, options?: Intl.DateTimeFormatOptions) {
   const date = new Date(value);
   return Number.isNaN(date.getTime())
     ? value
-    : date.toLocaleDateString("en-US", options || { month: "short", day: "numeric" });
+    : faDate(date, options || { month: "long", day: "numeric" });
 }
+/** 24-hour time with Persian digits, e.g. «۱۴:۳۰». */
 export function timeLabel(value: string, timeZone?: string) {
   const date = new Date(value);
   return Number.isNaN(date.getTime())
     ? value
-    : date.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone });
+    : faDate(date, { hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZone });
 }
+/** Persian relative time: «همین حالا»، «۲ ساعت پیش»، «دیروز», then a Jalali date. */
 export function relativeDate(value: string) {
-  const diff = Date.now() - new Date(value).getTime();
-  return diff < 60_000
-    ? "Just now"
-    : diff < 3600_000
-      ? `${Math.floor(diff / 60_000)}m ago`
-      : diff < 86400_000
-        ? `${Math.floor(diff / 3600_000)}h ago`
-        : dateLabel(value);
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  const diff = Date.now() - date.getTime();
+  if (diff < 60_000) return "همین حالا";
+  if (diff < 3600_000) return `${faNumber(Math.floor(diff / 60_000))} دقیقه پیش`;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  if (date.getTime() >= today.getTime()) return `${faNumber(Math.floor(diff / 3600_000))} ساعت پیش`;
+  if (date.getTime() >= today.getTime() - 86400_000) return "دیروز";
+  return dateLabel(value);
 }
 
 export function resultSummary(value: string) {
   return /^Saved to (?:sample|local) sent mail(?: · .+)?$/.test(value)
-    ? "Reply saved in your local Sent mail."
+    ? "پاسخ در پوشهٔ ارسال‌شدهٔ محلی ذخیره شد."
     : value;
 }

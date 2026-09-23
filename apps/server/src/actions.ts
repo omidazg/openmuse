@@ -53,15 +53,15 @@ export class ActionService {
     const parsed = proposalSchema.parse(raw);
     const connection = await this.options.connection?.(owner);
     if (this.options.connection && !connection)
-      throw new AppError("Connect Google before preparing an action", 409);
+      throw new AppError("پیش از آماده‌کردن اقدام، گوگل را متصل کنید", 409);
     const prepared = await this.options.prepare?.(owner, parsed, connection?.id);
     const input = proposalSchema.parse(prepared?.input ?? parsed);
     const title =
       input.kind === "email.send"
-        ? `Send “${input.data.subject}”`
+        ? `ارسال «${input.data.subject}»`
         : input.kind === "calendar.delete"
-          ? `Delete ${input.data.title}`
-          : `${input.kind === "calendar.create" ? "Create" : "Update"} ${input.data.title}`;
+          ? `حذف «${input.data.title}»`
+          : `${input.kind === "calendar.create" ? "ایجاد" : "به‌روزرسانی"} «${input.data.title}»`;
     const createdAt = new Date(this.now()).toISOString();
     const proposal: ActionProposal = {
       id,
@@ -93,10 +93,10 @@ export class ActionService {
         : await this.db.insertIfAbsent(owner, "actions", proposal);
     if (!saved) {
       const existing = await this.db.get<ActionProposal>(owner, "actions", id);
-      if (!existing) throw new AppError("Prepared action could not be loaded", 409);
+      if (!existing) throw new AppError("اقدام آماده‌شده بارگیری نشد", 409);
       return existing;
     }
-    await this.record(owner, saved, "Ready for your review");
+    await this.record(owner, saved, "آمادهٔ بازبینی شما");
     return saved;
   }
   async decide(
@@ -106,15 +106,18 @@ export class ActionService {
     decision: "approve" | "deny",
   ): Promise<ActionProposal> {
     const proposal = await this.db.get<ActionProposal>(owner, "actions", id);
-    if (!proposal) throw new AppError("Action not found", 404);
+    if (!proposal) throw new AppError("اقدام پیدا نشد", 404);
     if (proposal.hash !== hash)
-      throw new AppError("This proposal changed. Open its latest review before deciding.", 409);
+      throw new AppError(
+        "این پیشنهاد تغییر کرده است. پیش از تصمیم‌گیری، آخرین بازبینی آن را باز کنید.",
+        409,
+      );
     if (proposal.status !== "awaiting_review") return proposal;
     if (decision === "approve" && proposal.taskId) {
       const task = await this.db.get<{ status: string }>(owner, "tasks", proposal.taskId);
       if (!task || !["running", "waiting_approval"].includes(task.status))
         throw new AppError(
-          "Resume the task before approving this action. Cancelled tasks cannot execute.",
+          "پیش از تأیید این اقدام، کار را از سر بگیرید. کارهای لغوشده اجرا نمی‌شوند.",
           409,
         );
     }
@@ -128,13 +131,13 @@ export class ActionService {
       );
       if (!expired) {
         const current = await this.db.get<ActionProposal>(owner, "actions", id);
-        if (!current) throw new AppError("Action not found", 404);
+        if (!current) throw new AppError("اقدام پیدا نشد", 404);
         return current;
       }
-      throw new AppError("This review expired. Create a fresh proposal.", 409);
+      throw new AppError("مهلت این بازبینی تمام شده است. پیشنهاد تازه‌ای بسازید.", 409);
     }
     if (decision === "approve" && !(await this.options.connected(owner)))
-      throw new AppError("Google is disconnected. Reconnect before approving this action.", 409);
+      throw new AppError("اتصال گوگل قطع است. پیش از تأیید این اقدام دوباره متصل شوید.", 409);
     if (decision === "approve" && this.options.connection) {
       const connection = await this.options.connection(owner);
       if (
@@ -143,7 +146,7 @@ export class ActionService {
         connection.account !== proposal.account
       )
         throw new AppError(
-          "Google account or connection changed. Prepare a new action for the connected account.",
+          "حساب یا اتصال گوگل تغییر کرده است. برای حساب متصل، اقدام تازه‌ای آماده کنید.",
           409,
         );
     }
@@ -155,13 +158,13 @@ export class ActionService {
     );
     if (!claimed) {
       const current = await this.db.get<ActionProposal>(owner, "actions", id);
-      if (!current) throw new AppError("Action not found", 404);
+      if (!current) throw new AppError("اقدام پیدا نشد", 404);
       return current;
     }
     await this.record(
       owner,
       claimed,
-      decision === "deny" ? "Declined; no changes made" : "Approved; execution started",
+      decision === "deny" ? "رد شد؛ هیچ تغییری اعمال نشد" : "تأیید شد؛ اجرا آغاز شد",
     );
     if (decision === "deny") return claimed;
     let finished: ActionProposal;
@@ -182,7 +185,7 @@ export class ActionService {
       finished = {
         ...claimed,
         status: unknown ? "outcome_unknown" : "failed",
-        error: error instanceof Error ? error.message : "Execution failed",
+        error: error instanceof Error ? error.message : "اجرا ناموفق بود",
       };
     }
     await this.db.put(owner, "actions", finished);

@@ -18,5 +18,5 @@ test("the address bar rejects unsupported schemes, credentials, and malformed in
     "https://user:secret@example.com",
     "hello world",
   ])
-    assert.throws(() => browserAddress(input), /Enter a website address/);
+    assert.throws(() => browserAddress(input), /نشانی وب‌سایت را وارد کنید/);
 });

@@ -61,13 +61,13 @@ test("filling changes only the new PDF and round-trips text and checkbox values"
 
 test("PDF operations reject invalid bytes, encrypted input, unknown names, and wrong field types", async () => {
   for (const bytes of [new Uint8Array(), Buffer.from("not a PDF")]) {
-    await assert.rejects(inspectPdf(bytes), /invalid|malformed|empty/i);
-    await assert.rejects(fillPdf(bytes, {}), /invalid|malformed|empty/i);
+    await assert.rejects(inspectPdf(bytes), /نامعتبر|خراب|خالی/);
+    await assert.rejects(fillPdf(bytes, {}), /نامعتبر|خراب|خالی/);
   }
   const sample = await createSamplePdf();
-  await assert.rejects(fillPdf(sample, { missing: "value" }), /unknown.*missing/i);
-  await assert.rejects(fillPdf(sample, { permission_granted: "yes" }), /boolean/i);
-  await assert.rejects(fillPdf(sample, { participant_name: true }), /text|string/i);
+  await assert.rejects(fillPdf(sample, { missing: "value" }), /ناشناخته.*missing/);
+  await assert.rejects(fillPdf(sample, { permission_granted: "yes" }), /boolean/);
+  await assert.rejects(fillPdf(sample, { participant_name: true }), /متن/);
 
   const encrypted = await PDFDocument.create();
   encrypted.addPage();
@@ -75,7 +75,7 @@ test("PDF operations reject invalid bytes, encrypted input, unknown names, and w
   encrypted.context.trailerInfo.Encrypt = encrypted.context.register(
     encrypted.context.obj({ Filter: "Standard", V: 1 }),
   );
-  await assert.rejects(inspectPdf(await encrypted.save()), /encrypted/i);
+  await assert.rejects(inspectPdf(await encrypted.save()), /رمزگذاری‌شده/);
 });
 
 test("unsupported fields are disclosed and cannot be silently filled", async () => {
@@ -89,7 +89,7 @@ test("unsupported fields are disclosed and cannot be silently filled", async () 
   assert.deepEqual((await inspectPdf(bytes)).fields, [
     { name: "visit_type", value: "Museum", type: "unsupported" },
   ]);
-  await assert.rejects(fillPdf(bytes, { visit_type: "Garden" }), /unsupported.*visit_type/i);
+  await assert.rejects(fillPdf(bytes, { visit_type: "Garden" }), /پشتیبانی نمی‌شود.*visit_type/);
 });
 
 test("PDF output removes active actions before returning a filled document", async () => {
@@ -115,20 +115,20 @@ test("XFA forms fail explicitly instead of silently losing their fields", async 
   const acroForm = doc.getForm().acroForm.dict;
   acroForm.set(PDFName.of("XFA"), PDFString.of("<synthetic-xfa />"));
   const bytes = await doc.save({ updateFieldAppearances: false });
-  await assert.rejects(inspectPdf(bytes), /unsupported.*XFA|XFA.*unsupported/i);
+  await assert.rejects(inspectPdf(bytes), /XFA.*پشتیبانی نمی‌شوند/);
   await assert.rejects(
     fillPdf(bytes, { participant_name: "Test Participant" }),
-    /unsupported.*XFA|XFA.*unsupported/i,
+    /XFA.*پشتیبانی نمی‌شوند/,
   );
 });
 
 test("PDF failures expose safe typed 422 errors including malformed field and font errors", async () => {
   const sample = await createSamplePdf();
   const checks: [Promise<unknown>, RegExp][] = [
-    [inspectPdf(Buffer.from("not a pdf")), /invalid/i],
-    [fillPdf(sample, { missing: "value" }), /unknown.*missing/i],
-    [fillPdf(sample, { permission_granted: "yes" }), /boolean/i],
-    [fillPdf(sample, { participant_name: "漢字" }), /font|character|encod/i],
+    [inspectPdf(Buffer.from("not a pdf")), /نامعتبر/],
+    [fillPdf(sample, { missing: "value" }), /ناشناخته.*missing/],
+    [fillPdf(sample, { permission_granted: "yes" }), /boolean/],
+    [fillPdf(sample, { participant_name: "漢字" }), /فونت|حروف/],
   ];
   await Promise.all(
     checks.map(([operation, message]) =>
@@ -149,6 +149,6 @@ test("PDF failures expose safe typed 422 errors including malformed field and fo
     .acroField.dict.set(PDFName.of("V"), malformed.context.obj(["invalid"]));
   await assert.rejects(
     inspectPdf(await malformed.save({ updateFieldAppearances: false })),
-    (error: unknown) => error instanceof PdfError && /malformed|inspect|field/i.test(error.message),
+    (error: unknown) => error instanceof PdfError && /خراب|بررسی|فیلد/.test(error.message),
   );
 });

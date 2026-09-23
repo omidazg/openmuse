@@ -44,7 +44,7 @@ export function computerRoutes(computer: ComputerService, files: Files) {
   app.post("/files/export", async (c) => {
     const { path } = computerPathSchema.parse(await c.req.json());
     const { name, bytes } = await computer.pdfBytes(c.get("owner"), path);
-    return c.json(await files.import(c.get("owner"), name, bytes, `Computer: ${path}`), 201);
+    return c.json(await files.import(c.get("owner"), name, bytes, `رایانه: ${path}`), 201);
   });
   return app;
 }

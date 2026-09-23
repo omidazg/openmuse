@@ -410,7 +410,7 @@ test("calendar review captures authoritative details and requires a usable versi
       "primary",
       "event-1",
     ),
-    /recurr/i,
+    /تکرارشونده/,
   );
 });
 
@@ -422,8 +422,8 @@ test("calendar writes refuse targets changed since review before dispatch", asyn
       ? new Response(null, { status: 204 })
       : json({ ...eventResponse, etag: '"revision-2"' });
   });
-  await assert.rejects(client.updateEvent("event-1", event(), eventResponse.etag), /changed/i);
-  await assert.rejects(client.deleteEvent("primary", "event-1", eventResponse.etag), /changed/i);
+  await assert.rejects(client.updateEvent("event-1", event(), eventResponse.etag), /تغییر کرده/);
+  await assert.rejects(client.deleteEvent("primary", "event-1", eventResponse.etag), /تغییر کرده/);
   assert.equal(writes, 0);
 });
 
@@ -730,9 +730,9 @@ test("recurring masters and occurrences are rejected from fresh Google data befo
       assert.equal(new URL(request.url).pathname, "/calendar/v3/calendars/primary/events/event-1");
       return json({ ...eventResponse, ...recurrence });
     });
-    await assert.rejects(client.validateSingleEvent("primary", "event-1"), /recurr/i);
-    await assert.rejects(client.updateEvent("event-1", event()), /recurr/i);
-    await assert.rejects(client.deleteEvent("primary", "event-1"), /recurr/i);
+    await assert.rejects(client.validateSingleEvent("primary", "event-1"), /تکرارشونده/);
+    await assert.rejects(client.updateEvent("event-1", event()), /تکرارشونده/);
+    await assert.rejects(client.deleteEvent("primary", "event-1"), /تکرارشونده/);
     assert.deepEqual(methods, ["GET", "GET", "GET"]);
   }
 });
@@ -749,7 +749,7 @@ test("single-event validation is repeated at execution and read failures never d
     return json({ ...eventResponse, ...(reads > 1 ? { recurrence: ["RRULE:FREQ=DAILY"] } : {}) });
   });
   await client.validateSingleEvent("primary", "event-1");
-  await assert.rejects(client.updateEvent("event-1", event()), /recurr/i);
+  await assert.rejects(client.updateEvent("event-1", event()), /تکرارشونده/);
   assert.equal(writes, 0);
   const failing = clientWith((request) => {
     if (request.method !== "GET") writes++;

@@ -5,7 +5,7 @@ import { backgroundFailure } from "../log.ts";
 
 export class LostLeaseError extends Error {
   constructor() {
-    super("Task was paused, cancelled or taken over by another worker");
+    super("این کار متوقف یا لغو شد، یا پردازشگر دیگری آن را در دست گرفت.");
     this.name = "LostLeaseError";
   }
 }
@@ -210,8 +210,9 @@ export class TaskWorker {
           { status: "queued", leaseId: null, leaseUntil: null },
         );
       } else {
-        const detail = error instanceof Error ? error.message : "Task execution failed";
-        await event("error", "Task needs attention", detail).catch((error) =>
+        const detail =
+          error instanceof Error ? error.message : "اجرای کار ناموفق بود. دوباره تلاش کنید.";
+        await event("error", "کار نیاز به بررسی دارد", detail).catch((error) =>
           backgroundFailure("record task error", error),
         );
         await this.db.compareAndSwap(

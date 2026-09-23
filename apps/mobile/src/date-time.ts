@@ -19,16 +19,27 @@ export function localDateTime(value: string, timeZone: string): { date: string; 
     time: `${part("hour")}:${part("minute")}`,
   };
 }
+/**
+ * Persian (۰–۹) and Arabic-Indic (٠–٩) digits to ASCII. Mirrors `toLatinDigits` in
+ * locale.ts, which cannot be imported here because it pulls in React Native (tests run in Node).
+ */
+function latinDigits(text: string): string {
+  return text
+    .replace(/[۰-۹]/g, (d) => String(d.charCodeAt(0) - 0x06f0))
+    .replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - 0x0660));
+}
 /** Resolve a local wall-clock time, rejecting gaps at daylight-saving transitions. */
-export function zonedInstant(date: string, time: string, timeZone: string): string {
+export function zonedInstant(rawDate: string, rawTime: string, timeZone: string): string {
+  const date = latinDigits(rawDate.trim());
+  const time = latinDigits(rawTime.trim());
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !/^\d{2}:\d{2}$/.test(time))
-    throw new Error("Enter a complete date and time.");
+    throw new Error("تاریخ و ساعت را کامل وارد کنید.");
   const desired = Date.parse(`${date}T${time}:00Z`);
   if (
     !Number.isFinite(desired) ||
     new Date(desired).toISOString().slice(0, 16) !== `${date}T${time}`
   )
-    throw new Error("Choose a valid date and time.");
+    throw new Error("تاریخ و ساعت معتبری انتخاب کنید.");
   let candidate = desired;
   for (let pass = 0; pass < 4; pass++) {
     const local = localDateTime(new Date(candidate).toISOString(), timeZone);
@@ -37,7 +48,7 @@ export function zonedInstant(date: string, time: string, timeZone: string): stri
     if (delta === 0) return new Date(candidate).toISOString();
     candidate += delta;
   }
-  throw new Error("This time does not exist in the selected time zone. Choose another time.");
+  throw new Error("این ساعت در منطقهٔ زمانی انتخاب‌شده وجود ندارد. ساعت دیگری انتخاب کنید.");
 }
 
 /** Only fully serialized instants may reset a date editor's local text. */

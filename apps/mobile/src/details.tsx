@@ -38,6 +38,7 @@ import { browserAddress, browserSite } from "./browser-address";
 import { ComputerSheet } from "./computer";
 import DateTimeEditor from "./DateTimeEditor";
 import { localDateTime, zonedInstant } from "./date-time";
+import { faDate, faDateTime, faNumber, LOCALE, toLatinDigits } from "./locale";
 import PdfReader from "./PdfReader";
 import {
   Button,
@@ -57,6 +58,87 @@ import {
   timeLabel,
 } from "./ui";
 import { type Detail, useWorkspace } from "./workspace";
+
+const actionStatusLabels: Record<ActionProposal["status"], string> = {
+  awaiting_review: "در انتظار بررسی",
+  executing: "در حال اجرا",
+  succeeded: "انجام شد",
+  failed: "ناموفق",
+  outcome_unknown: "نتیجه نامشخص",
+  denied: "رد شد",
+  cancelled: "لغو شد",
+  expired: "منقضی شد",
+};
+const actionKindLabels: Record<ActionProposal["kind"], string> = {
+  "email.send": "ایمیل · ارسال",
+  "calendar.create": "تقویم · ایجاد",
+  "calendar.update": "تقویم · ویرایش",
+  "calendar.delete": "تقویم · حذف",
+};
+const browserStatusLabels: Record<BrowserSession["status"], string> = {
+  idle: "آماده",
+  active: "فعال",
+  closed: "بسته",
+  error: "خطا",
+};
+/** Splits address lists on Latin and Persian separators. */
+const ADDRESS_SEPARATORS = /[,،;؛\n]/;
+const FIELD_LABELS: Record<string, string> = {
+  to: "گیرنده",
+  cc: "رونوشت",
+  bcc: "رونوشت پنهان",
+  subject: "موضوع",
+  body: "متن پیام",
+  title: "عنوان رویداد",
+  start: "شروع",
+  end: "پایان",
+  timeZone: "منطقهٔ زمانی",
+  location: "مکان",
+  description: "یادداشت‌ها",
+  attendees: "شرکت‌کنندگان",
+};
+/** Persian validation messages; keeps schema messages that are already Persian. */
+function issuesText(
+  issues: readonly { path: readonly PropertyKey[]; message: string; code: string }[],
+) {
+  return issues
+    .map((issue) => {
+      const label = FIELD_LABELS[String(issue.path[0])] ?? "یکی از فیلدها";
+      if (/[\u0600-\u06FF]/.test(issue.message)) return `${label}: ${issue.message}.`;
+      if (issue.code === "invalid_format")
+        return `${label}: نشانی ایمیل معتبر نیست. آن را بررسی کنید.`;
+      if (issue.code === "too_small") return `${label} را وارد کنید.`;
+      if (issue.code === "too_big") return `${label} بیش از حد مجاز است. آن را کوتاه‌تر کنید.`;
+      return `${label} معتبر نیست. آن را بررسی کنید.`;
+    })
+    .join("\n");
+}
+/** Jalali date of an all-day value (YYYY-MM-DD); `shift` moves it by whole days. */
+function allDayLabel(value: string, shift = 0) {
+  const date = new Date(`${toLatinDigits(value).slice(0, 10)}T12:00:00Z`);
+  if (!Number.isFinite(date.getTime())) return value;
+  date.setUTCDate(date.getUTCDate() + shift);
+  return faDate(date, { year: "numeric", month: "long", day: "numeric", timeZone: "UTC" });
+}
+/** Jalali date and 24-hour time in the event's own time zone. */
+function zonedLabel(value: string, timeZone: string) {
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return value;
+  try {
+    const time = new Intl.DateTimeFormat(LOCALE, {
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23",
+      timeZone,
+    }).format(date);
+    return `${faDate(date, { year: "numeric", month: "long", day: "numeric", timeZone })}، ساعت ${time}`;
+  } catch {
+    return faDateTime(date);
+  }
+}
+function kilobytes(size: number) {
+  return `${faNumber(Math.max(1, Math.round(size / 1024)))} کیلوبایت`;
+}
 export function Details({ detail }: { detail: Detail }) {
   const { close, navigate } = useWorkspace();
   if (detail.type === "computer") return <ComputerSheet />;
@@ -71,14 +153,14 @@ export function Details({ detail }: { detail: Detail }) {
   if (detail.type === "review") return <ReviewDetail initial={detail.action} />;
   if (detail.type === "browser") return <BrowserDetail initial={detail.browser} />;
   return (
-    <Sheet title="Your workspace" subtitle="A little room for everything." onClose={close}>
+    <Sheet title="فضای کار شما" subtitle="جایی کوچک برای همه‌چیز." onClose={close}>
       {[
-        { section: "mail" as const, title: "Mail", icon: MailIcon },
-        { section: "calendar" as const, title: "Calendar", icon: CalendarDays },
-        { section: "browser" as const, title: "Browser", icon: Globe2 },
-        { section: "files" as const, title: "Files", icon: FileText },
-        { section: "activity" as const, title: "Activity", icon: Clock3 },
-        { section: "connections" as const, title: "Connections", icon: ShieldCheck },
+        { section: "mail" as const, title: "ایمیل", icon: MailIcon },
+        { section: "calendar" as const, title: "تقویم", icon: CalendarDays },
+        { section: "browser" as const, title: "مرورگر", icon: Globe2 },
+        { section: "files" as const, title: "فایل‌ها", icon: FileText },
+        { section: "activity" as const, title: "فعالیت‌ها", icon: Clock3 },
+        { section: "connections" as const, title: "اتصال‌ها", icon: ShieldCheck },
       ].map((item) => (
         <LinkRow
           key={item.section}
@@ -135,13 +217,13 @@ function MailDetail({ mail: m }: { mail: Mail }) {
   return (
     <Sheet
       title={m.subject}
-      subtitle={`${thread.length} message${thread.length === 1 ? "" : "s"} in this conversation`}
+      subtitle={`${faNumber(thread.length)} پیام در این گفت‌وگو`}
       onClose={close}
     >
       {loading && (
         <View style={[s.row, { gap: 10, paddingBottom: 20 }]}>
           <ActivityIndicator color={colors.blueDark} />
-          <Text style={s.muted}>Loading the conversation…</Text>
+          <Text style={s.muted}>در حال بارگذاری گفت‌وگو…</Text>
         </View>
       )}
       {thread.map((message) => (
@@ -149,15 +231,15 @@ function MailDetail({ mail: m }: { mail: Mail }) {
           <View style={s.between}>
             <View style={{ gap: 4, flex: 1 }}>
               <Text style={s.heading}>{message.sender}</Text>
-              <Text style={s.small}>{message.from}</Text>
-              <Text style={s.small}>To: {message.to.join(", ")}</Text>
+              <Text style={[s.small, { writingDirection: "ltr" }]}>{message.from}</Text>
+              <Text style={s.small}>به: {message.to.join("، ")}</Text>
             </View>
             <Text style={s.small}>
               {dateLabel(message.date)} · {timeLabel(message.date)}
             </Text>
           </View>
           <View style={s.divider} />
-          <Text selectable style={[s.text, { lineHeight: 25 }]}>
+          <Text selectable style={s.text}>
             {message.body}
           </Text>
           {message.attachments.map((id) => {
@@ -166,7 +248,7 @@ function MailDetail({ mail: m }: { mail: Mail }) {
               <LinkRow
                 key={id}
                 title={file.name}
-                detail={`${file.pageCount} pages · PDF attachment`}
+                detail={`${faNumber(file.pageCount)} صفحه · پیوست PDF`}
                 icon={FileText}
                 onPress={() => open({ type: "file", file })}
               />
@@ -177,14 +259,14 @@ function MailDetail({ mail: m }: { mail: Mail }) {
                 icon={FileText}
                 onPress={() => void importAttachment(id)}
               >
-                {decodeURIComponent(id.split(":").slice(2).join(":")) || "Open attachment"}
+                {decodeURIComponent(id.split(":").slice(2).join(":")) || "باز کردن پیوست"}
               </Button>
             );
           })}
         </Card>
       ))}
       <ErrorNotice error={error} />
-      {error && <Button onPress={() => setRetry(retry + 1)}>Reload conversation</Button>}
+      {error && <Button onPress={() => setRetry(retry + 1)}>بارگذاری دوباره گفت‌وگو</Button>}
       <Button
         primary
         icon={Reply}
@@ -205,7 +287,7 @@ function MailDetail({ mail: m }: { mail: Mail }) {
           })
         }
       >
-        Write a reply
+        نوشتن پاسخ
       </Button>
     </Sheet>
   );
@@ -222,7 +304,7 @@ function EmailEditor({ draft }: { draft?: Partial<EmailDraft> & { id?: string } 
   const [error, setError] = useState("");
   function emails(value: string) {
     return value
-      .split(/[,;\n]/)
+      .split(ADDRESS_SEPARATORS)
       .map((s) => s.trim())
       .filter(Boolean);
   }
@@ -240,10 +322,7 @@ function EmailEditor({ draft }: { draft?: Partial<EmailDraft> & { id?: string } 
         threadId: draft?.threadId,
         replyToMessageId: draft?.replyToMessageId,
       });
-      if (!parsed.success)
-        throw new Error(
-          parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("\n"),
-        );
+      if (!parsed.success) throw new Error(issuesText(parsed.error.issues));
       if (review) {
         const action = await api.request<ActionProposal>("/api/actions", {
           kind: "email.send",
@@ -257,7 +336,7 @@ function EmailEditor({ draft }: { draft?: Partial<EmailDraft> & { id?: string } 
           ...(draft?.id ? { id: draft.id } : {}),
         });
         await refresh();
-        notify("Draft saved in OpenMuse.");
+        notify("پیش‌نویس در OpenMuse ذخیره شد.");
         close();
       }
     } catch (e) {
@@ -268,60 +347,65 @@ function EmailEditor({ draft }: { draft?: Partial<EmailDraft> & { id?: string } 
   }
   return (
     <Sheet
-      title={draft?.threadId ? "Write a reply" : "A new message"}
-      subtitle={`From ${w.profile.email} · saved privately in OpenMuse`}
+      title={draft?.threadId ? "نوشتن پاسخ" : "پیام تازه"}
+      subtitle={`از ${w.profile.email} · به‌صورت خصوصی در OpenMuse ذخیره می‌شود`}
       onClose={close}
     >
       <Field
-        label="To"
+        label="گیرنده"
         value={to}
         onChangeText={setTo}
         placeholder="person@example.com"
         autoCapitalize="none"
         keyboardType="email-address"
+        style={{ writingDirection: "ltr" }}
       />
       <View style={{ flexDirection: "row", gap: 16 }}>
         <View style={{ flex: 1 }}>
           <Field
-            label="Cc"
+            label="رونوشت"
             value={cc}
             onChangeText={setCc}
-            placeholder="Optional"
+            placeholder="اختیاری"
             autoCapitalize="none"
+            keyboardType="email-address"
+            style={{ writingDirection: "ltr" }}
           />
         </View>
         <View style={{ flex: 1 }}>
           <Field
-            label="Bcc"
+            label="رونوشت پنهان"
             value={bcc}
             onChangeText={setBcc}
-            placeholder="Optional"
+            placeholder="اختیاری"
             autoCapitalize="none"
+            keyboardType="email-address"
+            style={{ writingDirection: "ltr" }}
           />
         </View>
       </View>
       <Field
-        label="Subject"
+        label="موضوع"
         value={subject}
         onChangeText={setSubject}
-        placeholder="What’s on your mind?"
+        placeholder="موضوع پیام چیست؟"
       />
       <Field
-        label="Message"
+        label="متن پیام"
         value={body}
         onChangeText={setBody}
         multiline
-        placeholder="Start your message…"
+        placeholder="پیامتان را بنویسید…"
         style={{ minHeight: 210 }}
       />
       {w.files.length > 0 && (
         <Card style={{ padding: 16, marginBottom: 18 }}>
-          <Text style={[s.heading, { fontSize: 13, marginBottom: 5 }]}>Attachments</Text>
+          <Text style={[s.heading, { fontSize: 13, marginBottom: 5 }]}>پیوست‌ها</Text>
           {w.files.map((f) => (
             <CheckRow
               key={f.id}
               checked={attachments.includes(f.id)}
-              label={`${f.name} · ${Math.max(1, Math.round(f.size / 1024))} KB`}
+              label={`${f.name} · ${kilobytes(f.size)}`}
               onPress={() =>
                 setAttachments(
                   attachments.includes(f.id)
@@ -342,7 +426,7 @@ function EmailEditor({ draft }: { draft?: Partial<EmailDraft> & { id?: string } 
           disabled={!!busy}
           onPress={() => void save(true)}
         >
-          Review email
+          بررسی ایمیل
         </Button>
         <Button
           icon={Save}
@@ -350,11 +434,11 @@ function EmailEditor({ draft }: { draft?: Partial<EmailDraft> & { id?: string } 
           disabled={!!busy}
           onPress={() => void save(false)}
         >
-          Save draft
+          ذخیرهٔ پیش‌نویس
         </Button>
       </View>
       <Text style={[s.small, { marginTop: 13 }]}>
-        You’ll review the exact recipients, message, and attachments before anything is sent.
+        پیش از ارسال، گیرندگان، متن پیام و پیوست‌ها را یک بار دیگر بررسی می‌کنید.
       </Text>
     </Sheet>
   );
@@ -414,14 +498,11 @@ function EventEditor({
           location,
           description,
           attendees: attendees
-            .split(/[,;\n]/)
+            .split(ADDRESS_SEPARATORS)
             .map((a) => a.trim())
             .filter(Boolean),
         });
-        if (!parsed.success)
-          throw new Error(
-            parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("\n"),
-          );
+        if (!parsed.success) throw new Error(issuesText(parsed.error.issues));
         data = e
           ? { kind: "calendar.update", data: { ...parsed.data, eventId: e.id } }
           : { kind: "calendar.create", data: parsed.data };
@@ -437,20 +518,20 @@ function EventEditor({
   }
   return (
     <Sheet
-      title={e ? "Make a little time" : "Something to look forward to"}
+      title={e ? "ویرایش رویداد" : "رویداد تازه"}
       subtitle={
-        e ? "Edit this event, then review your changes." : "Create an event in your calendar."
+        e ? "این رویداد را ویرایش کنید و سپس تغییرات را بررسی کنید." : "رویدادی در تقویمتان بسازید."
       }
       onClose={close}
     >
       <Field
-        label="Event title"
+        label="عنوان رویداد"
         value={title}
         onChangeText={setTitle}
-        placeholder="What are you making time for?"
+        placeholder="برای چه چیزی وقت می‌گذارید؟"
       />
       <CheckRow
-        label="All-day event"
+        label="رویداد تمام‌روز"
         checked={allDay}
         onPress={() => {
           try {
@@ -472,49 +553,55 @@ function EventEditor({
         }}
       />
       <DateTimeEditor
-        label="Starts"
+        label="شروع"
         value={start}
         onChange={setStart}
         timeZone={zone}
         allDay={allDay}
       />
-      <DateTimeEditor label="Ends" value={end} onChange={setEnd} timeZone={zone} allDay={allDay} />
+      <DateTimeEditor label="پایان" value={end} onChange={setEnd} timeZone={zone} allDay={allDay} />
       {allDay && (
         <Text style={[s.small, { marginBottom: 15 }]}>
-          The end date is the day after the last day of your event.
+          تاریخ پایان، روزِ بعد از آخرین روز رویداد است.
         </Text>
       )}
       <Field
-        label="Time zone"
+        label="منطقهٔ زمانی"
         value={zone}
         onChangeText={setZone}
-        placeholder="America/Los_Angeles"
+        placeholder="Asia/Tehran"
+        autoCapitalize="none"
+        autoCorrect={false}
+        style={{ writingDirection: "ltr" }}
       />
       <Field
-        label="Location or meeting link"
+        label="مکان یا پیوند جلسه"
         value={location}
         onChangeText={setLocation}
-        placeholder="Optional"
+        placeholder="اختیاری"
       />
       <Field
-        label="Attendees"
+        label="شرکت‌کنندگان"
         value={attendees}
         onChangeText={setAttendees}
-        placeholder="Email addresses, separated by commas"
+        placeholder="نشانی‌های ایمیل، جداشده با ویرگول"
+        autoCapitalize="none"
+        keyboardType="email-address"
+        style={{ writingDirection: "ltr" }}
       />
       <Field
-        label="Notes"
+        label="یادداشت‌ها"
         value={description}
         onChangeText={setDescription}
         multiline
-        placeholder="Anything else to keep in mind?"
+        placeholder="نکتهٔ دیگری هست که باید در نظر داشت؟"
       />
       {!!conflicts.length && (
         <Card style={{ backgroundColor: colors.orange, padding: 16, marginBottom: 16 }}>
-          <Text style={s.heading}>This time overlaps</Text>
+          <Text style={s.heading}>این زمان با رویدادهای دیگر هم‌پوشانی دارد</Text>
           {conflicts.map((c) => (
             <Text key={c.id} style={s.muted}>
-              {c.title} · {timeLabel(c.start, c.timeZone)}–{timeLabel(c.end, c.timeZone)}
+              {c.title} · {timeLabel(c.start, c.timeZone)} تا {timeLabel(c.end, c.timeZone)}
             </Text>
           ))}
         </Card>
@@ -522,11 +609,11 @@ function EventEditor({
       <ErrorNotice error={error} />
       <View style={[s.row, { gap: 10, flexWrap: "wrap" }]}>
         <Button primary icon={ShieldCheck} busy={busy} onPress={() => void propose()}>
-          Review {e ? "changes" : "event"}
+          {e ? "بررسی تغییرات" : "بررسی رویداد"}
         </Button>
         {e && (
           <Button icon={Trash2} disabled={busy} danger onPress={() => void propose(true)}>
-            Review deletion
+            بررسی حذف رویداد
           </Button>
         )}
       </View>
@@ -570,7 +657,7 @@ function ReviewDetail({ initial }: { initial: ActionProposal }) {
         if (action.kind === "calendar.update") {
           const eventId = action.data.eventId;
           if (typeof eventId !== "string" || !eventId)
-            throw new Error("The event reference is missing. Open the event in Calendar again.");
+            throw new Error("شناسهٔ رویداد پیدا نشد. رویداد را دوباره از تقویم باز کنید.");
           next = { type: "event", event: { ...draft, id: eventId } };
         } else next = { type: "event", draft };
       }
@@ -589,11 +676,11 @@ function ReviewDetail({ initial }: { initial: ActionProposal }) {
   const email = action.kind === "email.send";
   return (
     <Sheet
-      title={pending ? "One last look" : action.title}
+      title={pending ? "یک نگاه آخر" : action.title}
       subtitle={
         w.mode === "sample"
-          ? "This action stays in your local workspace."
-          : "Review this exact action before it changes your connected account."
+          ? "این اقدام فقط در فضای کاری محلی شما می‌ماند."
+          : "پیش از آنکه این اقدام حساب متصل شما را تغییر دهد، دقیقاً بررسی‌اش کنید."
       }
       onClose={close}
     >
@@ -603,72 +690,75 @@ function ReviewDetail({ initial }: { initial: ActionProposal }) {
         </View>
         <View style={{ flex: 1, gap: 4 }}>
           <Text style={s.heading}>{action.title}</Text>
-          <Text style={s.small}>{action.kind.replace(".", " · ")}</Text>
+          <Text style={s.small}>{actionKindLabels[action.kind] ?? action.kind}</Text>
         </View>
         <Chip tint={pending ? colors.lavender : colors.green}>
-          {action.status.replace(/_/g, " ")}
+          {actionStatusLabels[action.status] ?? action.status.replace(/_/g, " ")}
         </Chip>
       </View>
       <Card style={{ gap: 13 }}>
-        <ReviewLine label="Account" value={action.account || w.profile.email} />
+        <ReviewLine label="حساب" value={action.account || w.profile.email} />
         {email ? (
           <>
-            <ReviewLine label="To" value={arrayText(d.to)} />
-            <ReviewLine label="Cc" value={arrayText(d.cc) || "None"} />
-            <ReviewLine label="Bcc" value={arrayText(d.bcc) || "None"} />
-            <ReviewLine label="Subject" value={String(d.subject || "")} />
+            <ReviewLine label="گیرنده" value={arrayText(d.to)} />
+            <ReviewLine label="رونوشت" value={arrayText(d.cc) || "ندارد"} />
+            <ReviewLine label="رونوشت پنهان" value={arrayText(d.bcc) || "ندارد"} />
+            <ReviewLine label="موضوع" value={String(d.subject || "")} />
             <View style={s.divider} />
-            <Text selectable style={[s.text, { lineHeight: 25 }]}>
+            <Text selectable style={s.text}>
               {String(d.body || "")}
             </Text>
             <View style={s.divider} />
-            <Text style={s.label}>Attachments</Text>
+            <Text style={s.label}>پیوست‌ها</Text>
             {Array.isArray(d.attachmentIds) && d.attachmentIds.length ? (
               d.attachmentIds.map((id) => {
                 const file = w.files.find((f) => f.id === id);
                 return (
                   <Text key={String(id)} style={s.text}>
-                    {file?.name || String(id)} · version {String(id).slice(-8)}
+                    {file?.name || String(id)} · نسخهٔ {String(id).slice(-8)}
                   </Text>
                 );
               })
             ) : (
-              <Text style={s.muted}>No attachments</Text>
+              <Text style={s.muted}>بدون پیوست</Text>
             )}
           </>
         ) : (
           <>
-            <ReviewLine label="Event" value={String(d.title || "")} />
+            <ReviewLine label="رویداد" value={String(d.title || "")} />
             {action.kind !== "calendar.delete" && (
               <>
                 <ReviewLine
-                  label="Starts"
+                  label="شروع"
                   value={
                     d.allDay
-                      ? String(d.start || "")
-                      : `${dateLabel(String(d.start || ""), { year: "numeric", month: "short", day: "numeric", timeZone: String(d.timeZone || "UTC") })} · ${timeLabel(String(d.start || ""), String(d.timeZone || "UTC"))}`
+                      ? allDayLabel(String(d.start || ""))
+                      : zonedLabel(String(d.start || ""), String(d.timeZone || "UTC"))
                   }
                 />
                 <ReviewLine
-                  label="Ends"
+                  label="پایان"
                   value={
                     d.allDay
-                      ? `${String(d.end || "")} (exclusive)`
-                      : `${dateLabel(String(d.end || ""), { year: "numeric", month: "short", day: "numeric", timeZone: String(d.timeZone || "UTC") })} · ${timeLabel(String(d.end || ""), String(d.timeZone || "UTC"))}`
+                      ? `${allDayLabel(String(d.end || ""), -1)} (تا پایان روز)`
+                      : zonedLabel(String(d.end || ""), String(d.timeZone || "UTC"))
                   }
                 />
-                <ReviewLine label="Time zone" value={String(d.timeZone || "")} />
-                <ReviewLine label="All day" value={d.allDay ? "Yes" : "No"} />
-                <ReviewLine label="Location" value={String(d.location || "None")} />
-                <ReviewLine label="Attendees" value={arrayText(d.attendees) || "Just you"} />
-                <ReviewLine label="Notes" value={String(d.description || "None")} />
+                <ReviewLine label="منطقهٔ زمانی" value={String(d.timeZone || "")} ltr />
+                <ReviewLine label="زمان‌بندی" value={d.allDay ? "تمام‌روز" : "ساعت مشخص"} />
+                <ReviewLine label="مکان" value={String(d.location || "ندارد")} />
+                <ReviewLine label="شرکت‌کنندگان" value={arrayText(d.attendees) || "فقط خودتان"} />
+                <ReviewLine label="یادداشت‌ها" value={String(d.description || "ندارد")} />
               </>
             )}
-            <ReviewLine label="Calendar" value={String(d.calendarId || "primary")} />
+            <ReviewLine
+              label="تقویم"
+              value={!d.calendarId || d.calendarId === "primary" ? "اصلی" : String(d.calendarId)}
+            />
             <Text style={s.small}>
               {action.kind === "calendar.delete"
-                ? "This removes the event and may notify its attendees."
-                : "Attendees may receive an invitation or update from your connected calendar."}
+                ? "این کار رویداد را حذف می‌کند و ممکن است به شرکت‌کنندگان اطلاع داده شود."
+                : "ممکن است شرکت‌کنندگان از تقویم متصل شما دعوت‌نامه یا به‌روزرسانی دریافت کنند."}
             </Text>
           </>
         )}
@@ -684,51 +774,38 @@ function ReviewDetail({ initial }: { initial: ActionProposal }) {
       {pending ? (
         <>
           <Text style={[s.small, { marginVertical: 17 }]}>
-            Review expires{" "}
-            {new Date(action.expiresAt).toLocaleString(undefined, {
-              year: "numeric",
-              month: "short",
-              day: "numeric",
-              hour: "numeric",
-              minute: "2-digit",
-              timeZoneName: "short",
-            })}
-            . Your approval applies only to the details shown above.
+            {`مهلت بررسی تا ${faDateTime(action.expiresAt)} است. تأیید شما فقط برای جزئیات بالا اعمال می‌شود.`}
           </Text>
           <View style={[s.row, { gap: 10, flexWrap: "wrap" }]}>
             <Button primary icon={Check} busy={busy} onPress={() => void decide("approve")}>
-              {w.mode === "sample"
-                ? "Approve locally"
-                : email
-                  ? "Approve & send"
-                  : "Approve change"}
+              {w.mode === "sample" ? "تأیید محلی" : email ? "تأیید و ارسال" : "تأیید تغییر"}
             </Button>
             {action.kind !== "calendar.delete" && (
               <Button icon={Edit3} disabled={busy} onPress={() => void edit()}>
-                Edit details
+                ویرایش جزئیات
               </Button>
             )}
             <Button icon={X} disabled={busy} onPress={() => void decide("deny")}>
-              Don’t proceed
+              رد کردن
             </Button>
           </View>
         </>
       ) : (
         <Button style={{ alignSelf: "flex-start", marginTop: 19 }} onPress={close}>
-          Done
+          تمام
         </Button>
       )}
     </Sheet>
   );
 }
 function arrayText(value: unknown) {
-  return Array.isArray(value) ? value.map(String).join(", ") : "";
+  return Array.isArray(value) ? value.map(String).join("، ") : "";
 }
-function ReviewLine({ label, value }: { label: string; value: string }) {
+function ReviewLine({ label, value, ltr }: { label: string; value: string; ltr?: boolean }) {
   return (
     <View style={{ gap: 4 }}>
       <Text style={s.label}>{label}</Text>
-      <Text selectable style={s.text}>
+      <Text selectable style={[s.text, ltr && { writingDirection: "ltr" }]}>
         {value}
       </Text>
     </View>
@@ -775,7 +852,10 @@ function FileDetail({ file: f }: { file: Artifact }) {
       });
       if (await Sharing.isAvailableAsync())
         await Sharing.shareAsync(target, { mimeType: "application/pdf", UTI: "com.adobe.pdf" });
-      else throw new Error("Sharing is not available on this device.");
+      else
+        throw new Error(
+          "اشتراک‌گذاری در این دستگاه پشتیبانی نمی‌شود. فایل را از نسخهٔ وب OpenMuse دانلود کنید.",
+        );
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }
@@ -783,32 +863,33 @@ function FileDetail({ file: f }: { file: Artifact }) {
   return (
     <Sheet
       title={f.name}
-      subtitle={`${f.pageCount} pages · ${Math.max(1, Math.round(f.size / 1024))} KB · ${f.source}`}
+      subtitle={`${faNumber(f.pageCount)} صفحه · ${kilobytes(f.size)} · ${f.source}`}
       onClose={close}
       wide
     >
       <PdfReader url={url} token={api.token} pageCount={f.pageCount} />
       <View style={[s.row, { gap: 10, marginVertical: 18, flexWrap: "wrap" }]}>
         <Button icon={Download} onPress={() => void share()}>
-          {Platform.OS === "web" ? "Open / download" : "Save or share"}
+          {Platform.OS === "web" ? "دانلود فایل" : "اشتراک‌گذاری فایل"}
         </Button>
         <Button
           icon={Send}
           onPress={() => open({ type: "email", draft: { attachmentIds: [f.id] } })}
         >
-          Attach to email
+          پیوست به ایمیل
         </Button>
       </View>
       {f.fields && f.fields.length > 0 && (
         <Card>
-          <SectionHeading title="Fill this form" />
+          <SectionHeading title="پر کردن این فرم" />
           <Text style={[s.muted, { marginBottom: 18 }]}>
-            Add your details below. Saving creates a new copy and keeps the original intact.
+            اطلاعاتتان را در زیر وارد کنید. با ذخیره، نسخهٔ تازه‌ای ساخته می‌شود و نسخهٔ اصلی دست‌نخورده
+            می‌ماند.
           </Text>
           {f.fields.map((field) =>
             field.type === "unsupported" ? (
               <Text key={field.name} style={s.muted}>
-                {field.name} · this field type is not supported
+                {field.name} · این نوع فیلد پشتیبانی نمی‌شود
               </Text>
             ) : field.type === "checkbox" ? (
               <CheckRow
@@ -822,19 +903,21 @@ function FileDetail({ file: f }: { file: Artifact }) {
                 key={field.name}
                 label={field.name.replace(/_/g, " ").replace(/^./, (s) => s.toUpperCase())}
                 value={String(values[field.name] || "")}
-                onChangeText={(value) => setValues({ ...values, [field.name]: value })}
+                onChangeText={(value) =>
+                  setValues({ ...values, [field.name]: toLatinDigits(value) })
+                }
               />
             ),
           )}
           <Button primary icon={Save} busy={busy} onPress={() => void fill()}>
-            Save filled copy
+            ذخیرهٔ نسخهٔ پرشده
           </Button>
         </Card>
       )}
       <ErrorNotice error={error} />
       <Text style={[s.small, { marginTop: 15 }]}>
-        Added {dateLabel(f.createdAt)}
-        {f.parentId ? " · filled copy" : ""}
+        افزوده‌شده در {dateLabel(f.createdAt)}
+        {f.parentId ? " · نسخهٔ پرشده" : ""}
       </Text>
     </Sheet>
   );
@@ -888,8 +971,8 @@ function BrowserDetail({ initial }: { initial: BrowserSession }) {
       const files = result.files;
       notify(
         files.length
-          ? `${files.length} PDF download${files.length === 1 ? "" : "s"} added to Files.`
-          : "No new PDF downloads in this session.",
+          ? `${faNumber(files.length)} دانلود PDF به فایل‌ها افزوده شد.`
+          : "دانلود PDF تازه‌ای در این نشست نیست.",
       );
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -919,34 +1002,39 @@ function BrowserDetail({ initial }: { initial: BrowserSession }) {
   return (
     <Sheet
       title={browserSite(browser.url)}
-      subtitle={`${browser.status} · updated ${timeLabel(browser.updatedAt)}`}
+      subtitle={`${browserStatusLabels[browser.status] ?? browser.status} · به‌روزرسانی در ساعت ${timeLabel(browser.updatedAt)}`}
       onClose={close}
       wide
     >
       <View style={[s.row, { gap: 10, marginBottom: 16 }]}>
         <View style={{ flex: 1 }}>
           <Field
-            label="Website address"
+            label="نشانی وب‌سایت"
             value={url}
             onChangeText={setUrl}
             autoCapitalize="none"
             keyboardType="url"
+            style={{ writingDirection: "ltr" }}
             onSubmitEditing={() => void mutate()}
           />
         </View>
         <Button primary busy={busy} disabled={loading || !url.trim()} onPress={() => void mutate()}>
-          {browser.status === "closed" ? "Reopen" : browser.status === "error" ? "Reconnect" : "Go"}
+          {browser.status === "closed"
+            ? "باز کردن دوباره"
+            : browser.status === "error"
+              ? "اتصال دوباره"
+              : "باز کردن"}
         </Button>
       </View>
       <ErrorNotice error={error} />
       {loading ? (
         <View style={[s.row, { gap: 10, paddingVertical: 24 }]}>
           {error ? (
-            <Button onPress={() => setRetry(retry + 1)}>Retry connection</Button>
+            <Button onPress={() => setRetry(retry + 1)}>تلاش دوباره</Button>
           ) : (
             <>
               <ActivityIndicator color={colors.blueDark} />
-              <Text style={s.muted}>Connecting to your browser…</Text>
+              <Text style={s.muted}>در حال اتصال به مرورگر شما…</Text>
             </>
           )}
         </View>
@@ -961,13 +1049,11 @@ function BrowserDetail({ initial }: { initial: BrowserSession }) {
       ) : (
         <Empty
           icon={Globe2}
-          title={
-            browser.status === "closed" ? "This session is closed" : "Preview is not available"
-          }
+          title={browser.status === "closed" ? "این نشست بسته شده است" : "پیش‌نمایش در دسترس نیست"}
           detail={
             browser.status === "closed"
-              ? "Your profile and downloads are saved. Reopen to continue where you left off."
-              : "Reconnect to continue with your saved browser profile."
+              ? "نمایه و دانلودهای شما ذخیره شده‌اند. برای ادامه از همان جایی که بودید، دوباره بازش کنید."
+              : "برای ادامه با نمایهٔ ذخیره‌شدهٔ مرورگر، دوباره وصل شوید."
           }
         />
       )}
@@ -977,22 +1063,22 @@ function BrowserDetail({ initial }: { initial: BrowserSession }) {
             icon={ExternalLink}
             onPress={() => void Linking.openURL(api.url(browser.consoleUrl || ""))}
           >
-            Open browser in a window
+            باز کردن مرورگر در پنجره‌ای جدا
           </Button>
         )}
         {!loading && (
           <Button icon={RotateCw} disabled={busy} onPress={() => setRetry(retry + 1)}>
-            Refresh connection
+            تازه‌سازی اتصال
           </Button>
         )}
         {!loading && browser.status !== "closed" && (
           <Button icon={Download} busy={busy} onPress={() => void importDownloads()}>
-            Import PDF downloads
+            وارد کردن دانلودهای PDF
           </Button>
         )}
         {!loading && browser.status !== "closed" && (
           <Button icon={X} danger busy={busy} onPress={() => void mutate(true)}>
-            Close session
+            بستن نشست
           </Button>
         )}
       </View>

@@ -47,7 +47,7 @@ async function loadPdf(bytes: Uint8Array): Promise<PDFDocument> {
     bytes.length > MAX_PDF_BYTES ||
     Buffer.from(bytes.subarray(0, 1024)).indexOf("%PDF-") < 0
   ) {
-    throw new PdfError("Invalid PDF: expected nonempty PDF bytes up to 10 MiB");
+    throw new PdfError("PDF نامعتبر است: فایل نباید خالی باشد و حجمش باید حداکثر ۱۰ مگابایت باشد");
   }
   try {
     const doc = await PDFDocument.load(new Uint8Array(bytes), {
@@ -55,18 +55,18 @@ async function loadPdf(bytes: Uint8Array): Promise<PDFDocument> {
       throwOnInvalidObject: true,
       updateMetadata: false,
     });
-    if (doc.isEncrypted) throw new PdfError("Encrypted PDFs are not supported");
+    if (doc.isEncrypted) throw new PdfError("PDFهای رمزگذاری‌شده پشتیبانی نمی‌شوند");
     if (doc.catalog.lookupMaybe(PDFName.of("AcroForm"), PDFDict)?.has(PDFName.of("XFA"))) {
-      throw new PdfError("Unsupported XFA PDF form");
+      throw new PdfError("فرم‌های PDF از نوع XFA پشتیبانی نمی‌شوند");
     }
     if (doc.getPageCount() < 1 || doc.getPageCount() > MAX_PDF_PAGES)
-      throw new PdfError("PDF must contain between 1 and 500 pages");
+      throw new PdfError("PDF باید بین ۱ تا ۵۰۰ صفحه داشته باشد");
     return doc;
   } catch (error) {
     if (error instanceof PdfError) throw error;
     if (error instanceof Error && /encrypt/i.test(error.message))
-      throw new PdfError("Encrypted PDFs are not supported");
-    throw new PdfError("Invalid or malformed PDF");
+      throw new PdfError("PDFهای رمزگذاری‌شده پشتیبانی نمی‌شوند");
+    throw new PdfError("PDF نامعتبر یا خراب است");
   }
 }
 
@@ -75,7 +75,7 @@ function inspectField(field: PDFField): PdfInspection["fields"][number] {
   if (field instanceof PDFTextField) {
     const value = field.acroField.dict.lookup(PDFName.of("V"));
     if (value !== undefined && !(value instanceof PDFString) && !(value instanceof PDFHexString)) {
-      throw new PdfError("Cannot inspect PDF: a text field contains a malformed value");
+      throw new PdfError("بررسی PDF ممکن نشد: یکی از فیلدهای متنی مقدار خراب دارد");
     }
     return { name, value: field.getText() ?? "", type: "text" };
   }
@@ -94,7 +94,7 @@ export async function inspectPdf(bytes: Uint8Array): Promise<PdfInspection> {
   return pdfOperation(async () => {
     const doc = await loadPdf(bytes);
     return { pageCount: doc.getPageCount(), fields: doc.getForm().getFields().map(inspectField) };
-  }, "Cannot inspect PDF: the document contains malformed or unsupported form fields");
+  }, "بررسی PDF ممکن نشد: سند فیلدهای خراب یا پشتیبانی‌نشده دارد");
 }
 
 /** Strip action entry points in the new output; never execute PDF scripts. */
@@ -124,19 +124,19 @@ export async function fillPdf(
     const fields = new Map(form.getFields().map((field) => [field.getName(), field]));
     for (const [name, value] of Object.entries(values)) {
       const field = fields.get(name);
-      if (!field) throw new PdfError(`Unknown PDF field: ${name}`);
+      if (!field) throw new PdfError(`فیلد PDF ناشناخته است: ${name}`);
       if (field instanceof PDFTextField) {
-        if (typeof value !== "string")
-          throw new PdfError(`PDF text field requires a string: ${name}`);
-        if (value.length > 10000) throw new PdfError(`PDF text field value is too long: ${name}`);
+        if (typeof value !== "string") throw new PdfError(`فیلد متنی PDF فقط متن می‌پذیرد: ${name}`);
+        if (value.length > 10000)
+          throw new PdfError(`مقدار فیلد متنی PDF خیلی طولانی است: ${name}`);
         field.setText(value);
       } else if (field instanceof PDFCheckBox) {
         if (typeof value !== "boolean")
-          throw new PdfError(`PDF checkbox requires a boolean: ${name}`);
+          throw new PdfError(`چک‌باکس PDF فقط مقدار درست/نادرست (boolean) می‌پذیرد: ${name}`);
         if (value) field.check();
         else field.uncheck();
       } else {
-        throw new PdfError(`Unsupported PDF field: ${name}`);
+        throw new PdfError(`این فیلد PDF پشتیبانی نمی‌شود: ${name}`);
       }
     }
     removeActions(doc);
@@ -145,10 +145,10 @@ export async function fillPdf(
       return await doc.save();
     } catch {
       throw new PdfError(
-        "Could not render PDF field values; use characters supported by this form's font or choose a compatible PDF form",
+        "نوشتن مقدارها در PDF ممکن نشد: فونت این فرم فقط حروف لاتین را پشتیبانی می‌کند. مقدارها را با حروف انگلیسی وارد کنید یا فرم PDF سازگاری انتخاب کنید",
       );
     }
-  }, "Could not fill PDF: the document contains malformed or unsupported form fields");
+  }, "تکمیل PDF ممکن نشد: سند فیلدهای خراب یا پشتیبانی‌نشده دارد");
 }
 
 /** Original synthetic fixture. Personal details remain blank until explicitly supplied. */
@@ -278,5 +278,5 @@ export async function createSamplePdf(): Promise<Uint8Array> {
     });
     form.updateFieldAppearances(regular);
     return doc.save();
-  }, "Could not create the sample PDF");
+  }, "ساخت PDF نمونه ممکن نشد");
 }

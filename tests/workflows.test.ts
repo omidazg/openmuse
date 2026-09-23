@@ -3,8 +3,11 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, test } from "node:test";
+import { EventType, type RunAgentInput } from "@ag-ui/core";
+import { lastValueFrom, toArray } from "rxjs";
 import { createApp } from "../apps/server/src/app.ts";
 import { createStore, type Store } from "../apps/server/src/db.ts";
+import { ConversationAgent } from "../apps/server/src/engine/conversation.ts";
 import type { AgentNotification, AgentTask, Idea, Monitor } from "../packages/domain/src/agent.ts";
 import type { ActionProposal } from "../packages/domain/src/index.ts";
 
@@ -75,7 +78,7 @@ test("document job runs without a client, waits for review, and resumes from its
   await server.agent.control(owner, task.id, "pause");
   await assert.rejects(
     server.actions.decide(owner, action.id, action.hash, "approve"),
-    /Resume the task/,
+    /کار را از سر بگیرید/,
   );
   await server.agent.control(owner, task.id, "resume");
   const receipt = await server.actions.decide(owner, action.id, action.hash, "approve");
@@ -181,4 +184,36 @@ test("dismissal racing acceptance never creates work for a dismissed idea", asyn
       assert.equal(tasks.filter((t) => t.title === idea.title).length, 0);
     else assert.ok(saved?.taskId && tasks.some((t) => t.id === saved.taskId));
   }
+});
+
+test("sample conversation understands Persian requests and replies in Persian", async () => {
+  const agent = new ConversationAgent(server.agent.config, server.agent, owner);
+  const say = async (content: string) => {
+    const input: RunAgentInput = {
+      threadId: `persian-${content.length}`,
+      runId: crypto.randomUUID(),
+      messages: [{ id: crypto.randomUUID(), role: "user", content }],
+      tools: [],
+      context: [],
+      state: {},
+      forwardedProps: {},
+    };
+    const events = await lastValueFrom(agent.run(input).pipe(toArray()));
+    return events
+      .flatMap((event) =>
+        event.type === EventType.TEXT_MESSAGE_CONTENT && "delta" in event
+          ? [String(event.delta)]
+          : [],
+      )
+      .join("");
+  };
+  assert.match(await say("در برنامه‌ریزی امروز کمکم کنید"), /تقویم محلی شما [۰-۹]+ رویداد دارد/);
+  assert.match(await say("سلام"), /فرم اجازه‌نامه/);
+  assert.match(await say("فرم اجازه‌نامه را تکمیل کن"), /فرم اجازه‌نامه را پیدا کردم/);
+  const task = (await db.list<AgentTask>(owner, "tasks")).find(
+    (item) => item.prompt === "فرم اجازه‌نامه را تکمیل کن",
+  );
+  assert.equal(task?.kind, "document");
+  assert.equal(task?.title, "تکمیل فرم اجازه‌نامه");
+  await server.agent.control(owner, task.id, "cancel");
 });

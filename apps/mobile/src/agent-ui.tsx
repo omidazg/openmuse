@@ -1,8 +1,8 @@
 import {
-  ArrowRight,
+  ArrowLeft,
   Bell,
   CalendarDays,
-  ChevronRight,
+  ChevronLeft,
   CircleDollarSign,
   FileText,
   Globe2,
@@ -34,6 +34,7 @@ import type {
   RunEvent,
 } from "../../../packages/domain/src/agent";
 import { useAgentWorkspace } from "./agent-workspace";
+import { FONT, faDate, faDateTime, faDigits, faNumber, fw, LOCALE, toLatinDigits } from "./locale";
 import { ActivityScreen, ConnectionsScreen } from "./screens";
 import {
   Button,
@@ -53,18 +54,77 @@ import {
 } from "./ui";
 import { useWorkspace } from "./workspace";
 
+const STATUS_LABELS: Record<string, string> = {
+  queued: "در صف",
+  running: "در حال انجام",
+  waiting_approval: "در انتظار تأیید",
+  waiting_input: "در انتظار پاسخ شما",
+  scheduled: "زمان‌بندی‌شده",
+  paused: "متوقف‌شده",
+  succeeded: "انجام شد",
+  failed: "ناموفق",
+  cancelled: "لغوشده",
+  pending: "در انتظار",
+  waiting: "در انتظار",
+  active: "فعال",
+  completed: "تکمیل‌شده",
+  stopped: "پایان‌یافته",
+  new: "تازه",
+  dismissed: "کنارگذاشته",
+  accepted: "پذیرفته‌شده",
+  agent: "کار عمومی",
+  document: "سند",
+  monitor: "پیگیری",
+  finance: "مالی",
+  plan: "برنامه",
+  comparison: "مقایسه",
+  report: "گزارش",
+  step: "گام",
+  observation: "مشاهده",
+  approval: "تأیید",
+  result: "نتیجه",
+  error: "خطا",
+  status: "وضعیت",
+  warm: "گرم",
+  concise: "موجز",
+  thoughtful: "سنجیده",
+  sky: "آسمانی",
+  sand: "شنی",
+  lilac: "یاسی",
+};
+/** Persian display label for a status/kind enum; the underlying value is never changed. */
 export function statusLabel(value: string) {
-  return value.replace(/_/g, " ").replace(/^./, (c) => c.toUpperCase());
+  return STATUS_LABELS[value] ?? value.replace(/_/g, " ").replace(/^./, (c) => c.toUpperCase());
 }
-function stamp(value?: string) {
-  return value
-    ? new Date(value).toLocaleString(undefined, {
-        month: "short",
-        day: "numeric",
-        hour: "numeric",
-        minute: "2-digit",
-      })
-    : "Not checked yet";
+/** Short Jalali date with 24-hour time, e.g. «۲۹ شهریور، ۱۴:۳۰». */
+function stamp(value?: string, fallback = "هنوز بررسی نشده") {
+  if (!value) return fallback;
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return faDigits(value);
+  return new Intl.DateTimeFormat(`${LOCALE}-u-ca-persian`, {
+    month: "long",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).format(date);
+}
+/** Jalali display for a date value from data (ISO date-only strings are read as calendar days). */
+function day(value: unknown) {
+  const text = String(value ?? "");
+  if (!text) return "";
+  const dateOnly = /^\d{4}-\d{2}-\d{2}$/.test(text);
+  const date = new Date(text);
+  if (!Number.isFinite(date.getTime())) return faDigits(text);
+  return faDate(date, { dateStyle: "medium", ...(dateOnly ? { timeZone: "UTC" } : {}) });
+}
+/** User-typed number: Persian/Arabic digits, «٫» decimal and thousands separators normalized. */
+function typedNumber(text: string) {
+  return Number(
+    toLatinDigits(text)
+      .replace(/٫/g, ".")
+      .replace(/[,٬\s]/g, ""),
+  );
 }
 function errorText(e: unknown) {
   return e instanceof Error ? e.message : String(e);
@@ -77,15 +137,19 @@ export function AgentStatus() {
   if (data?.worker.running && !error) return null;
   return (
     <View style={{ gap: 8 }}>
-      <ErrorNotice error={error ? `Agent updates unavailable. ${error}` : ""} />
+      <ErrorNotice
+        error={error ? `به‌روزرسانی‌های دستیار دریافت نشد. دوباره وصل شوید. (${error})` : ""}
+      />
       {error && (
         <Button small onPress={() => void refresh().catch(() => {})}>
-          Reconnect agent
+          اتصال دوباره به دستیار
         </Button>
       )}
       {!data && !error && <ActivityIndicator color={colors.blueDark} />}
       {data && !data.worker.running && (
-        <Text style={s.small}>Worker is offline. Saved work will continue when it reconnects.</Text>
+        <Text style={s.small}>
+          پردازشگر آفلاین است. کارهای ذخیره‌شده پس از اتصال دوباره ادامه می‌یابند.
+        </Text>
       )}
     </View>
   );
@@ -106,7 +170,7 @@ export function TaskCard({
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`Open task: ${task.title}`}
+      accessibilityLabel={`باز کردن کار: ${task.title}`}
       onPress={() => {
         onOpen?.();
         open({ type: "task", taskId: task.id });
@@ -133,10 +197,10 @@ export function TaskCard({
             <Text style={s.heading}>{task.title}</Text>
             <Text style={s.small}>
               {statusLabel(task.status)}
-              {task.plan.length ? ` · ${done}/${task.plan.length} steps` : ""}
+              {task.plan.length ? ` · ${faNumber(done)} از ${faNumber(task.plan.length)} گام` : ""}
             </Text>
           </View>
-          <ChevronRight size={17} color={colors.muted} />
+          <ChevronLeft size={17} color={colors.muted} />
         </View>
         {!!task.plan.length && (
           <View style={{ height: 4, backgroundColor: colors.line, borderRadius: 4 }}>
@@ -156,8 +220,8 @@ export function TaskCard({
           </Text>
         )}
         {waiting && (
-          <Text style={[s.small, { color: colors.blueDark, fontWeight: "600" }]}>
-            {task.status === "waiting_approval" ? "Review requested" : "Your input is needed"}
+          <Text style={[s.small, { color: colors.blueDark, ...fw("600") }]}>
+            {task.status === "waiting_approval" ? "بازبینی درخواست شده" : "به پاسخ شما نیاز است"}
           </Text>
         )}
       </Card>
@@ -181,20 +245,25 @@ export function ChatWork() {
 }
 export function AgentActivityScreen() {
   const { data } = useAgentWorkspace();
-  const [filter, setFilter] = useState("All");
+  const [filter, setFilter] = useState<"all" | "active" | "finished">("all");
   const tasks = [...(data?.tasks || [])]
     .filter(
-      (task) =>
-        filter === "All" || (filter === "In progress" ? activeTask(task) : !activeTask(task)),
+      (task) => filter === "all" || (filter === "active" ? activeTask(task) : !activeTask(task)),
     )
     .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   return (
     <View style={{ gap: 20 }}>
       <AgentStatus />
       <View style={[s.row, { gap: 8 }]}>
-        {["All", "In progress", "Finished"].map((item) => (
+        {(
+          [
+            ["all", "همه"],
+            ["active", "در حال انجام"],
+            ["finished", "پایان‌یافته"],
+          ] as const
+        ).map(([item, label]) => (
           <Button key={item} small primary={filter === item} onPress={() => setFilter(item)}>
-            {item}
+            {label}
           </Button>
         ))}
       </View>
@@ -204,11 +273,11 @@ export function AgentActivityScreen() {
       {!tasks.length && (
         <Empty
           icon={ListChecks}
-          title="A place for the work"
-          detail="Delegate a task in Chat. Its plan, progress and results stay here."
+          title="هنوز کاری نسپرده‌اید"
+          detail="کارهایی که می‌سپارید با برنامه، پیشرفت و نتیجه اینجا نمایش داده می‌شوند. در گفت‌وگو اولین کار را بسپارید."
         />
       )}
-      <SectionHeading title="Reviews & receipts" />
+      <SectionHeading title="بازبینی‌ها و رسیدها" />
       <ActivityScreen />
     </View>
   );
@@ -221,9 +290,9 @@ export function EvidenceList({ items }: { items: Evidence[] }) {
       {items.map((item) => (
         <View
           key={item.id}
-          style={{ borderLeftWidth: 2, borderLeftColor: colors.blue, paddingLeft: 12, gap: 4 }}
+          style={{ borderStartWidth: 2, borderStartColor: colors.blue, paddingStart: 12, gap: 4 }}
         >
-          <Text style={[s.small, { color: colors.text, fontWeight: "600" }]}>{item.title}</Text>
+          <Text style={[s.small, { color: colors.text, ...fw("600") }]}>{item.title}</Text>
           <Text selectable style={s.small}>
             {item.excerpt}
           </Text>
@@ -231,10 +300,12 @@ export function EvidenceList({ items }: { items: Evidence[] }) {
             <Button
               small
               onPress={() =>
-                void Linking.openURL(item.url || "").catch((e) => setError(errorText(e)))
+                void Linking.openURL(item.url || "").catch(() =>
+                  setError("منبع باز نشد. اتصال اینترنت را بررسی کنید و دوباره تلاش کنید."),
+                )
               }
             >
-              Open source
+              باز کردن منبع
             </Button>
           )}
           {item.kind === "mail" && workspace.mail.some((mail) => mail.id === item.id) && (
@@ -245,7 +316,7 @@ export function EvidenceList({ items }: { items: Evidence[] }) {
                 if (mail) open({ type: "mail", mail });
               }}
             >
-              View email
+              مشاهده ایمیل
             </Button>
           )}
           {item.kind === "file" && workspace.files.some((file) => file.id === item.id) && (
@@ -256,7 +327,7 @@ export function EvidenceList({ items }: { items: Evidence[] }) {
                 if (file) open({ type: "file", file });
               }}
             >
-              View file
+              مشاهده فایل
             </Button>
           )}
         </View>
@@ -324,7 +395,12 @@ export function TaskDetail({ taskId }: { taskId: string }) {
     try {
       let parsed: Record<string, string | boolean> = fields;
       if (fieldJson.trim()) {
-        const raw: unknown = JSON.parse(fieldJson);
+        let raw: unknown;
+        try {
+          raw = JSON.parse(fieldJson);
+        } catch {
+          throw new Error("فیلدهای فرم خوانده نشد. قالب JSON را بررسی کنید و دوباره ثبت کنید.");
+        }
         if (
           !raw ||
           typeof raw !== "object" ||
@@ -333,11 +409,13 @@ export function TaskDetail({ taskId }: { taskId: string }) {
             (value) => typeof value !== "string" && typeof value !== "boolean",
           )
         )
-          throw new Error("Form fields must be a JSON object with text or true/false values.");
+          throw new Error(
+            "فیلدهای فرم پذیرفته نشد. یک شیء JSON با مقادیر متنی یا true/false وارد کنید.",
+          );
         parsed = raw as Record<string, string | boolean>;
       }
       await act("input", {
-        answer: answer.trim() || "Provided the requested fields.",
+        answer: answer.trim() || "فیلدهای درخواستی تکمیل شد.",
         fields: parsed,
       });
     } catch (e) {
@@ -351,7 +429,8 @@ export function TaskDetail({ taskId }: { taskId: string }) {
       await refreshWorkspace();
       const snapshot = await api.request<typeof workspace>("/api/workspace");
       const action = snapshot.actions.find((item) => item.id === task?.actionId);
-      if (!action) throw new Error("This review is not available yet. Refresh and try again.");
+      if (!action)
+        throw new Error("این بازبینی هنوز در دسترس نیست. صفحه را تازه کنید و دوباره تلاش کنید.");
       open({ type: "review", action });
     } catch (e) {
       setError(errorText(e));
@@ -371,9 +450,11 @@ export function TaskDetail({ taskId }: { taskId: string }) {
     .filter(Boolean);
   return (
     <Sheet
-      title={task?.title || "Task"}
+      title={task?.title || "کار"}
       subtitle={
-        task ? `${statusLabel(task.status)} · ${stamp(task.updatedAt)}` : "Loading saved progress…"
+        task
+          ? `${statusLabel(task.status)} · ${stamp(task.updatedAt)}`
+          : "در حال بارگذاری پیشرفت ذخیره‌شده…"
       }
       onClose={close}
     >
@@ -395,7 +476,7 @@ export function TaskDetail({ taskId }: { taskId: string }) {
                 busy={busy}
                 onPress={() => void act("control", { action: "pause" })}
               >
-                Pause
+                توقف
               </Button>
             )}
             {task.status === "paused" && (
@@ -405,7 +486,7 @@ export function TaskDetail({ taskId }: { taskId: string }) {
                 busy={busy}
                 onPress={() => void act("control", { action: "resume" })}
               >
-                Resume
+                ادامه
               </Button>
             )}
             {task.status === "failed" && (
@@ -415,7 +496,7 @@ export function TaskDetail({ taskId }: { taskId: string }) {
                 busy={busy}
                 onPress={() => void act("control", { action: "retry" })}
               >
-                Retry task
+                تلاش دوباره
               </Button>
             )}
             {activeTask(task) && (
@@ -426,22 +507,22 @@ export function TaskDetail({ taskId }: { taskId: string }) {
                 busy={busy}
                 onPress={() => void act("control", { action: "cancel" })}
               >
-                Cancel task
+                لغو کار
               </Button>
             )}
           </View>
           {task.status === "waiting_approval" && (
             <Card style={{ backgroundColor: colors.lavender, gap: 12 }}>
-              <Text style={s.heading}>Ready for your review</Text>
-              <Text style={s.muted}>Review the exact action and account before it proceeds.</Text>
+              <Text style={s.heading}>آماده بازبینی شما</Text>
+              <Text style={s.muted}>پیش از ادامه، اقدام و حساب دقیق را بازبینی کنید.</Text>
               <Button primary busy={busy} onPress={() => void review()}>
-                Review action
+                بازبینی اقدام
               </Button>
             </Card>
           )}
           {task.status === "waiting_input" && (
             <Card style={{ backgroundColor: colors.sky, gap: 10 }}>
-              <Text style={s.heading}>{task.question || "A detail from you will help"}</Text>
+              <Text style={s.heading}>{task.question || "یک توضیح از طرف شما کمک می‌کند"}</Text>
               {fieldNames.map((name) =>
                 missing.some(
                   (f) => typeof f === "object" && f && f.name === name && f.type === "checkbox",
@@ -465,26 +546,28 @@ export function TaskDetail({ taskId }: { taskId: string }) {
               )}
               {!fieldNames.length && (
                 <Field
-                  label="Your answer"
+                  label="پاسخ شما"
                   value={answer}
                   onChangeText={setAnswer}
                   multiline
-                  placeholder="Add the missing details…"
+                  placeholder="جزئیات جاافتاده را اضافه کنید…"
                 />
               )}
               {task.kind === "document" && !fieldNames.length && (
                 <>
                   <Button small onPress={() => setShowFieldJson(!showFieldJson)}>
-                    Form field values
+                    {showFieldJson ? "پنهان کردن فیلدهای فرم" : "وارد کردن فیلدهای فرم"}
                   </Button>
                   {showFieldJson && (
                     <Field
-                      label="Fields (JSON: field name to value)"
+                      label="فیلدها (JSON: نام فیلد به مقدار)"
                       value={fieldJson}
                       onChangeText={setFieldJson}
                       multiline
                       autoCapitalize="none"
-                      placeholder={'{"full_name":"Your name","consent":true}'}
+                      autoCorrect={false}
+                      style={{ writingDirection: "ltr" }}
+                      placeholder={'{"full_name":"نام شما","consent":true}'}
                     />
                   )}
                 </>
@@ -495,13 +578,13 @@ export function TaskDetail({ taskId }: { taskId: string }) {
                 disabled={!answer.trim() && !Object.keys(fields).length && !fieldJson.trim()}
                 onPress={() => void submitInput()}
               >
-                Continue task
+                ادامه کار
               </Button>
             </Card>
           )}
           {!!task.plan.length && (
             <Card style={{ gap: 15 }}>
-              <Text style={s.heading}>Plan</Text>
+              <Text style={s.heading}>برنامه</Text>
               {task.plan.map((step, index) => (
                 <View key={step.id} style={[s.row, { gap: 10, alignItems: "flex-start" }]}>
                   <Text
@@ -510,7 +593,7 @@ export function TaskDetail({ taskId }: { taskId: string }) {
                       { color: step.status === "succeeded" ? colors.blueDark : colors.muted },
                     ]}
                   >
-                    {step.status === "succeeded" ? "✓" : `${index + 1}.`}
+                    {step.status === "succeeded" ? "✓" : `${faNumber(index + 1)}.`}
                   </Text>
                   <View style={{ flex: 1, gap: 3 }}>
                     <Text style={s.text}>{step.title}</Text>
@@ -533,11 +616,13 @@ export function TaskDetail({ taskId }: { taskId: string }) {
           <ErrorNotice error={task.error ?? undefined} />
           {detail?.browsers?.map((browser) => (
             <Card key={browser.id} style={{ gap: 10 }}>
-              <Text style={s.heading}>{browser.title || "Agent browser"}</Text>
-              <Text style={s.small}>{browser.url}</Text>
+              <Text style={s.heading}>{browser.title || "مرورگر دستیار"}</Text>
+              <Text selectable style={[s.small, { writingDirection: "ltr" }]}>
+                {browser.url}
+              </Text>
               {browser.status === "active" && browser.previewUrl && (
                 <Image
-                  accessibilityLabel="Agent browser preview"
+                  accessibilityLabel="پیش‌نمایش مرورگر دستیار"
                   source={{ uri: api.url(browser.previewUrl) }}
                   style={{ width: "100%", aspectRatio: 1.6, borderRadius: 12 }}
                 />
@@ -561,8 +646,8 @@ export function TaskDetail({ taskId }: { taskId: string }) {
                 }}
               >
                 {["running", "scheduled", "queued"].includes(task.status)
-                  ? "Pause and open browser"
-                  : "Open browser"}
+                  ? "توقف و باز کردن مرورگر"
+                  : "باز کردن مرورگر"}
               </Button>
             </Card>
           ))}
@@ -570,7 +655,7 @@ export function TaskDetail({ taskId }: { taskId: string }) {
             <LinkRow
               key={file.id}
               title={file.name}
-              detail={`${file.pageCount} pages · PDF`}
+              detail={`${faNumber(file.pageCount)} صفحه · PDF`}
               icon={FileText}
               onPress={() => open({ type: "file", file })}
             />
@@ -584,15 +669,20 @@ export function TaskDetail({ taskId }: { taskId: string }) {
           ))}
           {!!task.evidence.length && (
             <View style={{ gap: 14 }}>
-              <Text style={s.heading}>Sources</Text>
+              <Text style={s.heading}>منابع</Text>
               <EvidenceList items={task.evidence} />
             </View>
           )}
-          <Text style={s.heading}>Timeline</Text>
+          <Text style={s.heading}>روند زمانی</Text>
           {detail?.events.map((event) => (
             <View
               key={event.id}
-              style={{ gap: 4, paddingLeft: 14, borderLeftWidth: 2, borderLeftColor: colors.line }}
+              style={{
+                gap: 4,
+                paddingStart: 14,
+                borderStartWidth: 2,
+                borderStartColor: colors.line,
+              }}
             >
               <Text style={s.small}>
                 {stamp(event.date)} · {statusLabel(event.kind)}
@@ -604,7 +694,9 @@ export function TaskDetail({ taskId }: { taskId: string }) {
             </View>
           ))}
           {!detail?.events.length && (
-            <Text style={s.muted}>The worker will record each step here.</Text>
+            <Text style={s.muted}>
+              هنوز گامی ثبت نشده است. پردازشگر هر گام را هنگام انجام اینجا ثبت می‌کند.
+            </Text>
           )}
         </View>
       )}
@@ -619,11 +711,15 @@ function record(value: unknown): Record<string, unknown> | undefined {
 function display(value: unknown): string {
   return typeof value === "string"
     ? value
-    : typeof value === "number" || typeof value === "boolean"
-      ? String(value)
-      : value === null
-        ? "—"
-        : JSON.stringify(value, null, 2) || "";
+    : typeof value === "number"
+      ? faNumber(value)
+      : typeof value === "boolean"
+        ? value
+          ? "بله"
+          : "خیر"
+        : value === null
+          ? "بدون مقدار"
+          : JSON.stringify(value, null, 2) || "";
 }
 export function ArtifactCard({ artifact }: { artifact: AgentArtifact }) {
   const [expanded, setExpanded] = useState(false);
@@ -673,14 +769,22 @@ export function ArtifactCard({ artifact }: { artifact: AgentArtifact }) {
               </View>
             ))
           ) : (
-            <Text selectable style={[s.text, { fontSize: typeof value === "number" ? 24 : 14 }]}>
+            <Text
+              selectable
+              style={[
+                s.text,
+                typeof value === "number"
+                  ? { fontSize: 24, lineHeight: 32 }
+                  : { fontSize: 14, lineHeight: 24 },
+              ]}
+            >
               {display(value)}
             </Text>
           )}
         </View>
       ))}
       <Button small onPress={() => setExpanded(!expanded)}>
-        {expanded ? "Show summary" : "Explore full result"}
+        {expanded ? "نمایش خلاصه" : "مشاهده نتیجه کامل"}
       </Button>
     </Card>
   );
@@ -700,8 +804,8 @@ function FinanceArtifact({ artifact }: { artifact: AgentArtifact }) {
       await mutate("/goals", {
         title: goalTitle.trim(),
         category: "Finances",
-        description: `Inspired by ${artifact.title}: ${artifact.summary}`,
-        milestones: ["Choose a savings target", "Review spending each week"],
+        description: `الهام‌گرفته از ${artifact.title}: ${artifact.summary}`,
+        milestones: ["یک هدف پس‌انداز انتخاب کنید", "هر هفته هزینه‌ها را مرور کنید"],
       });
       setGoalSaved(true);
     } catch (error) {
@@ -710,8 +814,9 @@ function FinanceArtifact({ artifact }: { artifact: AgentArtifact }) {
       setGoalBusy(false);
     }
   };
+  // Amounts stay in the imported file's own currency (unknown here), so no unit is invented.
   const amount = (value: unknown) =>
-    Number(value ?? 0).toLocaleString(undefined, {
+    faNumber(Number(value ?? 0) || 0, {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     });
@@ -725,7 +830,7 @@ function FinanceArtifact({ artifact }: { artifact: AgentArtifact }) {
     >
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel={`Open finance tracker: ${artifact.title}`}
+        accessibilityLabel={`باز کردن ردیاب مالی: ${artifact.title}`}
         accessibilityState={{ expanded: details }}
         onPress={() => setDetails(!details)}
       >
@@ -738,7 +843,7 @@ function FinanceArtifact({ artifact }: { artifact: AgentArtifact }) {
             padding: 20,
           }}
         >
-          <View style={{ position: "absolute", top: 0, left: 0, right: 0, height: 142 }}>
+          <View style={{ position: "absolute", top: 0, start: 0, end: 0, height: 142 }}>
             <Svg width="100%" height="100%">
               <Defs>
                 <LinearGradient id="finance" x1="0" y1="0" x2="0.5" y2="1">
@@ -750,25 +855,35 @@ function FinanceArtifact({ artifact }: { artifact: AgentArtifact }) {
               <Rect width="100%" height="100%" fill="url(#finance)" />
             </Svg>
           </View>
-          <Text style={{ color: "#D4DCFC", fontSize: 11, lineHeight: 18, marginBottom: 20 }}>
-            Read from your imported transactions.{"\n"}
-            {String(period?.from ?? "")} — {String(period?.to ?? "")}
+          <Text
+            style={{
+              fontFamily: FONT,
+              color: "#D4DCFC",
+              fontSize: 11,
+              lineHeight: 19,
+              marginBottom: 20,
+            }}
+          >
+            خوانده‌شده از تراکنش‌های واردشده‌ی شما.{"\n"}
+            {period?.from || period?.to ? `از ${day(period?.from)} تا ${day(period?.to)}` : ""}
             {"\n"}
-            {transactions.length} transactions, categorized and summarized.
+            {faNumber(transactions.length)} تراکنش، دسته‌بندی و خلاصه‌شده.
           </Text>
           <View style={[s.row, { gap: 7 }]}>
             {(
               [
-                ["Income", "income"],
-                ["Spending", "spending"],
-                ["Remaining", "saved"],
+                ["درآمد", "income"],
+                ["هزینه", "spending"],
+                ["باقی‌مانده", "saved"],
               ] as const
             ).map(([label, key]) => (
               <View
                 key={key}
                 style={{ flex: 1, padding: 11, borderRadius: 12, backgroundColor: "#1D2025" }}
               >
-                <Text style={{ color: "#A4A7AD", fontSize: 9 }}>{label}</Text>
+                <Text style={{ fontFamily: FONT, color: "#A4A7AD", fontSize: 9, lineHeight: 14 }}>
+                  {label}
+                </Text>
                 <Text
                   selectable
                   numberOfLines={1}
@@ -776,14 +891,25 @@ function FinanceArtifact({ artifact }: { artifact: AgentArtifact }) {
                   minimumFontScale={0.65}
                   style={{
                     fontSize: 17,
-                    fontWeight: "600",
+                    lineHeight: 26,
+                    ...fw("600"),
                     color: key === "saved" ? "#58D3AE" : "#FFF",
                     marginTop: 5,
                   }}
                 >
                   {amount(artifact.data[key])}
                 </Text>
-                <Text style={{ color: "#7E8289", fontSize: 8, marginTop: 4 }}>source currency</Text>
+                <Text
+                  style={{
+                    fontFamily: FONT,
+                    color: "#7E8289",
+                    fontSize: 8,
+                    lineHeight: 13,
+                    marginTop: 4,
+                  }}
+                >
+                  ارز مبدأ
+                </Text>
               </View>
             ))}
           </View>
@@ -791,15 +917,15 @@ function FinanceArtifact({ artifact }: { artifact: AgentArtifact }) {
         <View style={[s.row, { gap: 11, paddingHorizontal: 8, paddingTop: 13, paddingBottom: 4 }]}>
           <Text style={{ fontSize: 25 }}>💸</Text>
           <View style={{ flex: 1, gap: 2 }}>
-            <Text style={[s.text, { fontWeight: "600" }]}>Finance tracker</Text>
-            <Text style={s.small}>Spending, savings, and a plan for what’s next.</Text>
+            <Text style={[s.text, { ...fw("600") }]}>ردیاب مالی</Text>
+            <Text style={s.small}>هزینه‌ها، پس‌انداز و برنامه‌ای برای گام بعد.</Text>
           </View>
-          <ChevronRight size={17} color={colors.muted} />
+          <ChevronLeft size={17} color={colors.muted} />
         </View>
       </Pressable>
       {details && (
         <View style={{ gap: 16, padding: 10 }}>
-          <Text style={s.label}>Where your money went</Text>
+          <Text style={s.label}>پول شما کجا خرج شد</Text>
           {categories.map((category) => {
             const row = record(category);
             if (!row) return null;
@@ -823,17 +949,17 @@ function FinanceArtifact({ artifact }: { artifact: AgentArtifact }) {
             );
           })}
           <Text style={s.small}>
-            Amounts use your source currency. This summary covers the imported dates.
+            مبالغ به ارز مبدأ شماست. این خلاصه بازه‌ی تاریخ‌های واردشده را پوشش می‌دهد.
           </Text>
           {goalSaved ? (
-            <Text style={s.text}>Your savings goal is saved in Goals.</Text>
+            <Text style={s.text}>هدف پس‌انداز شما در «هدف‌ها» ذخیره شد.</Text>
           ) : (
             <View style={{ gap: 10 }}>
               <Field
-                label="Turn this into a savings goal"
+                label="این را به هدف پس‌انداز تبدیل کنید"
                 value={goalTitle}
                 onChangeText={setGoalTitle}
-                placeholder="What would you like to save for?"
+                placeholder="برای چه چیزی می‌خواهید پس‌انداز کنید؟"
               />
               <ErrorNotice error={goalError} />
               <Button
@@ -842,12 +968,12 @@ function FinanceArtifact({ artifact }: { artifact: AgentArtifact }) {
                 disabled={!goalTitle.trim()}
                 onPress={() => void saveGoal()}
               >
-                Create savings goal
+                ساخت هدف پس‌انداز
               </Button>
             </View>
           )}
           <Button small onPress={() => setExpanded(!expanded)}>
-            {expanded ? "Hide transactions" : "View transactions"}
+            {expanded ? "پنهان کردن تراکنش‌ها" : "مشاهده تراکنش‌ها"}
           </Button>
           {expanded &&
             transactions.slice(0, 100).map((transaction) => {
@@ -857,7 +983,7 @@ function FinanceArtifact({ artifact }: { artifact: AgentArtifact }) {
                   <View style={{ flex: 1 }}>
                     <Text style={s.text}>{String(row.description)}</Text>
                     <Text style={s.small}>
-                      {String(row.date)} · {String(row.category)}
+                      {day(row.date)} · {String(row.category)}
                     </Text>
                   </View>
                   <Text style={s.text}>{amount(row.amount)}</Text>
@@ -866,7 +992,7 @@ function FinanceArtifact({ artifact }: { artifact: AgentArtifact }) {
             })}
           {expanded && transactions.length > 100 && (
             <Text style={s.small}>
-              Showing the first 100 transactions. The totals include every row.
+              {faNumber(100)} تراکنش نخست نمایش داده شده است. جمع‌ها همه‌ی ردیف‌ها را شامل می‌شوند.
             </Text>
           )}
         </View>
@@ -890,7 +1016,12 @@ export function DelegateSheet() {
       const task = await delegate({
         prompt: prompt.trim(),
         kind,
-        input: kind === "finance" ? { csv } : kind === "document" ? { messageId } : {},
+        input:
+          kind === "finance"
+            ? { csv: toLatinDigits(csv) }
+            : kind === "document"
+              ? { messageId }
+              : {},
       });
       open({ type: "task", taskId: task.id });
     } catch (e) {
@@ -901,33 +1032,33 @@ export function DelegateSheet() {
   }
   return (
     <Sheet
-      title="Hand over an outcome"
-      subtitle="OpenMuse saves a plan and keeps working on the server."
+      title="سپردن یک کار"
+      subtitle="OpenMuse برنامه‌ای ذخیره می‌کند و روی سرور به کار ادامه می‌دهد."
       onClose={close}
     >
       <View style={[s.row, { flexWrap: "wrap", gap: 8, marginBottom: 20 }]}>
         {(["plan", "document", "finance", "agent"] as const).map((item) => (
           <Button small primary={kind === item} key={item} onPress={() => setKind(item)}>
-            {item === "agent" ? "General task" : statusLabel(item)}
+            {statusLabel(item)}
           </Button>
         ))}
       </View>
       <Field
-        label="What would you like done?"
+        label="چه کاری می‌خواهید انجام شود؟"
         value={prompt}
         onChangeText={setPrompt}
         multiline
         placeholder={
           kind === "document"
-            ? "Fill the attached form and prepare a reply for my review"
+            ? "فرم پیوست را پر کنید و پاسخی برای بازبینی من آماده کنید"
             : kind === "finance"
-              ? "Summarize my spending and suggest a savings plan"
-              : "Make a practical plan for my week"
+              ? "هزینه‌هایم را خلاصه کنید و یک برنامه‌ی پس‌انداز پیشنهاد دهید"
+              : "یک برنامه‌ی عملی برای هفته‌ام بچینید"
         }
       />
       {kind === "document" && (
         <View style={{ gap: 8, marginBottom: 18 }}>
-          <Text style={s.heading}>Choose the email with the PDF</Text>
+          <Text style={s.heading}>ایمیل دارای PDF را انتخاب کنید</Text>
           {workspace.mail
             .filter((mail) => mail.attachments.length)
             .map((mail) => (
@@ -940,7 +1071,8 @@ export function DelegateSheet() {
             ))}
           {!workspace.mail.some((mail) => mail.attachments.length) && (
             <Text style={s.muted}>
-              Connect mail in Apps and select a message with a PDF attachment.
+              ایمیل‌های دارای پیوست PDF اینجا نمایش داده می‌شوند. هنوز ایمیلی با PDF ندارید؛ در
+              «برنامه‌ها» ایمیل را وصل کنید.
             </Text>
           )}
         </View>
@@ -948,11 +1080,13 @@ export function DelegateSheet() {
       {kind === "finance" && (
         <>
           <Field
-            label="Transaction CSV"
+            label="CSV تراکنش‌ها"
             value={csv}
             onChangeText={setCsv}
             multiline
             autoCapitalize="none"
+            autoCorrect={false}
+            style={{ writingDirection: "ltr" }}
             placeholder={"date,description,amount,category\n2026-09-01,Groceries,54.20,Food"}
           />
           {workspace.mode === "sample" && (
@@ -963,19 +1097,19 @@ export function DelegateSheet() {
                 )
               }
             >
-              Try example transactions
+              امتحان با تراکنش‌های نمونه
             </Button>
           )}
           <Text style={[s.small, { marginVertical: 12 }]}>
-            Positive amounts are expenses; negative amounts are income. Imported data only. No bank
-            connection is implied.
+            مبالغ مثبت هزینه و مبالغ منفی درآمد هستند. فقط داده‌های واردشده استفاده می‌شود و هیچ
+            اتصالی به بانک برقرار نمی‌شود.
           </Text>
         </>
       )}
       {kind === "agent" && !workspace.runtime.configured && (
         <Text style={[s.muted, { marginBottom: 16 }]}>
-          General tasks and plans require a configured model. Document jobs, page watches and
-          spending summaries have guided workflows.
+          کارهای عمومی و برنامه‌ها به یک مدل پیکربندی‌شده نیاز دارند. کارهای اسناد، پیگیری صفحه‌ها و
+          خلاصه‌ی هزینه‌ها روند هدایت‌شده دارند.
         </Text>
       )}
       <ErrorNotice error={error} />
@@ -989,7 +1123,7 @@ export function DelegateSheet() {
         }
         onPress={() => void submit()}
       >
-        Delegate task
+        سپردن کار
       </Button>
     </Sheet>
   );
@@ -1014,9 +1148,9 @@ export function IdeasScreen() {
     <View style={{ gap: 20 }}>
       <AgentStatus />
       <View style={s.between}>
-        <Text style={s.small}>Inspired by your connected apps</Text>
+        <Text style={s.small}>برگرفته از برنامه‌های متصل شما</Text>
         <Button small icon={RefreshCw} busy={busy} onPress={() => void refreshIdeas()}>
-          Find ideas
+          یافتن ایده
         </Button>
       </View>
       <ErrorNotice error={error} />
@@ -1026,8 +1160,8 @@ export function IdeasScreen() {
       {!ideas.length && (
         <Empty
           icon={Lightbulb}
-          title="Room for a good idea"
-          detail="Find ideas from the sources you have granted access to. Each suggestion includes its evidence."
+          title="هنوز ایده‌ای پیدا نشده است"
+          detail="ایده‌هایی که از برنامه‌های متصل شما به دست می‌آیند، همراه با شواهدشان اینجا نمایش داده می‌شوند. برای شروع «یافتن ایده» را بزنید."
         />
       )}
       {(data?.ideas || [])
@@ -1035,7 +1169,7 @@ export function IdeasScreen() {
         .map((idea) => (
           <Card key={idea.id} style={{ gap: 7 }}>
             <Text style={s.heading}>{idea.title}</Text>
-            <Chip tint={colors.green}>Started</Chip>
+            <Chip tint={colors.green}>آغازشده</Chip>
             {idea.taskId && <TaskLink taskId={idea.taskId} />}
           </Card>
         ))}
@@ -1047,13 +1181,13 @@ function TaskLink({ taskId, onOpen }: { taskId: string; onOpen?: () => void }) {
   return (
     <Button
       small
-      icon={ArrowRight}
+      icon={ArrowLeft}
       onPress={() => {
         onOpen?.();
         open({ type: "task", taskId });
       }}
     >
-      View task
+      مشاهده کار
     </Button>
   );
 }
@@ -1081,7 +1215,7 @@ function IdeaCard({ idea }: { idea: Idea }) {
     <View style={{ paddingVertical: 18, borderBottomWidth: 1, borderBottomColor: colors.line }}>
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel={`View idea: ${idea.title}`}
+        accessibilityLabel={`مشاهده ایده: ${idea.title}`}
         accessibilityState={{ expanded }}
         onPress={() => setExpanded(!expanded)}
         style={{ flexDirection: "row", gap: 14 }}
@@ -1103,11 +1237,11 @@ function IdeaCard({ idea }: { idea: Idea }) {
         </View>
       </Pressable>
       {expanded && (
-        <View style={{ gap: 15, marginTop: 18, paddingLeft: 48 }}>
+        <View style={{ gap: 15, marginTop: 18, paddingStart: 48 }}>
           <EvidenceList items={idea.evidence} />
           {editing && (
             <Field
-              label="What should OpenMuse do?"
+              label="OpenMuse چه کاری انجام دهد؟"
               value={prompt}
               onChangeText={setPrompt}
               multiline
@@ -1121,13 +1255,13 @@ function IdeaCard({ idea }: { idea: Idea }) {
               disabled={!prompt.trim()}
               onPress={() => void act("accept")}
             >
-              Start this
+              شروع کار
             </Button>
             <Button disabled={busy} onPress={() => setEditing(!editing)}>
-              {editing ? "Keep edits" : "Edit"}
+              {editing ? "تمام" : "ویرایش"}
             </Button>
             <Button disabled={busy} onPress={() => void act("dismiss")}>
-              Dismiss
+              کنار گذاشتن
             </Button>
           </View>
         </View>
@@ -1160,17 +1294,17 @@ export function GoalsScreen() {
                 backgroundColor: "#24A46B",
               }}
             />
-            <Text style={[s.heading, { color: "#189A58" }]}>Tracking</Text>
+            <Text style={[s.heading, { color: "#189A58" }]}>پیگیری‌ها</Text>
           </View>
           <Button small icon={Plus} onPress={() => setAdding("Tracking")}>
-            Track
+            افزودن پیگیری
           </Button>
         </View>
         {(showAll ? monitors : monitors.slice(0, 3)).map((item) => (
           <Pressable
             key={item.id}
             accessibilityRole="button"
-            accessibilityLabel={`Open tracking: ${item.title}`}
+            accessibilityLabel={`باز کردن پیگیری: ${item.title}`}
             onPress={() => setSelectedMonitor(item.id)}
             style={[s.row, { gap: 12, paddingVertical: 13 }]}
           >
@@ -1179,21 +1313,22 @@ export function GoalsScreen() {
               <Text style={s.text}>{item.title}</Text>
               <Text numberOfLines={1} style={s.muted}>
                 {item.status === "active"
-                  ? `Checking every ${item.intervalMinutes} minutes`
+                  ? `بررسی هر ${faNumber(item.intervalMinutes)} دقیقه`
                   : statusLabel(item.status)}
               </Text>
             </View>
-            <ChevronRight size={18} color="#A3A6A8" />
+            <ChevronLeft size={18} color="#A3A6A8" />
           </Pressable>
         ))}
         {!monitors.length && (
           <Text style={[s.muted, { paddingVertical: 10 }]}>
-            Ticket prices, a reservation, a page you’re watching.
+            هنوز پیگیری‌ای ندارید. قیمت بلیت، یک رزرو یا هر صفحه‌ای را که می‌خواهید زیر نظر بگیرید با
+            «افزودن پیگیری» اضافه کنید.
           </Text>
         )}
         {monitors.length > 3 && (
           <Button small onPress={() => setShowAll(!showAll)}>
-            {showAll ? "Show less" : `Show ${monitors.length - 3} more`}
+            {showAll ? "نمایش کمتر" : `نمایش ${faNumber(monitors.length - 3)} مورد دیگر`}
           </Button>
         )}
       </View>
@@ -1210,13 +1345,13 @@ export function GoalsScreen() {
               backgroundColor: "#3D9BDE",
             }}
           />
-          <Text style={[s.heading, { color: colors.blueDark }]}>Goals</Text>
+          <Text style={[s.heading, { color: colors.blueDark }]}>هدف‌ها</Text>
         </View>
         {data?.goals.map((item) => (
           <Pressable
             key={item.id}
             accessibilityRole="button"
-            accessibilityLabel={`Open goal: ${item.title}`}
+            accessibilityLabel={`باز کردن هدف: ${item.title}`}
             onPress={() => setSelectedGoal(item.id)}
             style={[s.row, { gap: 12, paddingVertical: 13 }]}
           >
@@ -1231,38 +1366,39 @@ export function GoalsScreen() {
                 {item.description || statusLabel(item.status)}
               </Text>
             </View>
-            <ChevronRight size={18} color="#A3A6A8" />
+            <ChevronLeft size={18} color="#A3A6A8" />
           </Pressable>
         ))}
         {!data?.goals.length && (
           <Text style={[s.muted, { paddingVertical: 10 }]}>
-            Big plans start with one small step.
+            هدف‌های شما اینجا نمایش داده می‌شوند. برای شروع، از بخش «ساخت هدف» یک موضوع را انتخاب
+            کنید.
           </Text>
         )}
       </View>
       <View style={{ height: 1, backgroundColor: colors.line }} />
-      <Text style={s.heading}>Create a goal</Text>
+      <Text style={s.heading}>ساخت هدف</Text>
       {[
-        { name: "Health", icon: Heart },
-        { name: "Relationships", icon: Users },
-        { name: "Finances", icon: CircleDollarSign },
-        { name: "Something else", icon: Target },
+        { name: "Health", label: "سلامت", icon: Heart },
+        { name: "Relationships", label: "روابط", icon: Users },
+        { name: "Finances", label: "امور مالی", icon: CircleDollarSign },
+        { name: "Something else", label: "موضوعی دیگر", icon: Target },
       ].map((item) => (
         <Pressable
           key={item.name}
           accessibilityRole="button"
-          accessibilityLabel={`Create ${item.name.toLowerCase()} goal`}
+          accessibilityLabel={`ساخت هدف ${item.label}`}
           onPress={() => setAdding(item.name)}
           style={[s.row, { gap: 12, minHeight: 38 }]}
         >
           <item.icon size={23} color="#989C9F" />
-          <Text style={[s.text, { flex: 1, color: "#666A6D" }]}>{item.name}</Text>
+          <Text style={[s.text, { flex: 1, color: "#666A6D" }]}>{item.label}</Text>
           <Plus size={18} color="#989C9F" />
         </Pressable>
       ))}
       {adding && (
         <Sheet
-          title={adding === "Tracking" ? "Track something" : "Create a goal"}
+          title={adding === "Tracking" ? "پیگیری تازه" : "ساخت هدف"}
           onClose={() => setAdding(undefined)}
         >
           {adding === "Tracking" ? (
@@ -1315,26 +1451,26 @@ function GoalForm({ onDone, category }: { onDone: () => void; category?: string 
   return (
     <Card>
       <Field
-        label="Your goal"
+        label="هدف شما"
         value={title}
         onChangeText={setTitle}
-        placeholder="Build a three-month emergency fund"
+        placeholder="ساختن اندوخته‌ی اضطراری سه‌ماهه"
       />
       <Field
-        label="What does success look like?"
+        label="موفقیت چه شکلی است؟"
         value={description}
         onChangeText={setDescription}
         multiline
       />
       <Field
-        label="Milestones (one per line)"
+        label="نقاط عطف (هر کدام در یک خط)"
         value={milestones}
         onChangeText={setMilestones}
         multiline
       />
       <ErrorNotice error={error} />
       <Button primary disabled={!title.trim()} busy={busy} onPress={() => void save()}>
-        Create goal
+        ساخت هدف
       </Button>
     </Card>
   );
@@ -1361,8 +1497,8 @@ function GoalCard({ goal, onOpenTask }: { goal: Goal; onOpenTask?: () => void })
     setError("");
     try {
       const task = await delegate({
-        title: `Plan: ${goal.title}`,
-        prompt: `Create a practical plan for this goal: ${goal.title}. ${goal.description}`,
+        title: `برنامه: ${goal.title}`,
+        prompt: `یک برنامه‌ی عملی برای این هدف بسازید: ${goal.title}. ${goal.description}`,
         kind: "plan",
         goalId: goal.id,
         input: {},
@@ -1385,7 +1521,7 @@ function GoalCard({ goal, onOpenTask }: { goal: Goal; onOpenTask?: () => void })
       </View>
       <Text style={s.muted}>{goal.description}</Text>
       <Text style={s.small}>
-        {done} of {goal.milestones.length} milestones
+        {faNumber(done)} از {faNumber(goal.milestones.length)} نقطه‌ی عطف
       </Text>
       {goal.milestones.map((milestone) => (
         <CheckRow
@@ -1409,15 +1545,15 @@ function GoalCard({ goal, onOpenTask }: { goal: Goal; onOpenTask?: () => void })
           busy={busy}
           onPress={() => void update({ status: goal.status === "active" ? "paused" : "active" })}
         >
-          {goal.status === "active" ? "Pause" : "Resume"}
+          {goal.status === "active" ? "توقف" : "ادامه"}
         </Button>
         {goal.status !== "completed" && (
           <Button small busy={busy} onPress={() => void update({ status: "completed" })}>
-            Complete goal
+            تکمیل هدف
           </Button>
         )}
         <Button small primary busy={busy} onPress={() => void plan()}>
-          Plan next steps
+          برنامه‌ریزی گام‌های بعدی
         </Button>
       </View>
       {data?.tasks
@@ -1435,7 +1571,7 @@ function MonitorForm({ onDone }: { onDone: () => void }) {
   const [url, setUrl] = useState("");
   const [condition, setCondition] = useState<Monitor["condition"]>("change");
   const [value, setValue] = useState("");
-  const [interval, setInterval] = useState("15");
+  const [interval, setInterval] = useState(faNumber(15));
   const [sample, setSample] = useState(false);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -1443,16 +1579,25 @@ function MonitorForm({ onDone }: { onDone: () => void }) {
     setBusy(true);
     setError("");
     try {
-      const minutes = Number(interval);
+      const minutes = typedNumber(interval);
       if (!Number.isInteger(minutes) || minutes < 1 || minutes > 10080)
-        throw new Error("Use a check interval from 1 to 10080 minutes.");
+        throw new Error(
+          `بازه‌ی بررسی پذیرفته نشد. عددی بین ${faNumber(1)} تا ${faNumber(10080)} دقیقه وارد کنید.`,
+        );
+      let target = value;
+      if (condition === "price_below") {
+        const price = typedNumber(value);
+        if (!Number.isFinite(price) || price <= 0)
+          throw new Error("قیمت هدف پذیرفته نشد. عددی بزرگ‌تر از صفر وارد کنید.");
+        target = String(price);
+      }
       if (!sample && !/^https?:\/\//i.test(url.trim()))
-        throw new Error("Enter an http or https address for a public page.");
+        throw new Error("نشانی صفحه پذیرفته نشد. نشانی کامل با http یا https وارد کنید.");
       await mutate("/monitors", {
         title: title.trim(),
         url: sample ? "sample://availability" : url.trim(),
         condition,
-        value,
+        value: target,
         intervalMinutes: minutes,
       });
       onDone();
@@ -1465,56 +1610,60 @@ function MonitorForm({ onDone }: { onDone: () => void }) {
   return (
     <Card>
       <Field
-        label="What are you watching?"
+        label="چه چیزی را زیر نظر دارید؟"
         value={title}
         onChangeText={setTitle}
-        placeholder="A table at my favorite restaurant"
+        placeholder="یک میز در رستوران محبوبم"
       />
       {workspace.mode === "sample" && (
         <CheckRow
           checked={sample}
-          label="Try the built-in availability page"
+          label="امتحان با صفحه‌ی موجودی داخلی"
           onPress={() => setSample(!sample)}
         />
       )}
       {!sample && (
         <Field
-          label="Public page URL"
+          label="نشانی صفحه‌ی عمومی"
           value={url}
           onChangeText={setUrl}
           autoCapitalize="none"
+          autoCorrect={false}
+          keyboardType="url"
+          style={{ writingDirection: "ltr" }}
           placeholder="https://example.com/product"
         />
       )}
-      <Text style={[s.small, { marginBottom: 10 }]}>Notify me when</Text>
+      <Text style={[s.small, { marginBottom: 10 }]}>وقتی خبرتان می‌کنیم که</Text>
       <View style={[s.row, { gap: 7, flexWrap: "wrap", marginBottom: 16 }]}>
         {(["change", "contains", "price_below"] as const).map((item) => (
           <Button small primary={condition === item} key={item} onPress={() => setCondition(item)}>
             {item === "change"
-              ? "Page changes"
+              ? "صفحه تغییر کند"
               : item === "contains"
-                ? "Text appears"
-                : "Price drops below"}
+                ? "متنی ظاهر شود"
+                : "قیمت پایین‌تر از"}
           </Button>
         ))}
       </View>
       {condition !== "change" && (
         <Field
-          label={condition === "contains" ? "Text to look for" : "Target price"}
+          label={condition === "contains" ? "متن مورد جست‌وجو" : "قیمت هدف (به واحد پول همان صفحه)"}
           value={value}
           onChangeText={setValue}
+          keyboardType={condition === "price_below" ? "decimal-pad" : "default"}
         />
       )}
       <Field
-        label="Check every (minutes)"
+        label="بررسی هر (دقیقه)"
         value={interval}
         onChangeText={setInterval}
         keyboardType="number-pad"
       />
       <Text style={[s.small, { marginBottom: 14 }]}>
         {sample
-          ? "Changes to this built-in page stay in your workspace."
-          : "OpenMuse checks this public page on the server and saves meaningful changes in Notifications."}
+          ? "تغییرات این صفحه‌ی داخلی در فضای کاری شما می‌ماند."
+          : "OpenMuse این صفحه‌ی عمومی را روی سرور بررسی می‌کند و تغییرات مهم را در «اعلان‌ها» ذخیره می‌کند."}
       </Text>
       <ErrorNotice error={error} />
       <Button
@@ -1525,7 +1674,7 @@ function MonitorForm({ onDone }: { onDone: () => void }) {
         }
         onPress={() => void save()}
       >
-        Start tracking
+        شروع پیگیری
       </Button>
     </Card>
   );
@@ -1550,7 +1699,7 @@ function MonitorCard({ monitor, onOpenTask }: { monitor: Monitor; onOpenTask?: (
     setError("");
     try {
       await mutate("/sample-page", {
-        text: `Availability: a table is available. Updated ${new Date().toISOString()}`,
+        text: `موجودی: یک میز خالی است. به‌روزرسانی ${faDateTime(new Date())}`,
       });
       await mutate(`/monitors/${monitor.id}/control`, { action: "check" });
     } catch (e) {
@@ -1565,22 +1714,30 @@ function MonitorCard({ monitor, onOpenTask }: { monitor: Monitor; onOpenTask?: (
         <Text style={[s.heading, { flex: 1 }]}>{monitor.title}</Text>
         <Chip tint={colors.sky}>{statusLabel(monitor.status)}</Chip>
       </View>
-      <Text selectable style={s.small}>
-        {monitor.url.startsWith("sample:") ? "Built-in availability page" : monitor.url}
-      </Text>
+      {monitor.url.startsWith("sample:") ? (
+        <Text style={s.small}>صفحه‌ی موجودی داخلی</Text>
+      ) : (
+        <Text selectable style={[s.small, { writingDirection: "ltr" }]}>
+          {monitor.url}
+        </Text>
+      )}
       <Text style={s.text}>
         {monitor.condition === "change"
-          ? "Watch for a page change"
+          ? "زیر نظر گرفتن تغییر صفحه"
           : monitor.condition === "contains"
-            ? `Watch for “${monitor.value}”`
-            : `Price below ${monitor.value}`}
+            ? `زیر نظر گرفتن «${monitor.value}»`
+            : `قیمت کمتر از ${
+                Number.isFinite(Number(monitor.value))
+                  ? faNumber(Number(monitor.value))
+                  : faDigits(monitor.value ?? "")
+              }`}
       </Text>
       <Text style={s.small}>
-        Every {monitor.intervalMinutes} min · {monitor.checks} checks
+        هر {faNumber(monitor.intervalMinutes)} دقیقه · {faNumber(monitor.checks)} بررسی
       </Text>
       <Text style={s.small}>
-        Last check: {stamp(monitor.lastCheckedAt)}
-        {monitor.status === "active" ? `\nNext check: ${stamp(monitor.nextCheckAt)}` : ""}
+        آخرین بررسی: {stamp(monitor.lastCheckedAt)}
+        {monitor.status === "active" ? `\nبررسی بعدی: ${stamp(monitor.nextCheckAt, "به‌زودی")}` : ""}
       </Text>
       {monitor.lastValue && (
         <Text selectable numberOfLines={5} style={s.muted}>
@@ -1595,19 +1752,19 @@ function MonitorCard({ monitor, onOpenTask }: { monitor: Monitor; onOpenTask?: (
             busy={busy}
             onPress={() => void act(monitor.status === "active" ? "pause" : "resume")}
           >
-            {monitor.status === "active" ? "Pause" : "Resume"}
+            {monitor.status === "active" ? "توقف" : "ادامه"}
           </Button>
           <Button small busy={busy} onPress={() => void act("check")}>
-            Check now
+            بررسی اکنون
           </Button>
           <Button small danger busy={busy} onPress={() => void act("stop")}>
-            Stop tracking
+            پایان پیگیری
           </Button>
         </View>
       )}
       {monitor.url.startsWith("sample:") && monitor.status !== "stopped" && (
         <Button small busy={busy} onPress={() => void changeSample()}>
-          Change availability
+          تغییر موجودی
         </Button>
       )}
       <TaskLink taskId={monitor.taskId} onOpen={onOpenTask} />
@@ -1627,11 +1784,7 @@ export function NotificationsSheet() {
     }
   }
   return (
-    <Sheet
-      title="Notifications"
-      subtitle="Results and decisions that need your attention."
-      onClose={close}
-    >
+    <Sheet title="اعلان‌ها" subtitle="نتایج و تصمیم‌هایی که به توجه شما نیاز دارند." onClose={close}>
       <View style={{ gap: 14 }}>
         <ErrorNotice error={error} />
         {data?.notifications.map((item) => (
@@ -1641,20 +1794,24 @@ export function NotificationsSheet() {
           >
             <View style={s.between}>
               <Text style={s.heading}>{item.title}</Text>
-              {!item.read && <Chip>New</Chip>}
+              {!item.read && <Chip>تازه</Chip>}
             </View>
             <Text style={s.muted}>{item.body}</Text>
             <Text style={s.small}>{stamp(item.createdAt)}</Text>
             <Button small onPress={() => void read(item.id, item.taskId)}>
-              {item.taskId ? "View task" : item.read ? "Read" : "Mark read"}
+              {item.taskId
+                ? "مشاهده کار"
+                : item.read
+                  ? "خوانده‌شده"
+                  : "علامت‌گذاری به‌عنوان خوانده‌شده"}
             </Button>
           </Card>
         ))}
         {!data?.notifications.length && (
           <Empty
             icon={Bell}
-            title="You're all caught up"
-            detail="Results, meaningful changes and requests for your input will appear here."
+            title="اعلان تازه‌ای ندارید"
+            detail="نتیجه‌ی کارها، تغییرات مهم پیگیری‌ها و پرسش‌هایی که به پاسخ شما نیاز دارند اینجا نمایش داده می‌شوند. برای شروع، در گفت‌وگو کاری بسپارید."
           />
         )}
       </View>
@@ -1701,26 +1858,26 @@ export function AppsScreen() {
   const shortcuts = [
     {
       section: "mail" as const,
-      title: "Mail",
-      detail: "Read messages and prepare replies",
+      title: "ایمیل",
+      detail: "خواندن پیام‌ها و آماده کردن پاسخ",
       icon: Mail,
     },
     {
       section: "calendar" as const,
-      title: "Calendar",
-      detail: "Events and reviewed invitations",
+      title: "تقویم",
+      detail: "رویدادها و دعوت‌نامه‌های بازبینی‌شده",
       icon: CalendarDays,
     },
     {
       section: "browser" as const,
-      title: "Agent computer",
-      detail: "Persistent browser sessions",
+      title: "رایانه‌ی دستیار",
+      detail: "نشست‌های ماندگار مرورگر",
       icon: Globe2,
     },
     {
       section: "files" as const,
-      title: "Files",
-      detail: "PDFs, forms and filled copies",
+      title: "فایل‌ها",
+      detail: "PDFها، فرم‌ها و نسخه‌های پرشده",
       icon: FileText,
     },
   ];
@@ -1728,13 +1885,13 @@ export function AppsScreen() {
     <View style={{ gap: 22 }}>
       <AgentStatus />
       <Field
-        label="Search apps"
+        label="جست‌وجوی برنامه‌ها"
         value={query}
         onChangeText={setQuery}
-        placeholder="Search connectors"
+        placeholder="جست‌وجوی اتصال‌دهنده‌ها"
       />
       <ConnectionsScreen query={query} />
-      <Text style={s.heading}>On your computer</Text>
+      <Text style={s.heading}>روی رایانه‌ی شما</Text>
       <Card style={{ paddingVertical: 3, backgroundColor: "#F4F5F6" }}>
         {shortcuts
           .filter((item) =>
@@ -1753,18 +1910,18 @@ export function AppsScreen() {
           ))}
       </Card>
       <Button onPress={() => setSettings(!settings)}>
-        {settings ? "Close agent settings" : "Personality & memory"}
+        {settings ? "بستن تنظیمات دستیار" : "تنظیم شخصیت و حافظه"}
       </Button>
       {settings && (
         <>
           <Card style={{ gap: 10 }}>
-            <SectionHeading title="Your agent" />
+            <SectionHeading title="دستیار شما" />
             <View style={[s.row, { gap: 16, justifyContent: "center", marginBottom: 12 }]}>
               {(["sky", "sand", "lilac"] as const).map((item) => (
                 <Pressable
                   key={item}
                   accessibilityRole="radio"
-                  accessibilityLabel={`${statusLabel(item)} avatar`}
+                  accessibilityLabel={`آواتار ${statusLabel(item)}`}
                   accessibilityState={{ checked: avatar === item }}
                   onPress={() => setAvatar(item)}
                   style={{
@@ -1777,7 +1934,7 @@ export function AppsScreen() {
                 </Pressable>
               ))}
             </View>
-            <Field label="Name" value={name} onChangeText={setName} />
+            <Field label="نام" value={name} onChangeText={setName} />
             <View style={[s.row, { gap: 8 }]}>
               {(["warm", "concise", "thoughtful"] as const).map((item) => (
                 <Button key={item} small primary={tone === item} onPress={() => setTone(item)}>
@@ -1786,13 +1943,12 @@ export function AppsScreen() {
               ))}
             </View>
             <CheckRow
-              label="Show background updates in chat"
+              label="نمایش به‌روزرسانی‌های پس‌زمینه در گفت‌وگو"
               checked={showChatUpdates}
               onPress={() => setShowChatUpdates(!showChatUpdates)}
             />
             <Text style={s.small}>
-              Activity and notifications always keep the full record, including requests for
-              approval.
+              فعالیت و اعلان‌ها همیشه سابقه‌ی کامل را نگه می‌دارند، از جمله درخواست‌های تأیید.
             </Text>
             <Button
               busy={busy}
@@ -1801,29 +1957,38 @@ export function AppsScreen() {
                 void save("/identity", { name: name.trim(), tone, avatar, showChatUpdates })
               }
             >
-              Save preferences
+              ذخیره‌ی ترجیحات
             </Button>
           </Card>
           <Card style={{ gap: 12 }}>
-            <SectionHeading title="Memory" />
-            <Text style={s.muted}>Context you can inspect, correct or forget.</Text>
+            <SectionHeading title="حافظه" />
+            <Text style={s.muted}>زمینه‌ای که می‌توانید بررسی، اصلاح یا فراموش کنید.</Text>
             {data?.memories.map((item) => (
               <MemoryRow key={item.id} memory={item} />
             ))}
+            {!data?.memories.length && (
+              <Text style={s.small}>
+                هنوز چیزی در حافظه نیست. نکته‌ای درباره‌ی خودتان بنویسید تا دستیار آن را به خاطر
+                بسپارد.
+              </Text>
+            )}
             <Field
-              label="Remember something about me"
+              label="دستیار چه چیزی درباره‌ی شما به خاطر بسپارد؟"
               value={memory}
               onChangeText={setMemory}
-              placeholder="I prefer morning meetings"
+              placeholder="جلسه‌های صبح را ترجیح می‌دهم"
             />
             <Button
               busy={busy}
               disabled={!memory.trim()}
               onPress={() =>
-                void save("/memories", { text: memory.trim(), source: "User added in Apps" })
+                void save("/memories", {
+                  text: memory.trim(),
+                  source: "افزوده‌شده توسط شما در برنامه‌ها",
+                })
               }
             >
-              Remember
+              ذخیره در حافظه
             </Button>
           </Card>
         </>
@@ -1855,7 +2020,7 @@ function MemoryRow({ memory }: { memory: AgentMemory }) {
       style={{ gap: 8, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: colors.line }}
     >
       {editing ? (
-        <Field label="Memory" value={text} onChangeText={setText} />
+        <Field label="حافظه" value={text} onChangeText={setText} />
       ) : (
         <Text style={s.text}>{memory.text}</Text>
       )}
@@ -1865,15 +2030,15 @@ function MemoryRow({ memory }: { memory: AgentMemory }) {
       <View style={[s.row, { gap: 8 }]}>
         {editing ? (
           <Button small busy={busy} disabled={!text.trim()} onPress={() => void act(false)}>
-            Save correction
+            ذخیره‌ی اصلاح
           </Button>
         ) : (
           <Button small onPress={() => setEditing(true)}>
-            Edit
+            ویرایش
           </Button>
         )}
         <Button small danger busy={busy} onPress={() => void act(true)}>
-          Forget
+          حذف از حافظه
         </Button>
       </View>
       <ErrorNotice error={error} />

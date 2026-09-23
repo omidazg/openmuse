@@ -13,9 +13,11 @@ import type { BrowserSession } from "../../../packages/domain/src";
 import { browserAddress } from "./browser-address";
 import { useComputerDraft } from "./computer-drafts";
 import { LinuxWorkspace } from "./computer-workspace";
+import { faNumber, fw } from "./locale";
 import { Button, Card, colors, ErrorNotice, Field, LinkRow, Sheet, s } from "./ui";
 import { useWorkspace } from "./workspace";
 
+const tabLabels = { Browser: "مرورگر", Terminal: "ترمینال", Files: "فایل‌ها" } as const;
 export function ComputerEntry() {
   const { workspace, open } = useWorkspace();
   const available = workspace.connections.some(
@@ -25,7 +27,7 @@ export function ComputerEntry() {
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel="Agent computer — take control"
+      accessibilityLabel="باز کردن رایانهٔ دستیار"
       onPress={() => open({ type: "computer" })}
       style={[
         s.row,
@@ -40,9 +42,9 @@ export function ComputerEntry() {
       ]}
     >
       <Monitor size={13} color={colors.muted} />
-      <Text style={{ fontSize: 12, color: colors.muted }}>
-        Computer
-        {active ? " · take control" : available ? " · ready" : " · offline"}
+      <Text style={{ fontSize: 12, lineHeight: 18, color: colors.muted, ...fw("400") }}>
+        رایانه
+        {active ? " · در دست گرفتن کنترل" : available ? " · آماده" : " · آفلاین"}
       </Text>
       <View
         style={{
@@ -70,19 +72,19 @@ export function BrowserThreadCard({ browser }: { browser: BrowserSession }) {
           <Globe2 size={21} color={colors.blueDark} />
         </View>
         <View style={{ flex: 1 }}>
-          <Text style={[s.text, { fontWeight: "600" }]}>Browser</Text>
+          <Text style={[s.text, { ...fw("600") }]}>مرورگر</Text>
           <Text numberOfLines={1} style={s.small}>
             {browser.status === "closed"
-              ? "Session saved"
+              ? "نشست ذخیره شد"
               : browser.status === "error"
-                ? "Needs attention"
+                ? "نیاز به بررسی دارد"
                 : browser.title}
           </Text>
         </View>
       </View>
       {browser.previewUrl && browser.status === "active" && !failed ? (
         <Image
-          accessibilityLabel={`Browser preview: ${browser.title}`}
+          accessibilityLabel={`پیش‌نمایش مرورگر: ${browser.title}`}
           source={{ uri: browser.previewUrl }}
           style={{ width: "100%", aspectRatio: 1.6, borderRadius: 11, backgroundColor: "#FFF" }}
           resizeMode="contain"
@@ -99,17 +101,22 @@ export function BrowserThreadCard({ browser }: { browser: BrowserSession }) {
           }}
         >
           <Globe2 size={30} color={colors.muted} />
-          <Text numberOfLines={2} style={[s.muted, { textAlign: "center" }]}>
-            {failed ? "Preview unavailable. Open the browser to reconnect." : browser.url}
+          <Text
+            numberOfLines={2}
+            style={[s.muted, { textAlign: "center" }, !failed && { writingDirection: "ltr" }]}
+          >
+            {failed
+              ? "پیش‌نمایش در دسترس نیست. برای اتصال دوباره، مرورگر را باز کنید."
+              : browser.url}
           </Text>
         </View>
       )}
       <Button onPress={() => open({ type: "browser", browser })}>
         {browser.status === "closed"
-          ? "Reopen browser"
+          ? "باز کردن دوبارهٔ مرورگر"
           : browser.status === "error"
-            ? "Reconnect browser"
-            : "Take control"}
+            ? "اتصال دوبارهٔ مرورگر"
+            : "در دست گرفتن کنترل"}
       </Button>
     </Card>
   );
@@ -154,8 +161,8 @@ export function ComputerSheet() {
   }
   return (
     <Sheet
-      title="Agent computer"
-      subtitle="Your agent works here. Step in whenever you need."
+      title="رایانهٔ دستیار"
+      subtitle="دستیارتان اینجا کار می‌کند. هر وقت لازم بود، وارد عمل شوید."
       onClose={close}
     >
       <View style={{ gap: 20 }}>
@@ -165,11 +172,11 @@ export function ComputerSheet() {
           >
             <Monitor size={28} color={colors.blueDark} />
             <View style={{ flex: 1 }}>
-              <Text style={s.heading}>{available ? "Browser connected" : "Browser offline"}</Text>
+              <Text style={s.heading}>{available ? "مرورگر متصل است" : "مرورگر آفلاین است"}</Text>
               <Text style={s.muted}>
                 {available
-                  ? "Your agent’s browser and documents, in one place."
-                  : "Start the browser worker to connect this computer."}
+                  ? "مرورگر و اسناد دستیارتان، یک‌جا."
+                  : "برای اتصال این رایانه، سرویس مرورگر را راه‌اندازی کنید."}
               </Text>
             </View>
           </View>
@@ -182,7 +189,7 @@ export function ComputerSheet() {
               icon={item === "Browser" ? Globe2 : item === "Terminal" ? Terminal : FolderOpen}
               onPress={() => setTab(item)}
             >
-              {item}
+              {tabLabels[item]}
             </Button>
           ))}
         </View>
@@ -194,12 +201,13 @@ export function ComputerSheet() {
           <>
             <View>
               <Field
-                label="Website address"
+                label="نشانی وب‌سایت"
                 value={url}
                 onChangeText={setUrl}
                 placeholder="https://example.com"
                 autoCapitalize="none"
                 keyboardType="url"
+                style={{ writingDirection: "ltr", textAlign: "left" }}
                 onSubmitEditing={() => void create()}
               />
               <Button
@@ -209,7 +217,7 @@ export function ComputerSheet() {
                 disabled={!available || !url.trim()}
                 onPress={() => void create()}
               >
-                Open a browser session
+                باز کردن نشست مرورگر
               </Button>
             </View>
             {[...workspace.browsers]
@@ -219,25 +227,27 @@ export function ComputerSheet() {
               ))}
             {!workspace.browsers.length && (
               <Text style={s.muted}>
-                Open a page here or ask your agent to research something. Its browsing sessions will
-                appear here.
+                صفحه‌ای را اینجا باز کنید یا از دستیارتان بخواهید دربارهٔ چیزی جست‌وجو کند. نشست‌های
+                مرور او اینجا نمایش داده می‌شوند.
               </Text>
             )}
             <Text style={s.small}>
-              Browsing sessions keep their own logins and downloads. Open one to take over, then
-              return to your conversation.
+              هر نشست مرور، ورودها و دانلودهای خودش را نگه می‌دارد. یکی را باز کنید تا کنترل را در
+              دست بگیرید، سپس به گفت‌وگویتان برگردید.
             </Text>
           </>
         ) : tab === "Files" ? (
           <>
-            <Text style={s.heading}>Documents</Text>
-            <Text style={s.small}>PDFs saved from mail, browser downloads, and your uploads.</Text>
+            <Text style={s.heading}>اسناد</Text>
+            <Text style={s.small}>
+              فایل‌های PDF ذخیره‌شده از ایمیل، دانلودهای مرورگر و فایل‌هایی که بارگذاری کرده‌اید.
+            </Text>
             {workspace.files.map((file) => (
               <LinkRow
                 key={file.id}
                 icon={FileText}
                 title={file.name}
-                detail={`${file.pageCount} pages · PDF`}
+                detail={`${faNumber(file.pageCount)} صفحه · PDF`}
                 onPress={() => open({ type: "file", file })}
               />
             ))}
@@ -248,7 +258,7 @@ export function ComputerSheet() {
                 navigate("files");
               }}
             >
-              Import a document
+              افزودن سند
             </Button>
           </>
         ) : null}
@@ -258,10 +268,10 @@ export function ComputerSheet() {
           onPress={() =>
             void refresh()
               .then(() => setError(""))
-              .catch((e) => setError(String(e)))
+              .catch((e) => setError(e instanceof Error ? e.message : String(e)))
           }
         >
-          Refresh computer
+          تازه‌سازی رایانه
         </Button>
       </View>
     </Sheet>

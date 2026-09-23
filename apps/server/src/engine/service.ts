@@ -32,13 +32,30 @@ import { AppError } from "../errors.ts";
 import type { Files } from "../files.ts";
 import { backgroundFailure } from "../log.ts";
 import type { WorkspaceService } from "../workspace.ts";
-import { analyzeSpending } from "./finance.ts";
+import { analyzeSpending, faDate, faNumber } from "./finance.ts";
 import { executeModelTask } from "./model.ts";
 import { LostLeaseError, type TaskContext, TaskWorker } from "./worker.ts";
 
 const hash = (text: string) => createHash("sha256").update(text).digest("hex");
 const date = () => new Date().toISOString();
 const terminal = new Set(["succeeded", "failed", "cancelled"]);
+/** Persian display labels for task statuses; the stored status values stay in English. */
+const statusLabels: Record<AgentTask["status"], string> = {
+  queued: "در صف",
+  running: "در حال انجام",
+  scheduled: "زمان‌بندی‌شده",
+  paused: "متوقف‌شده",
+  waiting_input: "در انتظار اطلاعات شما",
+  waiting_approval: "در انتظار تأیید شما",
+  succeeded: "انجام‌شده",
+  failed: "ناموفق",
+  cancelled: "لغوشده",
+};
+const conditionLabels: Record<Monitor["condition"], string> = {
+  change: "تغییر",
+  contains: "وجود متن",
+  price_below: "قیمت کمتر از",
+};
 export class AgentService {
   readonly worker: TaskWorker;
   private maintenance?: ReturnType<typeof setInterval>;
@@ -89,8 +106,8 @@ export class AgentService {
             backgroundFailure("recover accepted idea", error);
             await this.notify(
               owner,
-              "Accepted idea needs attention",
-              "Open the idea again after making room for another task.",
+              "ایدهٔ پذیرفته‌شده نیاز به بررسی دارد",
+              "پس از باز کردن جا برای یک کار دیگر، دوباره ایده را باز کنید.",
               undefined,
               `idea-recovery:${value.id}`,
             );
@@ -103,8 +120,8 @@ export class AgentService {
           await this.refreshIdeas(owner).catch(async () => {
             await this.notify(
               owner,
-              "Source refresh needs attention",
-              "Reconnect the source or refresh Ideas to see the error.",
+              "به‌روزرسانی منبع نیاز به بررسی دارد",
+              "منبع را دوباره وصل کنید یا ایده‌ها را تازه کنید تا خطا را ببینید.",
               undefined,
               `source-error:${Math.floor(Date.now() / 3600000)}`,
             );
@@ -154,7 +171,7 @@ export class AgentService {
   }
   async getTask(owner: string, id: string) {
     const task = await this.db.get<AgentTask>(owner, "tasks", id);
-    if (!task) throw new AppError("Task not found", 404);
+    if (!task) throw new AppError("این کار پیدا نشد. فهرست کارها را تازه کنید.", 404);
     return task;
   }
   async detail(owner: string, id: string) {
@@ -180,7 +197,7 @@ export class AgentService {
   async createTask(owner: string, raw: unknown, idempotencyKey?: string, held = false) {
     const input = createTaskSchema.parse(raw);
     if (input.goalId && !(await this.db.get(owner, "goals", input.goalId)))
-      throw new AppError("Goal not found", 404);
+      throw new AppError("این هدف پیدا نشد. هدف دیگری انتخاب کنید.", 404);
     const id = idempotencyKey ? hash(`task:${idempotencyKey}`) : randomUUID();
     const existing = await this.db.get<AgentTask>(owner, "tasks", id);
     if (existing) return existing;
@@ -188,21 +205,24 @@ export class AgentService {
       (await this.db.list<AgentTask>(owner, "tasks")).filter((t) => !terminal.has(t.status))
         .length >= 100
     )
-      throw new AppError("Finish or cancel some tasks before adding more", 409);
+      throw new AppError(
+        "تعداد کارهای باز به حداکثر رسیده است. پیش از افزودن کار جدید، چند کار را تمام یا لغو کنید.",
+        409,
+      );
     const titles =
       input.kind === "document"
         ? [
-            "Find the source document",
-            "Fill a new copy",
-            "Prepare a reply",
-            "Wait for your decision",
-            "Record the outcome",
+            "پیدا کردن سند اصلی",
+            "پر کردن یک نسخهٔ جدید",
+            "آماده کردن پاسخ",
+            "انتظار برای تصمیم شما",
+            "ثبت نتیجه",
           ]
         : input.kind === "monitor"
-          ? ["Check the source", "Compare with the last observation", "Report a meaningful change"]
+          ? ["بررسی منبع", "مقایسه با آخرین مشاهده", "گزارش تغییر مهم"]
           : input.kind === "finance"
-            ? ["Validate transactions", "Calculate the summary", "Save your tracker"]
-            : ["Understand the outcome", "Plan the work", "Use connected tools", "Return a result"];
+            ? ["اعتبارسنجی تراکنش‌ها", "محاسبهٔ خلاصه", "ذخیرهٔ ردیاب شما"]
+            : ["درک نتیجهٔ مورد نظر", "برنامه‌ریزی کار", "استفاده از ابزارهای متصل", "ارائهٔ نتیجه"];
     const task: AgentTask = {
       id,
       title: input.title ?? input.prompt.slice(0, 90),
@@ -231,11 +251,11 @@ export class AgentService {
   async control(owner: string, id: string, action: "pause" | "resume" | "cancel" | "retry") {
     const task = await this.getTask(owner, id);
     if (action === "cancel" && task.status === "succeeded")
-      throw new AppError("This task is already complete", 409);
+      throw new AppError("این کار قبلاً انجام شده است و لغو نمی‌شود.", 409);
     if (action === "retry" && task.status !== "failed")
-      throw new AppError("Only failed tasks can be retried", 409);
+      throw new AppError("تلاش دوباره فقط برای کارهای ناموفق ممکن است.", 409);
     if (action === "resume" && task.status !== "paused")
-      throw new AppError("Only paused tasks can be resumed", 409);
+      throw new AppError("این کار متوقف نشده است. فقط کارهای متوقف‌شده ادامه پیدا می‌کنند.", 409);
     if (action === "pause" && (terminal.has(task.status) || task.status === "paused")) return task;
     const status =
       action === "cancel"
@@ -249,7 +269,7 @@ export class AgentService {
       const a = await this.db.get<ActionProposal>(owner, "actions", task.actionId);
       if (a && a.status !== "succeeded")
         throw new AppError(
-          "Check the reviewed action before retrying; its outcome may be uncertain. Start a new task when reconciled.",
+          "نتیجهٔ اقدام بررسی‌شده ممکن است نامشخص باشد. پیش از تلاش دوباره آن را بررسی کنید و پس از روشن شدن وضعیت، یک کار جدید شروع کنید.",
           409,
         );
     }
@@ -266,16 +286,17 @@ export class AgentService {
         updatedAt: date(),
         result:
           action === "cancel"
-            ? "Stopped by you."
+            ? "شما این کار را متوقف کردید."
             : action === "pause"
-              ? "Paused. Resume when you're ready."
+              ? "متوقف شد. هر وقت آماده بودید ادامه دهید."
               : "",
         ...(task.kind === "monitor" && action === "resume"
           ? { state: { ...task.state, failures: 0, notice: null } }
           : {}),
       },
     );
-    if (!updated) throw new AppError("Task changed; refresh and try again", 409);
+    if (!updated)
+      throw new AppError("کار تغییر کرده است؛ صفحه را تازه کنید و دوباره امتحان کنید", 409);
     this.worker.abort(id);
     if (task.kind === "monitor")
       await this.db.compareAndSwap(
@@ -298,8 +319,8 @@ export class AgentService {
       taskId: id,
       kind: "status",
       date: date(),
-      title: `Task ${status}`,
-      detail: "Changed by you",
+      title: `وضعیت کار: ${statusLabels[status]}`,
+      detail: "توسط شما تغییر کرد",
     });
     return updated;
   }
@@ -310,8 +331,7 @@ export class AgentService {
     fields?: Record<string, string | boolean>,
   ) {
     const task = await this.getTask(owner, id);
-    if (task.status !== "waiting_input")
-      throw new AppError("This task is not waiting for input", 409);
+    if (task.status !== "waiting_input") throw new AppError("این کار منتظر اطلاعات شما نیست", 409);
     const next = await this.db.compareAndSwap<AgentTask>(
       owner,
       "tasks",
@@ -325,7 +345,8 @@ export class AgentService {
         updatedAt: date(),
       },
     );
-    if (!next) throw new AppError("Task changed; refresh and try again", 409);
+    if (!next)
+      throw new AppError("کار تغییر کرده است؛ صفحه را تازه کنید و دوباره امتحان کنید", 409);
     return next;
   }
   async createGoal(owner: string, raw: unknown, id?: string) {
@@ -348,7 +369,7 @@ export class AgentService {
     patch: { status?: Goal["status"]; milestones?: Goal["milestones"] },
   ) {
     const goal = await this.db.get<Goal>(owner, "goals", id);
-    if (!goal) throw new AppError("Goal not found", 404);
+    if (!goal) throw new AppError("این هدف پیدا نشد. فهرست هدف‌ها را تازه کنید.", 404);
     const saved = await this.db.put(owner, "goals", { ...goal, ...patch });
     if (patch.status === "paused")
       for (const task of await this.db.list<AgentTask>(owner, "tasks"))
@@ -360,11 +381,17 @@ export class AgentService {
     const input = monitorInputSchema.parse(raw);
     const url = new URL(input.url);
     if (url.protocol === "sample:" && this.config.mode !== "sample")
-      throw new AppError("Sample sources are unavailable in live workspaces", 422);
+      throw new AppError(
+        "منابع نمونه در فضای کاری واقعی در دسترس نیستند. نشانی یک صفحهٔ عمومی را وارد کنید.",
+        422,
+      );
     if (!["https:", "http:", "sample:"].includes(url.protocol) || url.username || url.password)
-      throw new AppError("Use a public HTTP(S) page", 422);
+      throw new AppError(
+        "این نشانی پشتیبانی نمی‌شود. نشانی یک صفحهٔ عمومی HTTP یا HTTPS را وارد کنید.",
+        422,
+      );
     if (url.protocol === "sample:" && input.url !== "sample://availability")
-      throw new AppError("Unknown sample source", 422);
+      throw new AppError("این منبع نمونه شناخته‌شده نیست. منبع دیگری انتخاب کنید.", 422);
     const id = idempotencyKey ? hash(`monitor:${idempotencyKey}`) : randomUUID();
     const existing = await this.db.get<Monitor>(owner, "monitors", id);
     if (existing) {
@@ -376,7 +403,7 @@ export class AgentService {
       {
         kind: "monitor",
         title: input.title,
-        prompt: `Watch ${input.url} for ${input.condition}${input.value ? `: ${input.value}` : ""}`,
+        prompt: `پیگیری ${input.url} برای ${conditionLabels[input.condition]}${input.value ? `: ${input.value}` : ""}`,
         input: { monitorId: id },
       },
       `monitor:${id}`,
@@ -411,9 +438,9 @@ export class AgentService {
   }
   async controlMonitor(owner: string, id: string, action: "pause" | "resume" | "stop" | "check") {
     const monitor = await this.db.get<Monitor>(owner, "monitors", id);
-    if (!monitor) throw new AppError("Monitor not found", 404);
+    if (!monitor) throw new AppError("این پیگیری پیدا نشد. فهرست پیگیری‌ها را تازه کنید.", 404);
     if (monitor.status === "stopped" && action !== "stop")
-      throw new AppError("Create a new watch to restart this stopped monitor", 409);
+      throw new AppError("برای راه‌اندازی دوبارهٔ این پیگیریِ متوقف‌شده، یک پیگیری جدید بسازید", 409);
     const status = action === "pause" ? "paused" : action === "stop" ? "stopped" : "active";
     const saved = await this.db.put(owner, "monitors", { ...monitor, status, nextCheckAt: date() });
     const task = await this.getTask(owner, monitor.taskId);
@@ -467,16 +494,18 @@ export class AgentService {
         (m) =>
           !obsolete("document", m.id) &&
           m.attachments.length &&
-          /form|permission|complete|fill|sign/i.test(`${m.subject} ${m.body}`),
+          /form|permission|complete|fill|sign|فرم|اجازه|رضایت|تکمیل|پر کن|امضا/i.test(
+            `${m.subject} ${m.body}`,
+          ),
       )
       .slice(0, 5)) {
       const id = hash(`document:${mail.id}:${mail.body}`);
       const idea: Idea = {
         id,
-        title: `I can help with ${mail.subject}`,
-        reason: `${mail.sender} sent a document that may need your attention. I can prepare it and a reply for your review.`,
+        title: `می‌توانم در «${mail.subject}» کمکتان کنم`,
+        reason: `${mail.sender} سندی فرستاده که شاید به توجه شما نیاز داشته باشد. می‌توانم آن را همراه با یک پاسخ برای بررسی شما آماده کنم.`,
         evidence: [this.mailEvidence(mail)],
-        prompt: `Help complete the PDF from “${mail.subject}” and prepare a reply for review.`,
+        prompt: `فایل PDF ایمیل «${mail.subject}» را تکمیل کن و یک پاسخ برای بررسی آماده کن.`,
         kind: "document",
         input: { messageId: mail.id },
         status: "new",
@@ -488,15 +517,17 @@ export class AgentService {
       .filter(
         (m) =>
           !obsolete("agent", m.id) &&
-          /coffee|meet|available|schedule/i.test(`${m.subject} ${m.body}`),
+          /coffee|meet|available|schedule|قهوه|جلسه|دیدار|ملاقات|وقت آزاد|هماهنگ/i.test(
+            `${m.subject} ${m.body}`,
+          ),
       )
       .slice(0, 5)) {
       await this.db.insertIfAbsent(owner, "ideas", {
         id: hash(`coordination:${mail.id}`),
-        title: `I can help coordinate ${mail.subject}`,
-        reason: `${mail.sender} mentioned getting together. I can check your calendar and prepare a response for review.`,
+        title: `می‌توانم در هماهنگی «${mail.subject}» کمکتان کنم`,
+        reason: `${mail.sender} به یک دیدار اشاره کرده است. می‌توانم تقویمتان را بررسی کنم و پاسخی برای بررسی شما آماده کنم.`,
         evidence: [this.mailEvidence(mail)],
-        prompt: `Review the email “${mail.subject}”, check my calendar, and propose a next step. Ask me about missing preferences before preparing a reply.`,
+        prompt: `ایمیل «${mail.subject}» را بررسی کن، تقویمم را چک کن و قدم بعدی را پیشنهاد بده. پیش از آماده کردن پاسخ، ترجیحاتی را که نمی‌دانی از من بپرس.`,
         kind: "agent",
         input: { messageId: mail.id },
         status: "new",
@@ -508,10 +539,10 @@ export class AgentService {
         const id = hash(`goal:${goal.id}:${goal.description}`);
         await this.db.insertIfAbsent(owner, "ideas", {
           id,
-          title: `Let's make a plan for ${goal.title}`,
-          reason: "This goal has no milestones yet. A concrete plan will give it a next step.",
+          title: `بیایید برای «${goal.title}» برنامه بریزیم`,
+          reason: "این هدف هنوز هیچ مرحله‌ای ندارد. یک برنامهٔ مشخص، قدم بعدی را روشن می‌کند.",
           evidence: [{ id: goal.id, kind: "user", title: goal.title, excerpt: goal.description }],
-          prompt: `Create an actionable plan for ${goal.title}. ${goal.description}`,
+          prompt: `یک برنامهٔ عملی برای «${goal.title}» بساز. ${goal.description}`,
           kind: "plan",
           input: { goalId: goal.id },
           status: "new",
@@ -524,7 +555,7 @@ export class AgentService {
   }
   async decideIdea(owner: string, id: string, action: "accept" | "dismiss", prompt?: string) {
     let idea = await this.db.get<Idea>(owner, "ideas", id);
-    if (!idea) throw new AppError("Idea not found", 404);
+    if (!idea) throw new AppError("این ایده پیدا نشد. ایده‌ها را تازه کنید.", 404);
     if (idea.status === "dismissed" || (idea.status === "accepted" && action === "dismiss"))
       return idea;
     if (action === "dismiss")
@@ -621,7 +652,7 @@ export class AgentService {
     const connection = await this.workspace.connection(owner);
     if (connection?.id !== task.state.connectionId)
       throw new AppError(
-        "Google connection changed during this task. Start a new task using the current account.",
+        "اتصال گوگل در طول این کار تغییر کرد. با حساب فعلی یک کار جدید شروع کنید.",
         409,
       );
     const proposal = await this.actions.propose(owner, input, `${task.id}:${key}`, task.id);
@@ -635,7 +666,7 @@ export class AgentService {
     await context.event(
       "approval",
       proposal.title,
-      `Review prepared for ${proposal.account ?? "the connected account"}`,
+      `بررسی برای ${proposal.account ?? "حساب متصل"} آماده شد`,
     );
     return proposal;
   }
@@ -646,23 +677,23 @@ export class AgentService {
   ): Promise<Partial<AgentTask>> {
     await context.event(
       "status",
-      task.attempts === 1 ? "Started working" : "Resumed work",
+      task.attempts === 1 ? "کار شروع شد" : "کار از سر گرفته شد",
       task.prompt,
     );
     if (task.actionId) {
       const action = await this.db.get<ActionProposal>(owner, "actions", task.actionId);
-      if (!action) throw new Error("The linked review could not be found");
+      if (!action) throw new Error("بررسیِ مرتبط با این کار پیدا نشد. یک کار جدید شروع کنید.");
       if (action.status === "succeeded") {
-        await context.event("result", "Approved action completed", action.result);
+        await context.event("result", "اقدام تأییدشده انجام شد", action.result);
         if (task.kind === "document")
-          return this.finish(task, context, action.result ?? "Reply completed");
+          return this.finish(task, context, action.result ?? "پاسخ ارسال شد");
         task = await context.checkpoint({
           state: { ...task.state, approvalResult: action.result },
           actionId: null,
         });
       } else if (action.status !== "awaiting_review" && action.status !== "executing")
         throw new Error(
-          `Reviewed action ${action.status}: ${action.error ?? "No further action was taken"}`,
+          `اقدام بررسی‌شده انجام نشد (${action.status}): ${action.error ?? "اقدام دیگری انجام نشد"}`,
         );
       else return { status: "waiting_approval" };
     }
@@ -674,7 +705,10 @@ export class AgentService {
         if (error instanceof LostLeaseError || context.signal.aborted) throw error;
         await context.guard();
         const failures = Number(task.state.failures ?? 0) + 1;
-        const detail = error instanceof Error ? error.message : "Page check failed";
+        const detail =
+          error instanceof Error
+            ? error.message
+            : "بررسی صفحه انجام نشد. نشانی را بررسی کنید و دوباره تلاش کنید.";
         const nextCheckAt = new Date(
           Date.now() + Math.min(60, 2 ** failures) * 60000,
         ).toISOString();
@@ -691,7 +725,9 @@ export class AgentService {
         );
         await context.event(
           "error",
-          failures >= 5 ? "Watch paused after repeated failures" : "Check failed; retry scheduled",
+          failures >= 5
+            ? "پیگیری پس از چند خطای پیاپی متوقف شد"
+            : "بررسی ناموفق بود؛ تلاش دوباره زمان‌بندی شد",
           detail,
         );
         return {
@@ -702,7 +738,7 @@ export class AgentService {
             ...task.state,
             failures,
             notice: {
-              title: "Watch needs attention",
+              title: "پیگیری نیاز به بررسی دارد",
               body: detail,
               key: `watch-error:${task.id}:${failures >= 5 ? "paused" : "retry"}`,
             },
@@ -711,15 +747,15 @@ export class AgentService {
       }
     }
     if (task.kind === "finance") {
-      await context.event("step", "Analyzing the imported transactions");
+      await context.event("step", "در حال تحلیل تراکنش‌های واردشده");
       const csv = z.string().parse(task.input.csv);
       const data = analyzeSpending(csv);
       const artifact = await this.artifact(
         owner,
         task,
         "finance",
-        "Spending tracker",
-        `${data.count} transactions · ${data.spending.toFixed(2)} spent`,
+        "ردیاب هزینه‌ها",
+        `${faNumber(data.count)} تراکنش · ${faNumber(data.spending)} هزینه`,
         data,
       );
       task = await context.checkpoint({
@@ -728,8 +764,8 @@ export class AgentService {
           {
             id: task.id,
             kind: "user",
-            title: "Your transaction CSV",
-            excerpt: `${data.count} rows; ${data.period.from} through ${data.period.to}`,
+            title: "فایل CSV تراکنش‌های شما",
+            excerpt: `${faNumber(data.count)} ردیف؛ از ${faDate(data.period.from)} تا ${faDate(data.period.to)}`,
           },
         ],
       });
@@ -739,7 +775,7 @@ export class AgentService {
   }
   async finish(task: AgentTask, context: TaskContext, result: string) {
     await context.guard();
-    await context.event("result", "Work completed", result);
+    await context.event("result", "کار انجام شد", result);
     return {
       status: "succeeded" as const,
       result,
@@ -752,7 +788,7 @@ export class AgentService {
       await this.notify(
         owner,
         task.title,
-        task.result ?? "Work completed",
+        task.result ?? "کار انجام شد",
         task.id,
         `task-done:${task.id}`,
       );
@@ -777,7 +813,7 @@ export class AgentService {
     } else if (task.status === "failed") {
       await this.notify(
         owner,
-        "Task needs attention",
+        "کار نیاز به بررسی دارد",
         task.error ?? task.title,
         task.id,
         `task-error:${task.id}:${task.attempts}`,
@@ -785,19 +821,13 @@ export class AgentService {
     } else if (task.status === "waiting_input") {
       await this.notify(
         owner,
-        "Your details are needed",
+        "به اطلاعات شما نیاز است",
         task.question ?? task.title,
         task.id,
         `input:${task.id}:${hash(task.question ?? "")}`,
       );
     } else if (task.status === "waiting_approval") {
-      await this.notify(
-        owner,
-        "Ready for your review",
-        task.title,
-        task.id,
-        `review:${task.actionId}`,
-      );
+      await this.notify(owner, "آمادهٔ بررسی شما", task.title, task.id, `review:${task.actionId}`);
     }
     const notice = z
       .object({ title: z.string(), body: z.string(), key: z.string() })
@@ -814,9 +844,9 @@ export class AgentService {
     if (!source) {
       const w = await this.workspace.snapshot(owner);
       const mail = w.mail.find((m) => m.id === task.input.messageId);
-      if (!mail) throw new Error("Choose a current email with a PDF attachment to start this task");
+      if (!mail) throw new Error("برای شروع این کار، یک ایمیل فعلی با پیوست PDF انتخاب کنید");
       const ref = mail.attachments[0];
-      if (!ref) throw new Error("This email has no PDF attachment");
+      if (!ref) throw new Error("این ایمیل پیوست PDF ندارد");
       await ctx.guard();
       let file: Artifact;
       try {
@@ -831,7 +861,7 @@ export class AgentService {
         evidence: [this.mailEvidence(mail)],
         plan: task.plan.map((s, i) => ({ ...s, status: i === 0 ? "succeeded" : "pending" })),
       });
-      await ctx.event("step", "Found the document", file.name);
+      await ctx.event("step", "سند پیدا شد", file.name);
     }
     const fields = z
       .record(z.string(), z.union([z.string(), z.boolean()]))
@@ -842,14 +872,14 @@ export class AgentService {
       const names = file.fields
         ?.filter((f) => f.type !== "unsupported")
         .map((f) => f.name)
-        .join(", ");
+        .join("، ");
       if (!names)
         throw new Error(
-          "This PDF has no supported fillable fields. Open it in Files to review it.",
+          "این PDF هیچ فیلد قابل‌پرکردنِ پشتیبانی‌شده‌ای ندارد. آن را در «فایل‌ها» باز کنید و بررسی کنید.",
         );
       return {
         status: "waiting_input",
-        question: `Enter the form values you want to use. Supported fields: ${names}. The original PDF will stay intact.`,
+        question: `مقادیری را که می‌خواهید در فرم وارد شود بنویسید. فیلدهای پشتیبانی‌شده: ${names}. فایل PDF اصلی دست‌نخورده می‌ماند.`,
         state: {
           ...task.state,
           source,
@@ -867,7 +897,7 @@ export class AgentService {
         artifactIds: [filledId],
         plan: task.plan.map((s, i) => ({ ...s, status: i <= 1 ? "succeeded" : "pending" })),
       });
-      await ctx.event("step", "Saved a filled copy", filled.name);
+      await ctx.event("step", "یک نسخهٔ پرشده ذخیره شد", filled.name);
     }
     const input: ProposalInput = {
       kind: "email.send",
@@ -881,7 +911,7 @@ export class AgentService {
         body:
           typeof task.input.reply === "string"
             ? task.input.reply
-            : "Hello,\n\nPlease find the completed form attached.\n\nThank you.",
+            : "سلام،\n\nفرم تکمیل‌شده پیوست این ایمیل است.\n\nبا سپاس",
         attachmentIds: [filledId],
         threadId: source.mail.threadId,
         replyToMessageId: source.mail.id,
@@ -903,17 +933,18 @@ export class AgentService {
     ctx: TaskContext,
   ): Promise<Partial<AgentTask>> {
     const monitor = await this.db.get<Monitor>(owner, "monitors", String(task.input.monitorId));
-    if (!monitor) throw new Error("Monitor not found");
+    if (!monitor) throw new Error("این پیگیری پیدا نشد. یک پیگیری جدید بسازید.");
     if (monitor.status !== "active")
       return { status: monitor.status === "paused" ? "paused" : "cancelled" };
     let observation: { url: string; title: string; text: string; sessionId?: string };
     if (monitor.url === "sample://availability") {
-      if (this.config.mode !== "sample") throw new Error("Sample source unavailable");
+      if (this.config.mode !== "sample")
+        throw new Error("منبع نمونه در این فضای کاری در دسترس نیست. یک صفحهٔ عمومی را پیگیری کنید.");
       const page = await this.db.get<{ text: string }>(owner, "sample-pages", "availability");
       observation = {
         url: monitor.url,
-        title: "Sample dinner availability",
-        text: page?.text ?? "No tables available. Check again later.",
+        title: "نمونهٔ میزهای خالی شام",
+        text: page?.text ?? "میز خالی وجود ندارد. بعداً دوباره بررسی کنید.",
       };
     } else {
       await ctx.guard();
@@ -954,19 +985,19 @@ export class AgentService {
     if (!savedMonitor) throw new LostLeaseError();
     await ctx.event(
       "observation",
-      previousHash ? "Checked for changes" : "Saved the first observation",
+      previousHash ? "تغییرات بررسی شد" : "اولین مشاهده ذخیره شد",
       text.slice(0, 1000),
     );
     if (shouldNotify) {
       await ctx.guard();
-      await ctx.event("result", "A meaningful change was found", text.slice(0, 500));
+      await ctx.event("result", "یک تغییر مهم پیدا شد", text.slice(0, 500));
     }
     return {
       status: "scheduled",
       nextRunAt: nextCheckAt,
       result: shouldNotify
-        ? "Change found. A notification is ready."
-        : "Watching. I'll check again on schedule.",
+        ? "تغییری پیدا شد. یک اعلان آماده است."
+        : "در حال پیگیری هستم. طبق زمان‌بندی دوباره بررسی می‌کنم.",
       state: {
         ...task.state,
         sessionId: observation.sessionId,
@@ -975,7 +1006,7 @@ export class AgentService {
         notice: shouldNotify
           ? {
               title: monitor.title,
-              body: `Condition met at ${observation.url}: ${text.slice(0, 240)}`,
+              body: `شرط در ${observation.url} برقرار شد: ${text.slice(0, 240)}`,
               key: `monitor:${monitor.id}:${currentHash}`,
             }
           : null,
@@ -994,7 +1025,17 @@ export class AgentService {
     };
   }
   private matchesPrice(text: string, threshold: number) {
-    const matches = [...text.matchAll(/(?:\$|USD\s*)(\d+(?:,\d{3})*(?:\.\d{1,2})?)/g)];
+    // Accept Persian/Arabic digits and separators, and amounts written as «۱۲ دلار».
+    const latin = text
+      .replace(/[۰-۹]/g, (d) => String("۰۱۲۳۴۵۶۷۸۹".indexOf(d)))
+      .replace(/[٠-٩]/g, (d) => String("٠١٢٣٤٥٦٧٨٩".indexOf(d)))
+      .replace(/[٬،]/g, ",")
+      .replace(/٫/g, ".");
+    const amount = "(\\d+(?:,\\d{3})*(?:\\.\\d{1,2})?)";
+    const matches = [
+      ...latin.matchAll(new RegExp(`(?:\\$|USD\\s*)${amount}`, "g")),
+      ...latin.matchAll(new RegExp(`${amount}\\s*دلار`, "g")),
+    ];
     return matches.some((m) => Number(m[1].replace(/,/g, "")) < threshold);
   }
 }

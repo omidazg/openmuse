@@ -1,5 +1,5 @@
 import {
-  ArrowLeft,
+  ArrowRight,
   FilePlus2,
   FileText,
   Folder,
@@ -20,11 +20,21 @@ import type {
   ComputerSnapshot,
 } from "../../../packages/domain/src/computer";
 import { useComputerDraft } from "./computer-drafts";
+import { faDigits, faNumber, fw } from "./locale";
 import { Button, Card, colors, Empty, ErrorNotice, Field, LinkRow, s, timeLabel } from "./ui";
 import { useWorkspace } from "./workspace";
 
 const mono = Platform.OS === "ios" ? "Menlo" : "monospace";
 const message = (error: unknown) => (error instanceof Error ? error.message : String(error));
+/** Shell text, paths and output read left-to-right even inside the RTL app. */
+const ltr = { fontFamily: mono, writingDirection: "ltr", textAlign: "left" } as const;
+const runStatus: Record<ComputerCommand["status"], string> = {
+  running: "در حال اجرا",
+  succeeded: "موفق",
+  failed: "ناموفق",
+  timed_out: "پایان مهلت",
+  interrupted: "متوقف‌شده",
+};
 
 export function LinuxWorkspace({ tab }: { tab: "Terminal" | "Files" }) {
   const { api } = useWorkspace();
@@ -125,17 +135,17 @@ export function LinuxWorkspace({ tab }: { tab: "Terminal" | "Files" }) {
         <View style={[s.row, { gap: 12 }]}>
           <Terminal size={24} color={colors.blueDark} />
           <View style={{ flex: 1, gap: 4 }}>
-            <Text style={s.heading}>Your Linux workspace</Text>
+            <Text style={s.heading}>فضای کار Linux شما</Text>
             <Text style={s.muted}>
               {running
-                ? "Running · files persist when stopped"
+                ? "در حال اجرا · فایل‌ها پس از خاموش شدن هم می‌مانند"
                 : snapshot?.status === "stopped"
-                  ? "Stopped · your files are saved"
+                  ? "خاموش · فایل‌هایتان ذخیره شده‌اند"
                   : snapshot?.status === "unconfigured"
-                    ? "Set up the computer to get started"
+                    ? "برای شروع، رایانه را راه‌اندازی کنید"
                     : snapshot?.status === "error"
-                      ? "Connection needs attention"
-                      : "Connecting…"}
+                      ? "اتصال نیاز به بررسی دارد"
+                      : "در حال اتصال…"}
             </Text>
           </View>
           {!snapshot && !error && <ActivityIndicator color={colors.blueDark} />}
@@ -145,11 +155,11 @@ export function LinuxWorkspace({ tab }: { tab: "Terminal" | "Files" }) {
           <View style={[s.row, { gap: 8, flexWrap: "wrap" }]}>
             {running ? (
               <Button icon={Power} busy={busy} onPress={() => void control("stop")}>
-                Stop computer
+                خاموش کردن رایانه
               </Button>
             ) : (
               <Button primary icon={Play} busy={busy} onPress={() => void control("start")}>
-                Start computer
+                روشن کردن رایانه
               </Button>
             )}
             <Button
@@ -161,7 +171,7 @@ export function LinuxWorkspace({ tab }: { tab: "Terminal" | "Files" }) {
                   .catch((e) => setError(message(e)))
               }
             >
-              Refresh
+              تازه‌سازی
             </Button>
           </View>
         )}
@@ -175,7 +185,7 @@ export function LinuxWorkspace({ tab }: { tab: "Terminal" | "Files" }) {
               .catch((e) => setError(message(e)))
           }
         >
-          Retry connection
+          تلاش دوباره
         </Button>
       )}
       {snapshot?.enabled && (
@@ -183,19 +193,19 @@ export function LinuxWorkspace({ tab }: { tab: "Terminal" | "Files" }) {
           <View style={{ display: tab === "Terminal" ? "flex" : "none", gap: 16 }}>
             {editingCommand || command.length > 0 || snapshot.commands.length === 0 ? (
               <View style={{ borderRadius: 22, backgroundColor: "#F1F3F4", padding: 18, gap: 8 }}>
-                <Text style={{ color: colors.muted, fontSize: 12, fontFamily: mono }}>
-                  TERMINAL
+                <Text style={{ color: colors.muted, fontSize: 12, lineHeight: 18, ...fw("600") }}>
+                  ترمینال
                 </Text>
                 <Field
-                  label="Working directory"
+                  label="پوشهٔ کاری"
                   value={cwd}
                   onChangeText={setCwd}
                   autoCapitalize="none"
                   autoCorrect={false}
-                  style={{ fontFamily: mono }}
+                  style={ltr}
                 />
                 <Field
-                  label="Command"
+                  label="فرمان"
                   value={command}
                   onChangeText={setCommand}
                   placeholder="pwd"
@@ -206,7 +216,7 @@ export function LinuxWorkspace({ tab }: { tab: "Terminal" | "Files" }) {
                   spellCheck={false}
                   smartInsertDelete={false}
                   keyboardType="ascii-capable"
-                  style={{ fontFamily: mono, minHeight: 80 }}
+                  style={{ ...ltr, minHeight: 80 }}
                 />
                 {/[‘’“”]/.test(command) && (
                   <Button
@@ -215,7 +225,7 @@ export function LinuxWorkspace({ tab }: { tab: "Terminal" | "Files" }) {
                       setCommand((text) => text.replace(/[‘’]/g, "'").replace(/[“”]/g, '"'))
                     }
                   >
-                    Use straight quotes
+                    استفاده از نقل‌قول‌های ساده
                   </Button>
                 )}
                 <Button
@@ -225,10 +235,11 @@ export function LinuxWorkspace({ tab }: { tab: "Terminal" | "Files" }) {
                   disabled={!running || !command.trim() || busy}
                   onPress={() => void run()}
                 >
-                  Run command
+                  اجرای فرمان
                 </Button>
-                <Text style={{ color: colors.muted, fontSize: 12, lineHeight: 18 }}>
-                  Runs on your computer. Network access is off. Use Browser for the web.
+                <Text style={{ color: colors.muted, fontSize: 12, lineHeight: 20, ...fw("400") }}>
+                  روی رایانهٔ شما اجرا می‌شود. دسترسی به شبکه خاموش است؛ برای وب از مرورگر استفاده
+                  کنید.
                 </Text>
               </View>
             ) : (
@@ -238,19 +249,20 @@ export function LinuxWorkspace({ tab }: { tab: "Terminal" | "Files" }) {
                 disabled={!running || busy || !!commandRunning}
                 onPress={() => setEditingCommand(true)}
               >
-                New command
+                فرمان جدید
               </Button>
             )}
             {!!commandRunning && (
               <Text style={s.muted}>
-                Working… The result will appear here. Stop the computer to end running commands.
+                در حال کار… نتیجه اینجا نمایش داده می‌شود. برای پایان دادن به فرمان‌های در حال اجرا،
+                رایانه را خاموش کنید.
               </Text>
             )}
             {snapshot.commands.length === 0 ? (
               <Empty
                 icon={Terminal}
-                title="Ready for your first command"
-                detail="Run scripts, work with files, or ask your agent to create something here."
+                title="آمادهٔ اولین فرمان شما"
+                detail="اسکریپت اجرا کنید، با فایل‌ها کار کنید یا از دستیارتان بخواهید اینجا چیزی بسازد."
               />
             ) : (
               [...snapshot.commands]
@@ -260,7 +272,7 @@ export function LinuxWorkspace({ tab }: { tab: "Terminal" | "Files" }) {
             )}
             {snapshot.commands.length > 5 && (
               <Button small onPress={() => setShowHistory(!showHistory)}>
-                {showHistory ? "Show recent commands" : "Earlier commands"}
+                {showHistory ? "نمایش فرمان‌های اخیر" : "فرمان‌های قبلی"}
               </Button>
             )}
           </View>
@@ -291,47 +303,41 @@ function CommandReceipt({ run }: { run: ComputerCommand }) {
             },
           ]}
         >
-          {run.status.replace("_", " ")}
-          {run.exitCode !== undefined ? ` · exit ${run.exitCode}` : ""}
+          {runStatus[run.status] ?? run.status}
+          {run.exitCode !== undefined ? ` · کد خروج ${faDigits(run.exitCode)}` : ""}
         </Text>
         <Text style={s.small}>{timeLabel(run.startedAt)}</Text>
       </View>
-      <Text
-        selectable
-        style={[s.text, { fontFamily: mono, fontSize: 13 }]}
-      >{`$ ${run.command}`}</Text>
-      <Text style={[s.small, { fontFamily: mono }]}>{run.cwd}</Text>
+      <Text selectable style={[s.text, { ...ltr, fontSize: 13 }]}>{`$ ${run.command}`}</Text>
+      <Text style={[s.small, ltr]}>{run.cwd}</Text>
       {expanded && (
         <>
           {!!run.stdout && (
-            <Text selectable style={[s.text, { fontFamily: mono, fontSize: 12, lineHeight: 19 }]}>
+            <Text selectable style={[s.text, { ...ltr, fontSize: 12, lineHeight: 19 }]}>
               {run.stdout}
             </Text>
           )}
           {!!run.stderr && (
             <Text
               selectable
-              style={[
-                s.text,
-                { fontFamily: mono, fontSize: 12, lineHeight: 19, color: colors.danger },
-              ]}
+              style={[s.text, { ...ltr, fontSize: 12, lineHeight: 19, color: colors.danger }]}
             >
               {run.stderr}
             </Text>
           )}
           {!run.stdout && !run.stderr && run.status !== "running" && (
-            <Text style={s.small}>No output</Text>
+            <Text style={s.small}>بدون خروجی</Text>
           )}
           {run.truncated && (
             <Text style={s.small}>
-              Output reached the display limit. Write large results to a file.
+              خروجی به سقف نمایش رسید. نتیجه‌های بزرگ را در یک فایل بنویسید.
             </Text>
           )}
         </>
       )}
       {!!(run.stdout || run.stderr) && (
         <Button small onPress={() => setExpanded(!expanded)}>
-          {expanded ? "Hide output" : "Show output"}
+          {expanded ? "پنهان کردن خروجی" : "نمایش خروجی"}
         </Button>
       )}
     </Card>
@@ -410,7 +416,7 @@ function ComputerFiles({ running, active }: { running: boolean; active: boolean 
         path: `${path}/${file.name.replace(/[\\/]/g, "_")}`,
       });
       setImporting(false);
-      setNotice("Document copied to your computer.");
+      setNotice("سند در رایانه‌تان کپی شد.");
       setRetry((value) => value + 1);
     } catch (e) {
       setError(message(e));
@@ -446,7 +452,7 @@ function ComputerFiles({ running, active }: { running: boolean; active: boolean 
             ? { ...current, saved: sent.text, savedPath: sent.path }
             : current,
         );
-      setNotice("File saved to your computer.");
+      setNotice("فایل در رایانه‌تان ذخیره شد.");
       setRetry((value) => value + 1);
     } catch (e) {
       setError(message(e));
@@ -471,29 +477,29 @@ function ComputerFiles({ running, active }: { running: boolean; active: boolean 
   return (
     <View style={{ gap: 12 }}>
       <View style={s.between}>
-        <Text style={s.heading}>Workspace files</Text>
+        <Text style={s.heading}>فایل‌های فضای کار</Text>
         {(busy || loading) && <ActivityIndicator color={colors.blueDark} />}
       </View>
-      <Text selectable style={[s.small, { fontFamily: mono }]}>
+      <Text selectable style={[s.small, ltr]}>
         {editor?.path || path}
       </Text>
       <ErrorNotice error={error} />
       {!!notice && <Text style={[s.small, { color: "#248258" }]}>{notice}</Text>}
       {!running && (
-        <Text style={s.muted}>Start the computer to browse or edit its saved files.</Text>
+        <Text style={s.muted}>برای مرور یا ویرایش فایل‌های ذخیره‌شده، رایانه را روشن کنید.</Text>
       )}
       {editor ? (
         <>
           <Field
-            label="File path"
+            label="مسیر فایل"
             value={editor.path}
             onChangeText={(value) => setEditor({ ...editor, path: value })}
             autoCorrect={false}
             autoCapitalize="none"
-            style={{ fontFamily: mono }}
+            style={ltr}
           />
           <Field
-            label="File contents"
+            label="محتوای فایل"
             value={editor.text}
             onChangeText={(value) => setEditor({ ...editor, text: value })}
             multiline
@@ -502,7 +508,7 @@ function ComputerFiles({ running, active }: { running: boolean; active: boolean 
             smartInsertDelete={false}
             keyboardType="ascii-capable"
             autoCapitalize="none"
-            style={{ fontFamily: mono, minHeight: 240, fontSize: 13 }}
+            style={{ ...ltr, minHeight: 240, fontSize: 13 }}
           />
           <View style={[s.row, { flexWrap: "wrap", gap: 8 }]}>
             <Button
@@ -512,17 +518,17 @@ function ComputerFiles({ running, active }: { running: boolean; active: boolean 
               disabled={!running || !editor.path.trim()}
               onPress={() => void save()}
             >
-              Save file
+              ذخیرهٔ فایل
             </Button>
             <Button
               disabled={busy}
-              icon={ArrowLeft}
+              icon={ArrowRight}
               onPress={() => {
                 setEditor(undefined);
                 setNotice("");
               }}
             >
-              {dirty ? "Discard edits" : "Back to files"}
+              {dirty ? "نادیده گرفتن تغییرات" : "بازگشت به فایل‌ها"}
             </Button>
           </View>
         </>
@@ -533,10 +539,10 @@ function ComputerFiles({ running, active }: { running: boolean; active: boolean 
               <Button
                 small
                 disabled={busy}
-                icon={ArrowLeft}
+                icon={ArrowRight}
                 onPress={() => setPath(path.slice(0, path.lastIndexOf("/")) || "/workspace")}
               >
-                Up
+                پوشهٔ بالاتر
               </Button>
             )}
             <Button
@@ -553,7 +559,7 @@ function ComputerFiles({ running, active }: { running: boolean; active: boolean 
                 });
               }}
             >
-              New file
+              فایل جدید
             </Button>
             <Button
               small
@@ -561,7 +567,7 @@ function ComputerFiles({ running, active }: { running: boolean; active: boolean 
               icon={FolderPlus}
               onPress={() => setFolder("")}
             >
-              New folder
+              پوشهٔ جدید
             </Button>
             <Button
               small
@@ -569,7 +575,7 @@ function ComputerFiles({ running, active }: { running: boolean; active: boolean 
               icon={RefreshCw}
               onPress={() => setRetry(retry + 1)}
             >
-              Refresh files
+              تازه‌سازی فایل‌ها
             </Button>
             <Button
               small
@@ -577,14 +583,14 @@ function ComputerFiles({ running, active }: { running: boolean; active: boolean 
               icon={Upload}
               onPress={() => setImporting(!importing)}
             >
-              {importing ? "Hide documents" : "Copy a document here"}
+              {importing ? "پنهان کردن اسناد" : "کپی سند به اینجا"}
             </Button>
           </View>
           {importing && (
             <Card>
-              <Text style={s.heading}>Choose a saved PDF</Text>
+              <Text style={s.heading}>یک PDF ذخیره‌شده انتخاب کنید</Text>
               <Text style={[s.small, { marginTop: 6 }]}>
-                Copies into this folder. A file with the same name will be replaced.
+                در همین پوشه کپی می‌شود. فایلی با همین نام جایگزین خواهد شد.
               </Text>
               {workspace.files.map((file) => (
                 <LinkRow
@@ -595,14 +601,16 @@ function ComputerFiles({ running, active }: { running: boolean; active: boolean 
                 />
               ))}
               {!workspace.files.length && (
-                <Text style={s.muted}>Add a document from mail or Files first.</Text>
+                <Text style={s.muted}>
+                  هنوز سندی ندارید. ابتدا سندی از ایمیل یا بخش «فایل‌ها» اضافه کنید.
+                </Text>
               )}
             </Card>
           )}
           {folder !== undefined && (
             <Card style={{ gap: 8 }}>
               <Field
-                label="Folder name"
+                label="نام پوشه"
                 value={folder}
                 onChangeText={setFolder}
                 autoCapitalize="none"
@@ -615,10 +623,10 @@ function ComputerFiles({ running, active }: { running: boolean; active: boolean 
                   busy={busy}
                   onPress={() => void mkdir()}
                 >
-                  Create folder
+                  ساختن پوشه
                 </Button>
                 <Button disabled={busy} onPress={() => setFolder(undefined)}>
-                  Cancel
+                  انصراف
                 </Button>
               </View>
             </Card>
@@ -632,10 +640,10 @@ function ComputerFiles({ running, active }: { running: boolean; active: boolean 
                 title={entry.name}
                 detail={
                   entry.type === "directory"
-                    ? "Folder"
+                    ? "پوشه"
                     : entry.type === "symlink"
-                      ? "Symbolic link"
-                      : `${Math.max(1, Math.ceil(entry.size / 1024))} KB`
+                      ? "پیوند نمادین"
+                      : `${faNumber(Math.max(1, Math.ceil(entry.size / 1024)))} کیلوبایت`
                 }
                 onPress={() => {
                   if (busy || loading || !running) return;
@@ -655,8 +663,8 @@ function ComputerFiles({ running, active }: { running: boolean; active: boolean 
             directory.entries.length === 0 && (
               <Empty
                 icon={Folder}
-                title="A little space to create"
-                detail="Add a file here, or ask your agent to make one in its workspace."
+                title="فضایی کوچک برای ساختن"
+                detail="فایلی اینجا اضافه کنید یا از دستیارتان بخواهید در فضای کارش یکی بسازد."
               />
             )}
         </>

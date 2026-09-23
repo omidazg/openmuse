@@ -123,7 +123,7 @@ export class OpenBotAdapter {
     if (!this.options.agentId?.trim()) {
       throw new OpenBotError(
         "not_configured",
-        "Choose an OpenBot agent before configuring its runtime.",
+        "پیش از پیکربندی محیط اجرا، یک عامل OpenBot انتخاب کنید.",
       );
     }
     const runtimeUrl = httpUrl(transport.runtimeUrl);
@@ -165,7 +165,7 @@ export class OpenBotAdapter {
     if (channel.agentIds.length !== 1 || channel.agentIds[0] !== id) {
       throw new OpenBotError(
         "invalid_response",
-        "OpenBot returned a channel for a different agent.",
+        "OpenBot کانالی برای عامل دیگری برگرداند.",
         undefined,
         undefined,
         true,
@@ -177,7 +177,7 @@ export class OpenBotAdapter {
   async computerStatus(botId: string, signal?: AbortSignal): Promise<OpenBotComputerStatus> {
     const result = await this.json(computerPath(botId, "status"), computerStatusSchema, { signal });
     if (result.botId !== botId.trim()) {
-      throw new OpenBotError("invalid_response", "OpenBot returned another Bot's computer status.");
+      throw new OpenBotError("invalid_response", "OpenBot وضعیت رایانهٔ بات دیگری را برگرداند.");
     }
     return result;
   }
@@ -244,12 +244,9 @@ export class OpenBotAdapter {
 
   private requireTransport(): OpenBotTransport {
     if (this.options.enabled !== true)
-      throw new OpenBotError("disabled", "OpenBot integration is disabled.");
+      throw new OpenBotError("disabled", "یکپارچه‌سازی OpenBot غیرفعال است.");
     if (!this.options.transport)
-      throw new OpenBotError(
-        "not_configured",
-        "An authenticated OpenBot transport has not been configured.",
-      );
+      throw new OpenBotError("not_configured", "ارتباط احرازهویت‌شده با OpenBot پیکربندی نشده است.");
     return this.options.transport;
   }
 
@@ -261,7 +258,7 @@ export class OpenBotAdapter {
   ): Promise<T> {
     const transport = this.requireTransport();
     if (init.signal?.aborted)
-      throw new OpenBotError("cancelled", "OpenBot request cancelled before dispatch.");
+      throw new OpenBotError("cancelled", "درخواست OpenBot پیش از ارسال لغو شد.");
     let response: Response;
     try {
       response = await transport.request(path, {
@@ -277,7 +274,7 @@ export class OpenBotAdapter {
     } catch {
       throw new OpenBotError(
         init.signal?.aborted ? "cancelled" : "unavailable",
-        "OpenBot did not return a response.",
+        "OpenBot پاسخی نداد. اتصال را بررسی کنید و دوباره تلاش کنید.",
         undefined,
         undefined,
         mutates,
@@ -296,7 +293,7 @@ export class OpenBotAdapter {
         code,
         detail.success && detail.data.error
           ? detail.data.error.slice(0, 1000)
-          : `OpenBot request failed (${response.status}).`,
+          : `درخواست OpenBot ناموفق بود (${response.status}).`,
         response.status,
         detail.success ? detail.data.rule : undefined,
         mutates && (response.status >= 500 || response.status === 408),
@@ -306,7 +303,7 @@ export class OpenBotAdapter {
     if (!parsed.success)
       throw new OpenBotError(
         "invalid_response",
-        "OpenBot returned an incompatible response.",
+        "OpenBot پاسخ ناسازگاری برگرداند.",
         response.status,
         undefined,
         mutates,
@@ -318,7 +315,7 @@ export class OpenBotAdapter {
 function identifier(value: string): string {
   const id = value.trim();
   if (!id || id === "." || id === "..")
-    throw new OpenBotError("invalid_input", "An OpenBot ID is required.");
+    throw new OpenBotError("invalid_input", "شناسهٔ OpenBot لازم است.");
   return id;
 }
 
@@ -331,13 +328,10 @@ function httpUrl(value: string): string {
   try {
     url = new URL(value);
   } catch {
-    throw new OpenBotError("invalid_input", "A valid HTTP(S) URL is required.");
+    throw new OpenBotError("invalid_input", "یک نشانی HTTP(S) معتبر لازم است.");
   }
   if (!["http:", "https:"].includes(url.protocol) || url.username || url.password) {
-    throw new OpenBotError(
-      "invalid_input",
-      "A valid HTTP(S) URL without embedded credentials is required.",
-    );
+    throw new OpenBotError("invalid_input", "یک نشانی HTTP(S) معتبر بدون اطلاعات ورود لازم است.");
   }
   return url.toString();
 }

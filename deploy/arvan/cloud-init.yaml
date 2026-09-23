@@ -1,0 +1,47 @@
+#cloud-config
+# User data for an ArvanCloud cloud server (Ubuntu 24.04).
+# Installs Docker from the Ubuntu archive (reachable through ArvanCloud's Ubuntu mirror
+# in every region), clones the OpenMuse fork, and starts the stack once deploy/arvan/.env
+# exists. Secrets are never placed in user data: upload .env with deploy.sh afterwards.
+
+package_update: true
+packages:
+  - docker.io
+  - docker-compose-v2
+  - git
+  - ufw
+  - ca-certificates
+
+write_files:
+  - path: /etc/docker/daemon.json
+    permissions: "0644"
+    content: |
+      {
+        "log-driver": "local",
+        "log-opts": { "max-size": "20m", "max-file": "5" }
+      }
+  - path: /usr/local/bin/openmuse-up
+    permissions: "0755"
+    content: |
+      #!/bin/sh
+      set -eu
+      cd /opt/openmuse/deploy/arvan
+      if [ ! -f .env ]; then
+        echo "openmuse-up: /opt/openmuse/deploy/arvan/.env is missing; upload it with deploy.sh" >&2
+        exit 0
+      fi
+      docker compose up -d --build --remove-orphans
+
+runcmd:
+  - systemctl enable --now docker
+  - ufw default deny incoming
+  - ufw default allow outgoing
+  - ufw allow 22/tcp
+  - ufw allow 80/tcp
+  - ufw allow 443/tcp
+  - ufw allow 443/udp
+  - ufw --force enable
+  - '[ -d /opt/openmuse/.git ] || git clone --branch fa-arvan --depth 50 https://github.com/omidazg/openmuse.git /opt/openmuse'
+  - /usr/local/bin/openmuse-up
+
+final_message: "OpenMuse bootstrap finished after $UPTIME seconds"

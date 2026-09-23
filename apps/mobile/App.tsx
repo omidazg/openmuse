@@ -1,6 +1,7 @@
 import { CopilotKitProvider } from "@copilotkit/react-native/headless";
 import { StatusBar } from "expo-status-bar";
 import {
+  ArrowRight,
   Bell,
   Check,
   Lightbulb,
@@ -37,36 +38,38 @@ import { ChatScreen, WorkspaceTools } from "./src/chat";
 import { ComputerEntry } from "./src/computer";
 import { ComputerDraftProvider } from "./src/computer-drafts";
 import { Details } from "./src/details";
+import { faNumber, fw, useAppFonts } from "./src/locale";
 import { BrowserScreen, CalendarScreen, FilesScreen, MailScreen } from "./src/screens";
 import { ThreadsProvider, ThreadsSheet, useMuseThread } from "./src/threads";
 import { Button, Card, colors, ErrorNotice, Field, IconButton, Mascot, s } from "./src/ui";
 import { type Detail, useWorkspace, WorkspaceContext } from "./src/workspace";
 
 const nav: { id: Section; label: string; icon: LucideIcon }[] = [
-  { id: "chat", label: "Chat", icon: MessageCircle },
-  { id: "activity", label: "Activity", icon: PanelsTopLeft },
-  { id: "ideas", label: "Ideas", icon: Lightbulb },
-  { id: "goals", label: "Goals", icon: SquareCheck },
-  { id: "apps", label: "Apps", icon: Shapes },
+  { id: "chat", label: "گفت‌وگو", icon: MessageCircle },
+  { id: "activity", label: "فعالیت", icon: PanelsTopLeft },
+  { id: "ideas", label: "ایده‌ها", icon: Lightbulb },
+  { id: "goals", label: "اهداف", icon: SquareCheck },
+  { id: "apps", label: "برنامه‌ها", icon: Shapes },
 ];
 const titles: Partial<Record<Section, { title: string; subtitle: string }>> = {
-  activity: { title: "Activity", subtitle: "Plans, progress, decisions and results." },
-  ideas: { title: "Ideas", subtitle: "Useful next steps, grounded in your world." },
+  activity: { title: "فعالیت", subtitle: "برنامه‌ها، پیشرفت، تصمیم‌ها و نتیجه‌ها." },
+  ideas: { title: "ایده‌ها", subtitle: "قدم‌های بعدی کاربردی، متناسب با دنیای شما." },
   goals: {
-    title: "Goals",
-    subtitle: "Longer-term goals and things to keep an eye on.",
+    title: "اهداف",
+    subtitle: "هدف‌های بلندمدت و چیزهایی که باید حواسمان به آن‌ها باشد.",
   },
   apps: {
-    title: "Apps",
-    subtitle: "Connections, capabilities and what your agent remembers.",
+    title: "برنامه‌ها",
+    subtitle: "اتصال‌ها، توانایی‌ها و آنچه دستیارتان به خاطر دارد.",
   },
-  connections: { title: "Apps", subtitle: "Connections and capabilities." },
-  mail: { title: "Mail", subtitle: "The conversations behind your work." },
-  calendar: { title: "Calendar", subtitle: "Time for what matters." },
-  browser: { title: "Browser", subtitle: "Your connected browsing sessions." },
-  files: { title: "Files", subtitle: "Documents, forms and filled copies." },
+  connections: { title: "برنامه‌ها", subtitle: "اتصال‌ها و توانایی‌ها." },
+  mail: { title: "ایمیل", subtitle: "گفت‌وگوهایی که پشت کارهای شماست." },
+  calendar: { title: "تقویم", subtitle: "زمان برای چیزهایی که مهم‌اند." },
+  browser: { title: "مرورگر", subtitle: "نشست‌های مرور متصل شما." },
+  files: { title: "فایل‌ها", subtitle: "اسناد، فرم‌ها و نسخه‌های تکمیل‌شده." },
 };
 export default function App() {
+  const fontsReady = useAppFonts();
   const [token, setToken] = useState("");
   const [accessKey, setAccessKey] = useState("");
   const [busy, setBusy] = useState(true);
@@ -86,6 +89,7 @@ export default function App() {
   useEffect(() => {
     void connect();
   }, [connect]);
+  if (!fontsReady) return null;
   return (
     <SafeAreaProvider>
       <StatusBar style="dark" />
@@ -109,29 +113,35 @@ export default function App() {
           <View style={{ width: "100%", maxWidth: 420, gap: 22, alignItems: "center" }}>
             <Mascot size={72} />
             <Text
-              style={{ fontSize: 32, color: colors.text, letterSpacing: -1, fontWeight: "500" }}
+              style={{
+                fontSize: 32,
+                lineHeight: 44,
+                textAlign: "center",
+                color: colors.text,
+                ...fw("500"),
+              }}
             >
-              Welcome to OpenMuse.
+              به OpenMuse خوش آمدید.
             </Text>
-            <Text style={[s.muted, { textAlign: "center" }]}>A little room for your day.</Text>
+            <Text style={[s.muted, { textAlign: "center" }]}>فضایی کوچک برای روزتان.</Text>
             {busy ? (
               <ActivityIndicator color={colors.blueDark} />
             ) : (
               <Card style={{ width: "100%" }}>
                 <ErrorNotice error={error} />
                 <Field
-                  label="Workspace access key"
+                  label="کلید دسترسی فضای کار"
                   value={accessKey}
                   onChangeText={setAccessKey}
                   secureTextEntry
-                  placeholder="Required for a live workspace"
+                  placeholder="برای فضای کار آنلاین لازم است"
                 />
                 <Button primary onPress={() => void connect(accessKey || undefined)}>
-                  Open workspace
+                  باز کردن فضای کار
                 </Button>
                 <Text style={[s.small, { marginTop: 15 }]}>
-                  Local workspaces open without a key. Make sure your OpenMuse server is running at{" "}
-                  {API_URL}.
+                  فضاهای کار محلی بدون کلید باز می‌شوند. مطمئن شوید سرور OpenMuse در این نشانی در حال
+                  اجراست: <Text style={{ writingDirection: "ltr" }}>{API_URL}</Text>
                 </Text>
               </Card>
             )}
@@ -149,20 +159,25 @@ function WorkspaceApp({ token }: { token: string }) {
   const [toast, setToast] = useState("");
   const [error, setError] = useState("");
   const [prompt, setPrompt] = useState<{ id: number; text: string }>();
+  const fail = useCallback(
+    (e: unknown) =>
+      setError(`فضای کار بارگذاری نشد. ${e instanceof Error ? e.message : String(e)}`),
+    [],
+  );
   const refresh = useCallback(async () => {
     const snapshot = await api.request<Workspace>("/api/workspace");
     setWorkspace(snapshot);
     setError("");
   }, [api]);
   useEffect(() => {
-    void refresh().catch((e) => setError(String(e)));
-  }, [refresh]);
+    void refresh().catch(fail);
+  }, [refresh, fail]);
   useEffect(() => {
     const listener = AppState.addEventListener("change", (state) => {
-      if (state === "active") void refresh().catch((e) => setError(String(e)));
+      if (state === "active") void refresh().catch(fail);
     });
     return () => listener.remove();
-  }, [refresh]);
+  }, [refresh, fail]);
   useEffect(() => {
     if (!toast) return;
     const timer = setTimeout(() => setToast(""), 5500);
@@ -195,14 +210,12 @@ function WorkspaceApp({ token }: { token: string }) {
         {error ? (
           <>
             <ErrorNotice error={error} />
-            <Button onPress={() => void refresh().catch((e) => setError(String(e)))}>
-              Try again
-            </Button>
+            <Button onPress={() => void refresh().catch(fail)}>تلاش دوباره</Button>
           </>
         ) : (
           <>
             <ActivityIndicator color={colors.blueDark} />
-            <Text style={s.muted}>Opening your workspace…</Text>
+            <Text style={s.muted}>در حال باز کردن فضای کار…</Text>
           </>
         )}
       </SafeAreaView>
@@ -264,13 +277,13 @@ function WorkspaceShell({
   const agentName = data?.identity.name || "OpenMuse";
   const status = activeTask
     ? activeTask.status === "waiting_approval"
-      ? `Ready to review · ${activeTask.title}`
+      ? `آمادهٔ بررسی · ${activeTask.title}`
       : activeTask.status === "waiting_input"
-        ? `Needs your input · ${activeTask.title}`
+        ? `منتظر پاسخ شما · ${activeTask.title}`
         : activeTask.plan.find((step) => step.status === "running")?.title || activeTask.title
     : data?.tasks.some((task) => task.status === "queued")
-      ? "Picking up your next task…"
-      : "Here when you need me";
+      ? "در حال شروع کار بعدی…"
+      : "هر وقت لازم باشد، همین‌جا هستم";
   const title = titles[section] || titles.apps;
   const Screen =
     section === "mail"
@@ -301,17 +314,17 @@ function WorkspaceShell({
               marginHorizontal: 20,
             }}
           >
-            <View style={{ position: "absolute", left: 0, top: 16 }}>
+            <View style={{ position: "absolute", start: 0, top: 16 }}>
               <IconButton
                 icon={Menu}
-                label="Open conversations and menu"
+                label="باز کردن گفت‌وگوها و منو"
                 onPress={() => setThreadsOpen(true)}
               />
             </View>
             <View style={{ alignItems: "center", gap: 1 }}>
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel={`Open ${agentName} activity and approvals`}
+                accessibilityLabel={`باز کردن فعالیت‌ها و تأییدهای ${agentName}`}
                 onPress={() => navigate("activity")}
                 style={({ pressed }) => ({
                   alignItems: "center",
@@ -323,26 +336,32 @@ function WorkspaceShell({
                 <Text
                   style={{
                     fontSize: 16,
-                    fontWeight: "600",
+                    lineHeight: 24,
+                    ...fw("600"),
                     color: colors.text,
-                    letterSpacing: -0.4,
                   }}
                 >
                   {agentName}
                 </Text>
                 <Text
                   numberOfLines={1}
-                  style={{ fontSize: 11, color: colors.muted, marginBottom: 6 }}
+                  style={{
+                    fontSize: 12,
+                    lineHeight: 18,
+                    color: colors.muted,
+                    marginBottom: 6,
+                    ...fw("400"),
+                  }}
                 >
                   {status}
                 </Text>
               </Pressable>
               {section === "chat" && <ComputerEntry />}
             </View>
-            <View style={{ position: "absolute", right: 0, top: 16 }}>
+            <View style={{ position: "absolute", end: 0, top: 16 }}>
               <IconButton
                 icon={Bell}
-                label={`Notifications, ${pending} unread or pending`}
+                label={`اعلان‌ها، ${faNumber(pending)} مورد خوانده‌نشده یا در انتظار`}
                 onPress={() => open({ type: "notifications" })}
               />
               {pending > 0 && (
@@ -354,7 +373,7 @@ function WorkspaceShell({
                     borderRadius: 4,
                     position: "absolute",
                     top: 7,
-                    right: 9,
+                    end: 9,
                     backgroundColor: colors.blueDark,
                   }}
                 />
@@ -372,10 +391,11 @@ function WorkspaceShell({
                 {utility && (
                   <Button
                     small
+                    icon={ArrowRight}
                     style={{ alignSelf: "flex-start", marginBottom: 18 }}
                     onPress={() => navigate("apps")}
                   >
-                    Back to Apps
+                    بازگشت به برنامه‌ها
                   </Button>
                 )}
                 <Text style={[s.title, { fontSize: 25, marginBottom: 22 }]}>{title?.title}</Text>
@@ -395,13 +415,13 @@ function WorkspaceShell({
                 <>
                   <ErrorNotice error={threadsError} />
                   {threadsError ? (
-                    <Button onPress={retryThreads}>Retry main chat</Button>
+                    <Button onPress={retryThreads}>تلاش دوباره</Button>
                   ) : threadsLoading ? (
                     <ActivityIndicator color={colors.blueDark} />
                   ) : null}
                   {!threadsLoading && selection.id !== mainId && (
                     <Text style={[s.small, { textAlign: "center", marginBottom: 8 }]}>
-                      Side chat
+                      گفت‌وگوی جانبی
                     </Text>
                   )}
                   {visited.map((thread) => (
@@ -475,7 +495,7 @@ function WorkspaceShell({
         {!!toast && (
           <View
             pointerEvents="box-none"
-            style={{ position: "absolute", bottom: 94, left: 20, right: 20, alignItems: "center" }}
+            style={{ position: "absolute", bottom: 94, start: 20, end: 20, alignItems: "center" }}
           >
             <View
               style={[
@@ -490,10 +510,14 @@ function WorkspaceShell({
               ]}
             >
               <Check size={16} color={colors.blue} />
-              <Text style={{ color: "#FFF", fontSize: 13, flexShrink: 1 }}>{toast}</Text>
+              <Text
+                style={{ color: "#FFF", fontSize: 14, lineHeight: 22, flexShrink: 1, ...fw("400") }}
+              >
+                {toast}
+              </Text>
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel="Dismiss notification"
+                accessibilityLabel="بستن اعلان"
                 onPress={clearToast}
               >
                 <X size={16} color="#FFF" />

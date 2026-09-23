@@ -1,23 +1,29 @@
-# OpenMuse documentation
+<div dir="rtl">
 
-## Watch OpenMuse
+# مستندات OpenMuse
 
-[iPhone demo · 38 seconds](../assets/demos/2026-09-16/mobile.mp4) · [Web demo · 42 seconds](../assets/demos/2026-09-16/web.mp4) · [Recording notes and reproduction](DEMO.md)
+## تماشای OpenMuse
 
-The demos follow a request from chat to the agent's inline browser, then show how to take control of that session. The composer uses one control for sending and stopping a reply.
+[نمایش آیفون · ۳۸ ثانیه](../assets/demos/2026-09-16/mobile.mp4) · [نمایش وب · ۴۲ ثانیه](../assets/demos/2026-09-16/web.mp4) · [یادداشت‌های ضبط و بازتولید](DEMO.md)
 
-## Guides
+این نمایش‌ها یک درخواست را از گفت‌وگو تا مرورگر درون‌خطی عامل دنبال می‌کنند و سپس نشان می‌دهند چگونه کنترل آن نشست را در دست بگیرید. کادر نوشتن برای ارسال و توقف پاسخ از یک دکمهٔ واحد استفاده می‌کند.
 
-- [Quick start and architecture](../README.md)
-- [Native iOS / Android / web setup](../apps/mobile/README.md)
-- [Browser worker, API, persistence, and network boundary](../apps/worker/README.md)
-- [Linux computer, terminal, and workspace files](COMPUTER.md)
+## راهنماها
+
+- [شروع سریع و معماری](../README.md) ([English](../README.en.md))
+- [راه‌اندازی بومی iOS / اندروید / وب](../apps/mobile/README.md)
+- [کارگر مرورگر، API، ماندگاری و مرز شبکه](../apps/worker/README.md)
+- [رایانهٔ لینوکسی، ترمینال و فایل‌های فضای کاری](COMPUTER.md)
 - [CopilotKit Rich Threads](RICH-THREADS.md)
-- [Interaction design and conversation behavior](EXPERIENCE.md)
-- [OpenBot integration contract](OPENBOT-INTEGRATION.md)
-- [Feature inventory](FEATURES.md)
-- [Verification and limitations](VERIFICATION.md)
-- [Demo reproduction](DEMO.md)
-- [Roadmap](../ROADMAP.md)
-- [Contributing](../CONTRIBUTING.md)
-- [Security](../SECURITY.md)
+- [طراحی تعامل و رفتار گفت‌وگو](EXPERIENCE.md)
+- [قرارداد یکپارچه‌سازی OpenBot](OPENBOT-INTEGRATION.md)
+- [فهرست امکانات](FEATURES.md)
+- [راستی‌آزمایی و محدودیت‌ها](VERIFICATION.md)
+- [بازتولید نمایش](DEMO.md)
+- [فارسی‌سازی](FA.md) و [قواعد فارسی‌سازی](persian-rules.md)
+- [استقرار روی ابرآروان](../deploy/arvan/README.fa.md)
+- [نقشهٔ راه](../ROADMAP.md)
+- [مشارکت](../CONTRIBUTING.md)
+- [امنیت](../SECURITY.md)
+
+</div>

@@ -86,7 +86,7 @@ export function agentRoutes(service: AgentService): Hono<{ Variables: { owner: s
     const memory: AgentMemory = {
       id: randomUUID(),
       text: body.text,
-      source: body.source ?? "You",
+      source: body.source ?? "شما",
       createdAt: new Date().toISOString(),
     };
     return c.json(await service.db.put(c.get("owner"), "memories", memory), 201);
@@ -100,12 +100,12 @@ export function agentRoutes(service: AgentService): Hono<{ Variables: { owner: s
       {},
       body,
     );
-    if (!memory) throw new AppError("Memory not found", 404);
+    if (!memory) throw new AppError("این مورد حافظه پیدا نشد. فهرست حافظه را تازه کنید.", 404);
     return c.json(memory);
   });
   app.post("/memories/:id/forget", async (c) => {
     if (!(await service.db.take(c.get("owner"), "memories", c.req.param("id"))))
-      throw new AppError("Memory not found", 404);
+      throw new AppError("این مورد حافظه پیدا نشد. فهرست حافظه را تازه کنید.", 404);
     return c.json({ ok: true });
   });
   app.post("/identity", async (c) => {
@@ -126,7 +126,11 @@ export function agentRoutes(service: AgentService): Hono<{ Variables: { owner: s
       {},
       body,
     );
-    if (!identity) throw new AppError("Agent identity changed; refresh and try again", 409);
+    if (!identity)
+      throw new AppError(
+        "مشخصات دستیار تغییر کرده است. صفحه را تازه کنید و دوباره تلاش کنید.",
+        409,
+      );
     return c.json(identity);
   });
   app.get("/notifications", async (c) =>
@@ -140,11 +144,11 @@ export function agentRoutes(service: AgentService): Hono<{ Variables: { owner: s
       {},
       { read: true },
     );
-    if (!notification) throw new AppError("Notification not found", 404);
+    if (!notification) throw new AppError("این اعلان پیدا نشد. اعلان‌ها را تازه کنید.", 404);
     return c.json(notification);
   });
   app.post("/sample-page", async (c) => {
-    if (service.config.mode !== "sample") throw new AppError("Not found", 404);
+    if (service.config.mode !== "sample") throw new AppError("پیدا نشد", 404);
     const body = z.object({ text: z.string().max(100000) }).parse(await c.req.json());
     await service.db.put(c.get("owner"), "sample-pages", { id: "availability", text: body.text });
     return c.json({ ok: true });

@@ -11,14 +11,16 @@ export function browserAddress(value: string): string {
       throw new Error("Invalid address");
     return url.href;
   } catch {
-    throw new Error("Enter a website address, like copilotkit.ai or https://news.ycombinator.com.");
+    throw new Error(
+      "نشانی وب‌سایت را وارد کنید؛ مثلاً copilotkit.ai یا https://news.ycombinator.com",
+    );
   }
 }
 
 export function browserSite(value: string): string {
   try {
-    return new URL(value).hostname.replace(/^www\./, "") || "Browser";
+    return new URL(value).hostname.replace(/^www\./, "") || "مرورگر";
   } catch {
-    return "Browser";
+    return "مرورگر";
   }
 }

@@ -1,0 +1,163 @@
+# OpenMuse on a single ArvanCloud cloud server (ECC VM).
+#
+#   cd deploy/arvan
+#   cp env.example .env   # fill in secrets
+#   docker compose up -d --build
+#
+# Only Caddy publishes ports (80/443). Everything else stays on the private
+# compose network.
+name: openmuse
+
+x-app-env: &app-env
+  WORKSPACE_MODE: live
+  AGENT_BACKEND: ${AGENT_BACKEND:-model}
+  HOST: 0.0.0.0
+  PORT: "8787"
+  DATA_DIR: /data
+  PUBLIC_API_URL: https://${DOMAIN:?Set DOMAIN}
+  ALLOWED_ORIGINS: https://${DOMAIN}
+  DATABASE_URL: postgresql://openmuse:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}@postgres:5432/openmuse
+  OPENMUSE_ACCESS_KEY: ${OPENMUSE_ACCESS_KEY:?Set OPENMUSE_ACCESS_KEY (24+ characters)}
+  TOKEN_ENCRYPTION_KEY: ${TOKEN_ENCRYPTION_KEY:?Set TOKEN_ENCRYPTION_KEY (32 random bytes, base64)}
+  CPK_INTELLIGENCE_API_KEY: ${CPK_INTELLIGENCE_API_KEY:?Live mode requires CPK_INTELLIGENCE_API_KEY}
+  MODEL: ${MODEL:-}
+  OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+  OPENAI_BASE_URL: ${OPENAI_BASE_URL:-}
+  ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+  GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
+  AGENT_URL: ${AGENT_URL:-}
+  AGENT_TOKEN: ${AGENT_TOKEN:-}
+  GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+  GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+  BROWSER_WORKER_URL: http://browser-worker:8790
+  WORKER_TOKEN: ${WORKER_TOKEN:?Set WORKER_TOKEN to a random secret of at least 32 characters}
+  COMPUTER_ENABLED: "false"
+
+services:
+  postgres:
+    image: ${REGISTRY_MIRROR:-}library/postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: openmuse
+      POSTGRES_DB: openmuse
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks: [backend]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U openmuse -d openmuse"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  app:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+      args:
+        REGISTRY_MIRROR: ${REGISTRY_MIRROR:-}
+        NPM_REGISTRY: ${NPM_REGISTRY:-}
+        EXPO_PUBLIC_API_URL: https://${DOMAIN}
+    image: openmuse-app:latest
+    restart: unless-stopped
+    environment:
+      <<: *app-env
+      # The dedicated `worker` service below runs background tasks.
+      TASK_WORKER_ENABLED: "false"
+    volumes:
+      - app-data:/data
+    networks: [backend, frontend]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    init: true
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 1g
+
+  worker:
+    image: openmuse-app:latest
+    pull_policy: never
+    command: ["node", "dist/apps/server/src/worker-entry.js"]
+    restart: unless-stopped
+    environment:
+      <<: *app-env
+    volumes:
+      - app-data:/data
+    networks: [backend]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      app:
+        condition: service_healthy
+    init: true
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      disable: true
+    mem_limit: 1g
+
+  browser-worker:
+    build:
+      context: ../../apps/worker
+    init: true
+    restart: unless-stopped
+    environment:
+      WORKER_HOST: 0.0.0.0
+      WORKER_TOKEN: ${WORKER_TOKEN}
+    volumes:
+      - browser-profiles:/data
+    networks: [backend]
+    tmpfs:
+      - /tmp:size=256m,mode=1777
+    shm_size: 256mb
+    mem_limit: 2g
+    pids_limit: 256
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8790/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+  caddy:
+    image: ${REGISTRY_MIRROR:-}library/caddy:2-alpine
+    restart: unless-stopped
+    environment:
+      DOMAIN: ${DOMAIN}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    networks: [frontend]
+    depends_on:
+      - app
+
+networks:
+  frontend:
+  # Not `internal`: the API needs outbound access to model providers / Google,
+  # and the browser worker needs the public web.
+  backend:
+
+volumes:
+  pgdata:
+  app-data:
+  browser-profiles:
+  caddy-data:
+  caddy-config:

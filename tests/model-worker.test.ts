@@ -60,9 +60,7 @@ test("CopilotKit model worker executes server tools and persists the confirmed o
     assert.equal(result.task.status, "succeeded", result.task.error ?? result.task.question);
     assert.equal(result.task.result, "Saved your weekend plan with two steps.");
     assert.ok(result.artifacts.some((a) => a.title === "Weekend plan"));
-    assert.ok(
-      result.events.some((event) => event.title === "Read the authorized workspace sources"),
-    );
+    assert.ok(result.events.some((event) => event.title === "خواندن منابع مجاز فضای کاری"));
     assert.ok(requests.length >= 4 && requests.length <= 6);
     assert.ok(requests.every((request) => request.path === "/v1/responses"));
     assert.ok(requests[0].body.includes('"name":"prepare_email"'));

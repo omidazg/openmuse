@@ -108,7 +108,7 @@ test("reviewed sample email persists a receipt, then revocation blocks another p
   });
   const saved: ActionProposal = await result.json();
   assert.equal(saved.status, "succeeded");
-  assert.match(saved.result ?? "", /local sent mail/);
+  assert.match(saved.result ?? "", /ایمیل‌های ارسالی محلی/);
   const pending: ActionProposal = await (await propose()).json();
   await app.request("/api/google/disconnect", { method: "POST", headers: headers(), body: "{}" });
   const revoked = await app.request(`/api/actions/${pending.id}/decide`, {
@@ -125,7 +125,7 @@ test("missing browser setup is explicit rather than a fictional browser session"
     body: JSON.stringify({ url: "https://example.com" }),
   });
   assert.equal(response.status, 503);
-  assert.match((await response.json()).error, /not configured/);
+  assert.match((await response.json()).error, /پیکربندی نشده/);
 });
 test("calendar ranges and complete sample mail threads survive navigation", async () => {
   await app.request("/api/google/connect", {
@@ -177,7 +177,7 @@ test("CopilotKit runtime streams actual AG-UI events without a provider key", as
   assert.match(stream, /RUN_STARTED/);
   assert.match(stream, /TEXT_MESSAGE_CONTENT/);
   assert.match(stream, /RUN_FINISHED/);
-  assert.match(stream, /Your local calendar has/);
+  assert.match(stream, /تقویم محلی شما/);
 });
 
 test("guided document delegation streams a rich tool result bound to its saved task", async () => {

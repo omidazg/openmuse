@@ -19,7 +19,7 @@ const MAX_JSON_BYTES = Math.ceil((MAX_ATTACHMENT_BYTES * 4) / 3) + 1024 * 1024;
 export class OutcomeUnknownError extends Error {
   readonly code = "outcome_unknown";
   constructor(
-    message = "Google may have completed this action. Check Google before trying again.",
+    message = "ممکن است گوگل این اقدام را انجام داده باشد. پیش از تلاش دوباره، آن را در گوگل بررسی کنید.",
   ) {
     super(message);
     this.name = "OutcomeUnknownError";
@@ -31,7 +31,7 @@ export class GoogleApiError extends Error {
     readonly status: number,
     detail: string,
   ) {
-    super(`Google API (${status}): ${detail}`);
+    super(`خطای API گوگل (${status}): ${detail}`);
     this.name = "GoogleApiError";
   }
 }
@@ -40,7 +40,7 @@ export class RecurringEventError extends Error {
   readonly status = 422;
   constructor() {
     super(
-      "Recurring events cannot be changed here yet. Open Google Calendar to choose one occurrence or the whole series.",
+      "رویدادهای تکرارشونده هنوز از اینجا تغییر نمی‌کنند. تقویم گوگل را باز کنید و یک نوبت یا کل مجموعه را انتخاب کنید.",
     );
     this.name = "RecurringEventError";
   }
@@ -93,7 +93,7 @@ const googleEventSchema = z.object({
   etag: z.string().optional(),
   recurrence: z.array(z.string()).optional(),
   recurringEventId: z.string().optional(),
-  summary: z.string().default("(Untitled event)"),
+  summary: z.string().default("(رویداد بی‌عنوان)"),
   start: z.object({
     date: z.string().optional(),
     dateTime: z.string().optional(),
@@ -317,7 +317,7 @@ function mapMessage(message: z.infer<typeof messageSchema>): Mail {
     from: address,
     sender,
     to: addresses(metadata.get("to") ?? ""),
-    subject: decodeHeader(metadata.get("subject") ?? "(No subject)"),
+    subject: decodeHeader(metadata.get("subject") ?? "(بدون موضوع)"),
     body,
     date: Number.isFinite(time) ? new Date(time).toISOString() : "",
     unread: message.labelIds.includes("UNREAD"),
@@ -479,7 +479,7 @@ export class GoogleClient {
             .array(
               z.object({
                 id: z.string().min(1),
-                summary: z.string().default("(Untitled calendar)"),
+                summary: z.string().default("(تقویم بی‌عنوان)"),
                 summaryOverride: z.string().optional(),
                 timeZone: z.string(),
                 accessRole: z.string(),
@@ -541,10 +541,14 @@ export class GoogleClient {
   }
 
   private eventVersion(event: z.infer<typeof googleEventSchema>, expectedVersion?: string): string {
-    if (!event.etag?.trim()) throw new Error("Google event has no ETag; prepare a fresh review");
+    if (!event.etag?.trim())
+      throw new Error("رویداد گوگل نسخه (ETag) ندارد؛ بازبینی تازه‌ای آماده کنید");
     const version = singleLine(event.etag, "event ETag");
     if (expectedVersion !== undefined && version !== expectedVersion)
-      throw new GoogleApiError(409, "This event changed since review. Prepare a new action.");
+      throw new GoogleApiError(
+        409,
+        "این رویداد پس از بازبینی تغییر کرده است. اقدام تازه‌ای آماده کنید.",
+      );
     return version;
   }
 
@@ -558,7 +562,7 @@ export class GoogleClient {
     // Credential failures happen before dispatch, so their outcome is definite.
     const token = await this.getAccessToken();
     if (!token || /[\r\n]/.test(token))
-      throw new Error("Google access token is missing or invalid; reconnect Google");
+      throw new Error("توکن دسترسی گوگل وجود ندارد یا نامعتبر است؛ گوگل را دوباره متصل کنید");
     let response: Response;
     try {
       response = await this.fetcher(url, {
@@ -575,7 +579,7 @@ export class GoogleClient {
       });
     } catch {
       if (write) throw new OutcomeUnknownError();
-      throw new Error("Could not reach Google; check the connection and try again");
+      throw new Error("ارتباط با گوگل برقرار نشد؛ اتصال را بررسی کنید و دوباره تلاش کنید");
     }
     if (write && (response.status >= 500 || response.status === 408)) {
       try {
@@ -586,7 +590,7 @@ export class GoogleClient {
       throw new OutcomeUnknownError();
     }
     if (!response.ok) {
-      let detail = response.statusText || "Request failed";
+      let detail = response.statusText || "درخواست ناموفق بود";
       try {
         const result = z
           .object({ error: z.object({ message: z.string() }) })
@@ -602,7 +606,7 @@ export class GoogleClient {
       return await readJson(response);
     } catch {
       if (write) throw new OutcomeUnknownError();
-      throw new Error("Google returned an invalid or oversized response");
+      throw new Error("پاسخ گوگل نامعتبر یا بیش از حد بزرگ بود");
     }
   }
 

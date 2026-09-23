@@ -94,7 +94,7 @@ export const runDocker: DockerRunner = (args, options) =>
     child.on("error", () => {
       capture(
         stderr,
-        Buffer.from("Docker CLI could not be started. Install Docker and start its engine."),
+        Buffer.from("اجرای Docker CLI ممکن نشد. Docker را نصب و موتور آن را روشن کنید."),
       );
       finish();
     });
@@ -131,10 +131,10 @@ export function workspacePath(path: string): string {
     !path.startsWith("/workspace") ||
     path.split("/").includes("..")
   )
-    throw new AppError("Choose an absolute path inside /workspace", 422);
+    throw new AppError("یک مسیر مطلق داخل ‎/workspace انتخاب کنید", 422);
   const normalized = posix.normalize(path);
   if (normalized !== "/workspace" && !normalized.startsWith("/workspace/"))
-    throw new AppError("Choose an absolute path inside /workspace", 422);
+    throw new AppError("یک مسیر مطلق داخل ‎/workspace انتخاب کنید", 422);
   return normalized;
 }
 const inspectionSchema = z.object({
@@ -201,23 +201,23 @@ export class ComputerService {
   private enabled() {
     if (!this.config.computerEnabled)
       throw new AppError(
-        "Computer is not configured. Enable COMPUTER_ENABLED and build the local computer image.",
+        "رایانه پیکربندی نشده است. COMPUTER_ENABLED را فعال کنید و ایمیج محلی رایانه را بسازید.",
         503,
       );
   }
   private image() {
     const image = this.config.computerImage ?? "openmuse-computer:local";
     if (!/^[a-zA-Z0-9][a-zA-Z0-9._/:@-]{0,250}$/.test(image))
-      throw new AppError("COMPUTER_IMAGE is invalid", 503);
+      throw new AppError("مقدار COMPUTER_IMAGE نامعتبر است", 503);
     return image;
   }
   private async checked(args: string[]) {
     const result = await this.docker(args, { timeoutMs: controlTimeout });
     if (result.timedOut)
-      throw new AppError("Docker did not respond within 10 seconds. Check the Docker engine.", 503);
+      throw new AppError("Docker در ۱۰ ثانیه پاسخ نداد. موتور Docker را بررسی کنید.", 503);
     if (result.interrupted || result.exitCode !== 0 || result.truncated)
       throw new AppError(
-        "Docker operation failed. Check that the engine is running and the computer image is built locally.",
+        "عملیات Docker ناموفق بود. بررسی کنید موتور روشن باشد و ایمیج رایانه به‌صورت محلی ساخته شده باشد.",
         503,
       );
     return result.stdout;
@@ -239,7 +239,7 @@ export class ComputerService {
     const raw = JSON.parse(await this.checked(["container", "inspect", identity.container]));
     const result = z.array(inspectionSchema).length(1).safeParse(raw);
     if (!result.success)
-      throw new AppError("Computer isolation inspection failed; refusing to attach", 409);
+      throw new AppError("بررسی ایزوله‌بودن رایانه ناموفق بود؛ اتصال انجام نمی‌شود", 409);
     const c = result.data[0],
       h = c.HostConfig;
     const empty = (list: unknown[] | null) => !list?.length;
@@ -286,7 +286,7 @@ export class ComputerService {
       Object.keys(c.NetworkSettings.Networks).every((network) => network === "none");
     if (!safe)
       throw new AppError(
-        "Computer ownership or isolation does not match this deployment; refusing to attach",
+        "مالکیت یا ایزوله‌بودن رایانه با این استقرار مطابقت ندارد؛ اتصال انجام نمی‌شود",
         409,
       );
     await this.verifyVolume(owner);
@@ -306,7 +306,7 @@ export class ComputerService {
       )
       .length(1)
       .safeParse(JSON.parse(await this.checked(["volume", "inspect", identity.volume])));
-    if (!parsed.success) throw new AppError("Computer workspace ownership inspection failed", 409);
+    if (!parsed.success) throw new AppError("بررسی مالکیت فضای کاری رایانه ناموفق بود", 409);
     const v = parsed.data[0];
     if (
       v.Name !== identity.volume ||
@@ -315,7 +315,7 @@ export class ComputerService {
       Object.keys(v.Options ?? {}).length ||
       !Object.entries(identity.labels).every(([key, value]) => v.Labels?.[key] === value)
     )
-      throw new AppError("Computer workspace ownership or isolation does not match", 409);
+      throw new AppError("مالکیت یا ایزوله‌بودن فضای کاری رایانه مطابقت ندارد", 409);
   }
   private async acquire(owner: string, operation: Lease["operation"] = "operation") {
     this.enabled();
@@ -332,7 +332,7 @@ export class ComputerService {
       operation,
     };
     if (previous && previous.expiresAt > Date.now())
-      throw new AppError("Computer is busy. Wait for the current operation to finish.", 409);
+      throw new AppError("رایانه مشغول است. صبر کنید عملیات فعلی تمام شود.", 409);
     const claimed = previous
       ? await this.db.compareAndSwap<Lease>(
           owner,
@@ -342,8 +342,7 @@ export class ComputerService {
           lease,
         )
       : await this.db.insertIfAbsent(owner, "computer-state", lease);
-    if (!claimed)
-      throw new AppError("Computer is busy. Wait for the current operation to finish.", 409);
+    if (!claimed) throw new AppError("رایانه مشغول است. صبر کنید عملیات فعلی تمام شود.", 409);
     return lease;
   }
   private async exclusive<T>(
@@ -399,7 +398,7 @@ export class ComputerService {
               status: "interrupted",
               completedAt: new Date().toISOString(),
               stderr:
-                "Execution was interrupted. Its outcome is unknown; inspect files before running it again.",
+                "اجرا قطع شد و نتیجه‌اش نامعلوم است؛ پیش از اجرای دوباره، فایل‌ها را بررسی کنید.",
             },
           );
           if (saved) Object.assign(command, saved);
@@ -420,7 +419,7 @@ export class ComputerService {
         ...base,
         status: "unconfigured",
         message:
-          "Enable the Docker computer on the server to use its terminal and workspace files.",
+          "برای استفاده از ترمینال و فایل‌های فضای کاری، رایانهٔ Docker را روی سرور فعال کنید.",
       };
     try {
       return {
@@ -434,7 +433,7 @@ export class ComputerService {
         message:
           error instanceof AppError
             ? error.message
-            : "Computer inspection failed. Check Docker setup.",
+            : "بررسی رایانه ناموفق بود. تنظیمات Docker را بررسی کنید.",
       };
     }
   }
@@ -516,7 +515,7 @@ export class ComputerService {
     let lease = await this.db.get<Lease>(owner, "computer-state", "lease");
     if (!lease || lease.expiresAt <= Date.now()) lease = await this.acquire(owner);
     else if ((lease.operation !== "command" && !lease.stopping) || lease.stopInFlight)
-      throw new AppError("Computer is busy with another operation. Try Stop again shortly.", 409);
+      throw new AppError("رایانه مشغول عملیات دیگری است. کمی بعد دوباره «توقف» را بزنید.", 409);
     const attempt = randomUUID();
     const stopping = await this.db.compareAndSwap<Lease>(
       owner,
@@ -535,7 +534,7 @@ export class ComputerService {
         expiresAt: Date.now() + leaseDuration,
       },
     );
-    if (!stopping) throw new AppError("Computer is busy with another Stop request", 409);
+    if (!stopping) throw new AppError("رایانه در حال انجام درخواست توقف دیگری است", 409);
     try {
       // Record intent before Docker Stop so a concurrently exiting command
       // cannot report success over the user's interruption.
@@ -549,7 +548,7 @@ export class ComputerService {
             {
               status: "interrupted",
               completedAt: new Date().toISOString(),
-              stderr: "Stopped by the user. Inspect the workspace before repeating this command.",
+              stderr: "کاربر آن را متوقف کرد. پیش از تکرار این فرمان، فضای کاری را بررسی کنید.",
             },
           );
       if ((await this.inspect(owner))?.State.Running)
@@ -585,7 +584,7 @@ export class ComputerService {
   private async running(owner: string) {
     this.enabled();
     if (!(await this.inspect(owner))?.State.Running)
-      throw new AppError("Start the computer before using its terminal or files", 409);
+      throw new AppError("پیش از استفاده از ترمینال یا فایل‌ها، رایانه را روشن کنید", 409);
     return computerIdentity(this.config, owner).container;
   }
   async execute(
@@ -602,7 +601,7 @@ export class ComputerService {
     const previous = await this.db.get<ComputerCommand>(owner, "computer-commands", id);
     if (previous) {
       if (previous.command !== args.command || previous.cwd !== cwd)
-        throw new AppError("This operation ID already belongs to a different command", 409);
+        throw new AppError("این شناسهٔ عملیات قبلاً برای فرمان دیگری استفاده شده است", 409);
       await this.commands(owner);
       return (await this.db.get<ComputerCommand>(owner, "computer-commands", id)) ?? previous;
     }
@@ -610,8 +609,7 @@ export class ComputerService {
       owner,
       async (lease) => {
         const container = await this.running(owner);
-        if (options.signal?.aborted)
-          throw new AppError("Computer command was interrupted before execution", 409);
+        if (options.signal?.aborted) throw new AppError("فرمان رایانه پیش از اجرا قطع شد", 409);
         const command: ComputerCommand = {
           id,
           command: args.command,
@@ -626,7 +624,7 @@ export class ComputerService {
         if (!saved) {
           const existing = await this.db.get<ComputerCommand>(owner, "computer-commands", id);
           if (existing) return existing;
-          throw new AppError("Computer receipt could not be saved", 500);
+          throw new AppError("رسید رایانه ذخیره نشد", 500);
         }
         const active = await this.db.get<Lease>(owner, "computer-state", "lease");
         if (
@@ -638,7 +636,7 @@ export class ComputerService {
           return this.db.put(owner, "computer-commands", {
             ...command,
             status: "interrupted",
-            stderr: "Stopped before execution",
+            stderr: "پیش از اجرا متوقف شد",
             completedAt: new Date().toISOString(),
           });
         let result: DockerResult;
@@ -666,7 +664,7 @@ export class ComputerService {
         } catch {
           result = {
             stdout: "",
-            stderr: "Docker execution was interrupted; inspect the workspace before retrying.",
+            stderr: "اجرای Docker قطع شد؛ پیش از تلاش دوباره، فضای کاری را بررسی کنید.",
             exitCode: null,
             interrupted: true,
             timedOut: false,
@@ -758,7 +756,7 @@ export class ComputerService {
   ): Promise<T> {
     const path = workspacePath(rawPath);
     if (text !== undefined && Buffer.byteLength(text) > fileLimit)
-      throw new AppError("Text files must be 256 KB or smaller", 413);
+      throw new AppError("حجم فایل متنی باید حداکثر ۲۵۶ کیلوبایت باشد", 413);
     return this.exclusive(owner, async () => {
       const container = await this.running(owner);
       const result = await this.docker(
@@ -783,13 +781,13 @@ export class ComputerService {
       );
       if (result.exitCode !== 0 || result.timedOut || result.interrupted || result.truncated)
         throw new AppError(
-          "Computer file operation failed. Check the path, permissions and file size; symlinks cannot be opened.",
+          "عملیات فایل رایانه ناموفق بود. مسیر، مجوزها و حجم فایل را بررسی کنید؛ پیوندهای نمادین باز نمی‌شوند.",
           422,
         );
       try {
         return JSON.parse(result.stdout) as T;
       } catch {
-        throw new AppError("Computer returned an invalid file response", 502);
+        throw new AppError("رایانه پاسخ نامعتبری برای فایل برگرداند", 502);
       }
     });
   }
@@ -807,7 +805,7 @@ export class ComputerService {
   }
   async writePdf(owner: string, path: string, bytes: Uint8Array) {
     if (bytes.length > 10 * 1024 * 1024 || Buffer.from(bytes.subarray(0, 5)).toString() !== "%PDF-")
-      throw new AppError("Choose a PDF of 10 MB or smaller", 422);
+      throw new AppError("یک PDF با حجم حداکثر ۱۰ مگابایت انتخاب کنید", 422);
     return this.file<{ path: string }>(
       owner,
       "write_pdf",

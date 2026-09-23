@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Text, View } from "react-native";
 import DateFields from "./DateFields";
 import { isCompleteInstant, localDateTime, zonedInstant } from "./date-time";
+import { toLatinDigits } from "./locale";
 import { colors, s } from "./ui";
 export default function DateTimeEditor({
   label,
@@ -29,10 +30,13 @@ export default function DateTimeEditor({
         setTime(local.time);
       }
     } catch {
-      setError("Choose a valid time zone.");
+      setError("منطقهٔ زمانی معتبری انتخاب کنید.");
     }
   }, [value, timeZone, allDay]);
-  function change(nextDate: string, nextTime: string) {
+  function change(typedDate: string, typedTime: string) {
+    // Users may type Persian digits; machine formats stay ISO with Latin digits.
+    const nextDate = toLatinDigits(typedDate);
+    const nextTime = toLatinDigits(typedTime);
     setDate(nextDate);
     setTime(nextTime);
     setError("");

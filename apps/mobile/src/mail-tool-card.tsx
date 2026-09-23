@@ -3,6 +3,7 @@ import { useContext } from "react";
 import { ActivityIndicator, Text, View } from "react-native";
 import { z } from "zod";
 import { BrowserRunContext } from "./browser-tool-card";
+import { faNumber, fw } from "./locale";
 import { Button, Card, colors, ErrorNotice, s } from "./ui";
 import { useWorkspace } from "./workspace";
 
@@ -50,7 +51,11 @@ export function MailToolCard({
           <Mail size={16} color={colors.muted} />
         )}
         <Text style={s.muted}>
-          {!active ? "Mail reading paused" : search ? "Checking your inbox…" : "Reading the email…"}
+          {!active
+            ? "خواندن ایمیل متوقف شد"
+            : search
+              ? "در حال بررسی صندوق ورودی…"
+              : "در حال خواندن ایمیل…"}
         </Text>
       </View>
     );
@@ -58,16 +63,15 @@ export function MailToolCard({
     const parsed = z
       .object({ matches: z.array(z.object({ id: z.string() })), truncated: z.boolean() })
       .safeParse(value);
-    if (!parsed.success)
-      return <ErrorNotice error="The mailbox did not return readable results." />;
+    if (!parsed.success) return <ErrorNotice error="صندوق ایمیل نتیجهٔ قابل‌خواندنی برنگرداند." />;
     const count = parsed.data.matches.length;
     return (
       <View style={[s.row, { gap: 9, padding: 12 }]}>
         <Search size={16} color={colors.muted} />
         <Text style={s.muted}>
           {count
-            ? `Found ${parsed.data.truncated ? "at least " : ""}${count} ${count === 1 ? "email" : "emails"}`
-            : "No matching emails"}
+            ? `${parsed.data.truncated ? "دست‌کم " : ""}${faNumber(count)} ایمیل پیدا شد`
+            : "ایمیل مطابقی پیدا نشد"}
         </Text>
       </View>
     );
@@ -75,9 +79,9 @@ export function MailToolCard({
   const parsed = z
     .object({ messages: z.array(messageSchema), truncated: z.boolean() })
     .safeParse(value);
-  if (!parsed.success) return <ErrorNotice error="The email could not be displayed." />;
+  if (!parsed.success) return <ErrorNotice error="این ایمیل نمایش داده نشد. دوباره تلاش کنید." />;
   const message = parsed.data.messages.at(-1);
-  if (!message) return <Text style={s.muted}>No messages in this thread.</Text>;
+  if (!message) return <Text style={s.muted}>این رشته پیامی ندارد.</Text>;
   return (
     <Card
       style={{ padding: 18, gap: 14, backgroundColor: "#F0EFF2", maxWidth: 440, width: "100%" }}
@@ -87,22 +91,17 @@ export function MailToolCard({
           <Mail size={20} color={colors.blueDark} />
         </View>
         <View style={{ flex: 1 }}>
-          <Text style={[s.text, { fontWeight: "600" }]}>{message.sender}</Text>
-          <Text style={s.small}>
-            Email ·{" "}
-            {parsed.data.messages.length === 1
-              ? "1 message"
-              : `${parsed.data.messages.length} messages`}
-          </Text>
+          <Text style={[s.text, { ...fw("600") }]}>{message.sender}</Text>
+          <Text style={s.small}>ایمیل · {faNumber(parsed.data.messages.length)} پیام</Text>
         </View>
       </View>
       <Text style={s.heading}>{message.subject}</Text>
       <Text style={s.muted} numberOfLines={3}>
         {message.body}
       </Text>
-      {parsed.data.truncated && <Text style={s.small}>Showing an excerpt of this thread.</Text>}
+      {parsed.data.truncated && <Text style={s.small}>بخشی از این رشته نمایش داده شده است.</Text>}
       <Button small icon={Mail} onPress={() => open({ type: "mail", mail: message })}>
-        Open email
+        باز کردن ایمیل
       </Button>
     </Card>
   );

@@ -1,144 +1,166 @@
-  <div align="center">
+<div dir="rtl">
+
+[English](README.en.md)
+
+<div align="center">
 
 # OpenMuse
 
-**A personal agent with a browser, terminal, files, and work that keeps going. Compatible with any agent harness.**
+**یک دستیار شخصی با مرورگر، ترمینال، فایل‌ها و کاری که ادامه پیدا می‌کند. سازگار با هر چارچوب اجرای عامل.**
 
-Ask for an outcome. Follow the plan, review actions, and come back to the result.
-Built with CopilotKit React Native for iOS, Android, and web.
+نتیجه‌ای را که می‌خواهید بخواهید. برنامه را دنبال کنید، اقدام‌ها را بازبینی کنید و به نتیجه برگردید.
+ساخته‌شده با CopilotKit React Native برای iOS، اندروید و وب.
 
-[Quick start](#quick-start) · [Demo](#demo) · [Features](#features) · [Architecture](#architecture) · [Docs](docs/README.md) · [Contributing](CONTRIBUTING.md)
+[شروع سریع](#شروع-سریع) · [نمایش](#نمایش) · [امکانات](#امکانات) · [معماری](#معماری) · [مستندات](docs/README.md) · [مشارکت](CONTRIBUTING.md)
 
-[![CI](https://github.com/CopilotKit/OpenMuse/actions/workflows/ci.yml/badge.svg)](https://github.com/CopilotKit/OpenMuse/actions/workflows/ci.yml)
+[![CI](https://github.com/omidazg/openmuse/actions/workflows/ci.yml/badge.svg)](https://github.com/omidazg/openmuse/actions/workflows/ci.yml)
 [![MIT license](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-Clone this template and customize it however you want.
+این قالب را کلون کنید و هر طور که می‌خواهید سفارشی کنید.
 
-**[Building on OpenMuse? Meet with the CopilotKit team →](https://www.copilotkit.ai/openmuse)**
+**[روی OpenMuse چیزی می‌سازید؟ با تیم CopilotKit دیدار کنید ←](https://www.copilotkit.ai/openmuse)**
 
-[![OpenMuse 🪁 — Ask it to browse. Watch the 38-second mobile demo.](assets/demos/2026-09-16/mobile.png)](assets/demos/2026-09-16/mobile.mp4)
+[![OpenMuse 🪁: از آن بخواهید مرور کند. نمایش ۳۸ ثانیه‌ای موبایل را ببینید.](assets/demos/2026-09-16/mobile.png)](assets/demos/2026-09-16/mobile.mp4)
 
-**[Watch the mobile demo · 38 seconds](assets/demos/2026-09-16/mobile.mp4)**
+**[تماشای نمایش موبایل · ۳۸ ثانیه](assets/demos/2026-09-16/mobile.mp4)**
 
-[![OpenMuse 🪁 on the web — Watch the 42-second desktop demo.](assets/demos/2026-09-16/web.png)](assets/demos/2026-09-16/web.mp4)
+[![OpenMuse 🪁 در وب: نمایش ۴۲ ثانیه‌ای دسکتاپ را ببینید.](assets/demos/2026-09-16/web.png)](assets/demos/2026-09-16/web.mp4)
 
-**[Watch the web demo · 42 seconds](assets/demos/2026-09-16/web.mp4)**
+**[تماشای نمایش وب · ۴۲ ثانیه](assets/demos/2026-09-16/web.mp4)**
 
 </div>
 
-> **Alpha, for self-hosting and building on.** Open-ended reasoning, live Google accounts, and CopilotKit Rich Threads require their own configuration. See [what is verified](docs/VERIFICATION.md) and the [roadmap](ROADMAP.md).
+> **نسخهٔ آلفا، برای میزبانی شخصی و توسعه روی آن.** استدلال باز، حساب‌های واقعی گوگل و Rich Threads در CopilotKit به پیکربندی جداگانه نیاز دارند. [موارد راستی‌آزمایی‌شده](docs/VERIFICATION.md) و [نقشهٔ راه](ROADMAP.md) را ببینید.
 
-## Demo
+## نمایش
 
-On iPhone, ask OpenMuse to find interesting stories on Hacker News and summarize CopilotKit. On desktop, ask it to check the school-trip email, open the message, and research exhibits at Monterey Bay Aquarium. The agent shows email and browser results inline. **Take control** opens that same browser session when you need it.
+در آیفون، از OpenMuse بخواهید داستان‌های جالب Hacker News را پیدا کند و CopilotKit را خلاصه کند. در دسکتاپ، از آن بخواهید ایمیل اردوی مدرسه را بررسی کند، پیام را باز کند و دربارهٔ نمایشگاه‌های آکواریوم خلیج مانتری تحقیق کند. عامل نتایج ایمیل و مرورگر را درون گفت‌وگو نشان می‌دهد. با **در دست گرفتن کنترل** همان نشست مرورگر هر وقت لازم بود باز می‌شود.
 
-The 38-second iPhone and 42-second desktop web demos show the current interface, framed in 16:9. The send arrow becomes a stop square inside the input pill while the agent replies, then switches back. Stopping keeps your draft intact. See the [recording notes](docs/DEMO.md) for the model setup and reproduction steps.
+نمایش‌های ۳۸ ثانیه‌ای آیفون و ۴۲ ثانیه‌ای وب دسکتاپ، رابط کاربری فعلی را در کادر ۱۶:۹ نشان می‌دهند. هنگام پاسخ‌دادن عامل، فلش ارسال درون کادر ورودی به مربع توقف تبدیل می‌شود و بعد دوباره برمی‌گردد. توقف، پیش‌نویس شما را دست‌نخورده نگه می‌دارد. برای تنظیمات مدل و مراحل بازتولید، [یادداشت‌های ضبط](docs/DEMO.md) را ببینید.
 
-[Mobile MP4](assets/demos/2026-09-16/mobile.mp4) · [Web MP4](assets/demos/2026-09-16/web.mp4) · [Recording details and reproduction](docs/DEMO.md)
+[MP4 موبایل](assets/demos/2026-09-16/mobile.mp4) · [MP4 وب](assets/demos/2026-09-16/web.mp4) · [جزئیات ضبط و بازتولید](docs/DEMO.md)
 
-## What it is
+## OpenMuse چیست
 
-OpenMuse is a personal-agent application with an agent computer, visible work, and rich results. It runs its own server, task worker, and browser worker. You can inspect and change the source under the MIT license.
+OpenMuse یک برنامهٔ دستیار شخصی با رایانهٔ عامل، کار قابل‌مشاهده و نتایج غنی است. سرور، پردازشگر وظایف و کارگر مرورگر خودش را اجرا می‌کند. می‌توانید کد منبع را تحت مجوز MIT بررسی و تغییر دهید.
 
-The computer combines **persistent Chromium and an optional Linux workspace**. The agent can browse public pages, run commands in its own container, work with files, and move PDFs between the computer and the app. You can open its browser or terminal and continue the work. Graphical desktops and autonomous checkout remain future work.
+این رایانه **Chromium ماندگار و یک فضای کاری لینوکسی اختیاری** را ترکیب می‌کند. عامل می‌تواند صفحه‌های عمومی را مرور کند، در کانتینر خودش فرمان اجرا کند، با فایل‌ها کار کند و فایل‌های PDF را بین رایانه و برنامه جابه‌جا کند. شما می‌توانید مرورگر یا ترمینال آن را باز کنید و کار را ادامه دهید. دسکتاپ‌های گرافیکی و پرداخت خودکار از کارهای آینده‌اند.
 
-## Features
+## امکانات
 
-| Surface | What runs in this alpha |
+| بخش | آنچه در این نسخهٔ آلفا اجرا می‌شود |
 | --- | --- |
-| **Chat** | CopilotKit headless chat with streamed AG-UI events, mailbox search and reading, send/stop in one input pill, a visible follow-up queue, retained drafts, delegated tasks, and inline email, browser, PDF, plan, and finance cards. |
-| **Agent computer** | Persistent browser profiles and takeover console; optional isolated Linux terminal, saved command receipts, editable workspace files, and PDF transfer. |
-| **Activity** | Durable task plans, progress, input requests, pause/resume/cancel/retry, approvals, and saved receipts. SQL leases recover interrupted work. |
-| **Ideas** | Suggestions with source evidence; edit, accept, or dismiss. Sent replies and completed matching work are excluded. |
-| **Goals & Tracking** | Goals and milestones; recurring public-page checks for changes, text availability, or USD price thresholds, with deduplicated alerts and failure backoff. |
-| **Documents** | Email attachment → PDF → requested form values → filled copy → reviewed reply → receipt. Native/web PDF viewing, paging, zoom, supported fields, and sharing. |
-| **Finance** | Import transaction CSV to create a spending summary with categories, transactions, and a savings-goal action. |
-| **Gmail & Calendar** | Google OAuth adapters, complete mail threads, drafts/attachments, calendar discovery, and reviewed event creation/update/deletion. Live credentials required. |
-| **Personal context** | Editable name, tone, avatar, and memories. Background-update preferences and durable in-app notifications. |
-| **Rich Threads** | CopilotKit Intelligence persistence for live deployments, with a stable main conversation, side chats, renaming, archiving, restoring, and replay. A server-only project key is required in live mode; sample mode uses local history. |
+| **گفت‌وگو** | گفت‌وگوی بدون‌رابط CopilotKit با رویدادهای جریانی AG-UI، جست‌وجو و خواندن صندوق نامه، ارسال/توقف در یک کادر ورودی، صف پیگیری قابل‌مشاهده، حفظ پیش‌نویس‌ها، وظایف واگذارشده و کارت‌های درون‌خطی ایمیل، مرورگر، PDF، برنامه و امور مالی. |
+| **رایانهٔ عامل** | نمایه‌های ماندگار مرورگر و کنسول در دست گرفتن کنترل؛ ترمینال لینوکسی ایزولهٔ اختیاری، رسیدهای ذخیره‌شدهٔ فرمان‌ها، فایل‌های قابل‌ویرایش فضای کاری و انتقال PDF. |
+| **فعالیت** | برنامه‌های ماندگار وظایف، پیشرفت، درخواست ورودی، مکث/ادامه/لغو/تلاش دوباره، تأییدها و رسیدهای ذخیره‌شده. اجاره‌های SQL کار قطع‌شده را بازیابی می‌کنند. |
+| **ایده‌ها** | پیشنهادها همراه با شواهد منبع؛ ویرایش، پذیرش یا رد. پاسخ‌های ارسال‌شده و کارهای مشابهِ انجام‌شده کنار گذاشته می‌شوند. |
+| **اهداف و پیگیری** | اهداف و نقاط عطف؛ بررسی دوره‌ای صفحه‌های عمومی برای تغییرات، موجودبودن متن یا آستانهٔ قیمت دلاری، با هشدارهای بدون تکرار و تأخیر افزایشی پس از خطا. |
+| **اسناد** | پیوست ایمیل ← PDF ← مقادیر درخواستی فرم ← نسخهٔ پرشده ← پاسخ بازبینی‌شده ← رسید. نمایش PDF بومی/وب، صفحه‌بندی، بزرگ‌نمایی، فیلدهای پشتیبانی‌شده و اشتراک‌گذاری. |
+| **امور مالی** | وارد کردن CSV تراکنش‌ها برای ساخت خلاصهٔ هزینه‌ها با دسته‌بندی‌ها، تراکنش‌ها و اقدام هدف پس‌انداز. |
+| **Gmail و تقویم** | آداپتورهای Google OAuth، رشته‌های کامل نامه، پیش‌نویس‌ها/پیوست‌ها، کشف تقویم و ایجاد/به‌روزرسانی/حذف بازبینی‌شدهٔ رویدادها. به اعتبارنامه‌های واقعی نیاز دارد. |
+| **زمینهٔ شخصی** | نام، لحن، آواتار و خاطره‌های قابل‌ویرایش. ترجیحات به‌روزرسانی پس‌زمینه و اعلان‌های ماندگار درون‌برنامه‌ای. |
+| **Rich Threads** | ماندگاری CopilotKit Intelligence برای استقرارهای واقعی، با گفت‌وگوی اصلی پایدار، گفت‌وگوهای جانبی، تغییر نام، بایگانی، بازیابی و بازپخش. در حالت واقعی به کلید پروژهٔ مخصوص سرور نیاز است؛ حالت نمونه از تاریخچهٔ محلی استفاده می‌کند. |
 
-The [feature inventory](docs/FEATURES.md) describes implemented capabilities and planned extensions. Health/bank/social connectors, device push, voice, generated executable tools, and automatic reservations/payments are on the [roadmap](ROADMAP.md).
+[فهرست امکانات](docs/FEATURES.md) توانایی‌های پیاده‌سازی‌شده و گسترش‌های برنامه‌ریزی‌شده را شرح می‌دهد. اتصال به سلامت/بانک/شبکه‌های اجتماعی، اعلان روی دستگاه، صدا، ابزارهای اجرایی تولیدشده و رزرو/پرداخت خودکار در [نقشهٔ راه](ROADMAP.md) قرار دارند.
 
-## Quick start
+## شروع سریع
 
-**Requirements:** Node 24 LTS and pnpm 11.19.0. The local sample app needs no model, Google account, Docker, or Intelligence subscription.
+**پیش‌نیازها:** Node 24 LTS و pnpm 11.19.0. برنامهٔ نمونهٔ محلی به مدل، حساب گوگل، Docker یا اشتراک Intelligence نیاز ندارد.
+
+<div dir="ltr">
 
 ```sh
-git clone https://github.com/CopilotKit/OpenMuse.git openmuse
+git clone https://github.com/omidazg/openmuse.git openmuse
 cd openmuse
 pnpm install --frozen-lockfile
 cp .env.example .env
 pnpm dev
 ```
 
-In another terminal:
+</div>
+
+در یک ترمینال دیگر:
+
+<div dir="ltr">
 
 ```sh
 pnpm dev:web
 ```
 
-Open [localhost:8081](http://localhost:8081). The API runs at [localhost:8787/api/health](http://localhost:8787/api/health).
+</div>
 
-### Try it
+[localhost:8081](http://localhost:8081) را باز کنید. API در [localhost:8787/api/health](http://localhost:8787/api/health) اجرا می‌شود.
 
-1. In Chat, send **“Complete the permission slip”**. Open the task, supply fictional form values, inspect the saved PDF, and review the prepared reply. This writes only to the local mailbox.
-2. In **Goals → Track**, create a built-in availability watch, then change the built-in test page to trigger an alert.
-3. In **Menu → Delegate task → Finance**, use **Try example transactions** to create an interactive spending tracker.
-4. Start the [browser worker](#browser-worker) and configure a model, then ask **“Check out Hacker News for cool stuff”** or **“Summarize copilotkit.ai”**. Follow the browser inline and use **Take control** to open its session. For a key-free version of this flow, follow the [AI Mock demo setup](docs/DEMO.md#run-the-agent-browser-demo).
+### امتحان کنید
 
-For iOS or Android, use `pnpm --dir apps/mobile ios` or `pnpm --dir apps/mobile android`. Xcode or Android tooling is required. The PDF reader needs an Expo development build; use [native setup](apps/mobile/README.md).
+1. در گفت‌وگو، **«برگهٔ رضایت‌نامه را کامل کن»** را بفرستید. وظیفه را باز کنید، مقادیر فرضی فرم را وارد کنید، PDF ذخیره‌شده را بررسی کنید و پاسخ آماده‌شده را بازبینی کنید. این کار فقط در صندوق نامهٔ محلی می‌نویسد.
+2. در **اهداف ← پیگیری**، یک پایشگر موجودی داخلی بسازید، سپس صفحهٔ آزمایشی داخلی را تغییر دهید تا هشدار فعال شود.
+3. در **منو ← واگذاری وظیفه ← امور مالی**، با **امتحان تراکنش‌های نمونه** یک ردیاب تعاملی هزینه بسازید.
+4. [کارگر مرورگر](#کارگر-مرورگر) را اجرا و یک مدل پیکربندی کنید، سپس بپرسید **«در Hacker News چیزهای جالب پیدا کن»** یا **«copilotkit.ai را خلاصه کن»**. مرورگر را درون گفت‌وگو دنبال کنید و با **در دست گرفتن کنترل** نشست آن را باز کنید. برای نسخهٔ بدون کلید این روند، [راه‌اندازی نمایش AI Mock](docs/DEMO.md#run-the-agent-browser-demo) را دنبال کنید.
 
-## Configure the agent and Google
+برای iOS یا اندروید از `pnpm --dir apps/mobile ios` یا `pnpm --dir apps/mobile android` استفاده کنید. Xcode یا ابزارهای اندروید لازم است. نمایشگر PDF به یک Expo development build نیاز دارد؛ [راه‌اندازی بومی](apps/mobile/README.md) را ببینید.
 
-Copy the commented settings in [.env.example](.env.example) into your private `.env`:
+## پیکربندی عامل و گوگل
 
-1. Set `AGENT_BACKEND=model`, `MODEL=provider/model-id`, and the matching provider key. CopilotKit supports the configured OpenAI, Anthropic or Google provider. Fictional data can still be used with a real model. Provider keys stay on the server.
-2. Create or select a CopilotKit Intelligence project with `npx copilotkit@latest login` and `npx copilotkit@latest project select`. Keep the generated `CPK_INTELLIGENCE_API_KEY` on the server.
-3. For personal mail/calendar, set `WORKSPACE_MODE=live`, the generated `CPK_INTELLIGENCE_API_KEY`, a random `OPENMUSE_ACCESS_KEY` of at least 24 characters, and `TOKEN_ENCRYPTION_KEY` containing 32 random bytes encoded as base64. Restart the API.
-4. Configure a Google OAuth web client with Gmail and Calendar APIs enabled. Set `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`; register `${PUBLIC_API_URL}/api/google/callback` as its redirect URI. Configure consent/test-user access in your Google project.
-5. Open **Apps → Gmail** (or **Google Calendar**), connect read access, and grant write access when needed. Every send or calendar change still requires its own stored review. Changing/disconnecting the account invalidates pending connection-bound work.
+تنظیمات توضیح‌دار موجود در [.env.example](.env.example) را در فایل خصوصی `.env` خود کپی کنید:
 
-Google credentials are encrypted at rest. File URLs and browser consoles use short-lived signatures. This deployment uses one owner protected by a shared access key; it is not a multi-tenant authentication system. Use HTTPS and restricted network access for a remote host. Keep the default local-data mode on loopback.
+1. مقادیر `AGENT_BACKEND=model` و `MODEL=provider/model-id` و کلید ارائه‌دهندهٔ متناظر را تنظیم کنید. CopilotKit از ارائه‌دهندهٔ پیکربندی‌شدهٔ OpenAI، Anthropic یا Google پشتیبانی می‌کند. با مدل واقعی هم می‌توان از داده‌های فرضی استفاده کرد. کلیدهای ارائه‌دهنده روی سرور می‌مانند.
+2. با `npx copilotkit@latest login` و `npx copilotkit@latest project select` یک پروژهٔ CopilotKit Intelligence بسازید یا انتخاب کنید. کلید تولیدشدهٔ `CPK_INTELLIGENCE_API_KEY` را روی سرور نگه دارید.
+3. برای نامه/تقویم شخصی، `WORKSPACE_MODE=live`، کلید تولیدشدهٔ `CPK_INTELLIGENCE_API_KEY`، یک `OPENMUSE_ACCESS_KEY` تصادفی با دست‌کم ۲۴ نویسه و `TOKEN_ENCRYPTION_KEY` شامل ۳۲ بایت تصادفی با کدگذاری base64 را تنظیم کنید. API را دوباره راه‌اندازی کنید.
+4. یک کلاینت وب Google OAuth با APIهای فعال Gmail و Calendar پیکربندی کنید. `GOOGLE_CLIENT_ID` و `GOOGLE_CLIENT_SECRET` را تنظیم کنید و `${PUBLIC_API_URL}/api/google/callback` را به‌عنوان نشانی بازگشت (redirect URI) ثبت کنید. دسترسی رضایت/کاربر آزمایشی را در پروژهٔ گوگل خود پیکربندی کنید.
+5. **برنامه‌ها ← Gmail** (یا **Google Calendar**) را باز کنید، دسترسی خواندن را وصل کنید و در صورت نیاز دسترسی نوشتن بدهید. هر ارسال یا تغییر تقویم همچنان به بازبینی ذخیره‌شدهٔ خودش نیاز دارد. تغییر یا قطع اتصال حساب، کارهای در انتظارِ وابسته به آن اتصال را نامعتبر می‌کند.
 
-## Browser worker
+اعتبارنامه‌های گوگل به‌صورت رمزشده ذخیره می‌شوند. نشانی فایل‌ها و کنسول‌های مرورگر از امضاهای کوتاه‌مدت استفاده می‌کنند. این استقرار یک مالک دارد که با یک کلید دسترسی مشترک محافظت می‌شود؛ یک سامانهٔ احراز هویت چندمستأجری نیست. برای میزبان راه دور از HTTPS و دسترسی شبکهٔ محدود استفاده کنید. حالت پیش‌فرض دادهٔ محلی را روی loopback نگه دارید.
 
-Set `BROWSER_WORKER_URL=http://127.0.0.1:8790` and a random `WORKER_TOKEN` of at least 32 characters in `.env`.
+## کارگر مرورگر
+
+در `.env` مقدار `BROWSER_WORKER_URL=http://127.0.0.1:8790` و یک `WORKER_TOKEN` تصادفی با دست‌کم ۳۲ نویسه را تنظیم کنید.
+
+<div dir="ltr">
 
 ```sh
 pnpm --dir apps/worker exec playwright install chromium
 pnpm dev:browser
 ```
 
-Or use `docker compose --env-file .env -f infra/compose.yaml up --build -d`. The same token must reach the API and worker. Sessions have persistent Chromium profiles; the app can open a live screenshot console and import PDF downloads. Agent tools can read public pages and hand interactive work to the person. [Worker setup and boundaries](apps/worker/README.md).
+</div>
 
-## Persistence and operation
+یا از `docker compose --env-file .env -f infra/compose.yaml up --build -d` استفاده کنید. همان توکن باید به API و کارگر برسد. نشست‌ها نمایه‌های ماندگار Chromium دارند؛ برنامه می‌تواند یک کنسول زندهٔ اسکرین‌شات باز کند و فایل‌های PDF دانلودشده را وارد کند. ابزارهای عامل می‌توانند صفحه‌های عمومی را بخوانند و کار تعاملی را به کاربر بسپارند. [راه‌اندازی کارگر و مرزهای آن](apps/worker/README.md).
 
-### Linux terminal and workspace
+## ماندگاری و بهره‌برداری
 
-Build the computer image, enable it on the API, then open **Computer → Terminal → Start computer**:
+### ترمینال و فضای کاری لینوکس
+
+ایمیج رایانه را بسازید، آن را روی API فعال کنید، سپس **رایانه ← ترمینال ← روشن کردن رایانه** را باز کنید:
+
+<div dir="ltr">
 
 ```sh
 docker build -t openmuse-computer:local apps/computer
 COMPUTER_ENABLED=true pnpm dev
 ```
 
-The API needs access to the Docker CLI and engine. Commands run in a nonroot container with no host-directory mounts or credentials. A named `/workspace` volume retains files when stopped. Terminal networking is disabled; public web access uses the browser worker. Commands have a 30-second limit and saved output/exit receipts. **Files** supports folders, text editing, and PDF transfer to/from Documents. This is a Linux container, not a full operating-system VM. [Setup, Colima option, and boundaries](docs/COMPUTER.md).
+</div>
 
-### Application storage
+API به Docker CLI و موتور آن دسترسی نیاز دارد. فرمان‌ها در یک کانتینر غیرروت بدون اتصال پوشه‌های میزبان یا اعتبارنامه اجرا می‌شوند. یک volume نام‌دار `/workspace` فایل‌ها را پس از توقف نگه می‌دارد. شبکهٔ ترمینال غیرفعال است؛ دسترسی به وب عمومی از طریق کارگر مرورگر انجام می‌شود. فرمان‌ها محدودیت ۳۰ ثانیه‌ای و رسید ذخیره‌شدهٔ خروجی/کد خروج دارند. بخش **فایل‌ها** از پوشه‌ها، ویرایش متن و انتقال PDF به/از اسناد پشتیبانی می‌کند. این یک کانتینر لینوکس است، نه یک ماشین مجازی کامل سیستم‌عامل. [راه‌اندازی، گزینهٔ Colima و مرزها](docs/COMPUTER.md).
 
-By default, embedded PGlite, documents and the signing key live in `.openmuse/`; browser profiles live in `.openmuse/browser-profiles/`. Keep that directory private and back it up. The API hosts the task worker. The host must remain running for background work.
+### ذخیره‌سازی برنامه
 
-For a separate task worker, configure the same `DATABASE_URL`, secrets and shared `DATA_DIR` for both processes, then set `TASK_WORKER_ENABLED=false` on the API and run `pnpm dev:worker`. PGlite cannot be opened by separate processes. Production commands are `pnpm build:server`, `pnpm start` and `pnpm start:worker`. Run one API instance; task workers coordinate through SQL leases.
+به‌طور پیش‌فرض، PGlite تعبیه‌شده، اسناد و کلید امضا در `.openmuse/` و نمایه‌های مرورگر در `.openmuse/browser-profiles/` قرار دارند. این پوشه را خصوصی نگه دارید و از آن پشتیبان بگیرید. API میزبان پردازشگر وظایف است. برای کار پس‌زمینه، میزبان باید روشن بماند.
 
-No hidden retry occurs after an uncertain external write. Review its provider outcome before creating a replacement. Pausing/cancelling prevents subsequent task steps; an already approved in-flight provider request may finish.
+برای پردازشگر وظایف جداگانه، `DATABASE_URL`، رازها و `DATA_DIR` مشترک یکسانی را برای هر دو فرایند پیکربندی کنید، سپس `TASK_WORKER_ENABLED=false` را روی API تنظیم کنید و `pnpm dev:worker` را اجرا کنید. PGlite را نمی‌توان از فرایندهای جداگانه باز کرد. فرمان‌های تولید `pnpm build:server`، `pnpm start` و `pnpm start:worker` هستند. فقط یک نمونه از API اجرا کنید؛ پردازشگرهای وظایف از طریق اجاره‌های SQL هماهنگ می‌شوند.
+
+پس از یک نوشتن خارجی نامطمئن، هیچ تلاش دوبارهٔ پنهانی رخ نمی‌دهد. پیش از ایجاد جایگزین، نتیجهٔ آن را نزد ارائه‌دهنده بازبینی کنید. مکث/لغو از مراحل بعدی وظیفه جلوگیری می‌کند؛ درخواستی که پیش‌تر تأیید شده و در حال اجراست ممکن است به پایان برسد.
 
 ## CopilotKit Rich Threads
 
-Live deployments require `CPK_INTELLIGENCE_API_KEY` on the API server for CopilotKit Intelligence conversation persistence and replay. Create or select a project with `npx copilotkit@latest login` and `npx copilotkit@latest project select`, set the generated server-only key, and restart the API. The native menu uses `useThreads`; rich tool results link back to saved tasks, documents, and browser sessions.
+استقرارهای واقعی برای ماندگاری و بازپخش گفت‌وگو با CopilotKit Intelligence به `CPK_INTELLIGENCE_API_KEY` روی سرور API نیاز دارند. با `npx copilotkit@latest login` و `npx copilotkit@latest project select` یک پروژه بسازید یا انتخاب کنید، کلید تولیدشدهٔ مخصوص سرور را تنظیم کنید و API را دوباره راه‌اندازی کنید. منوی بومی از `useThreads` استفاده می‌کند؛ نتایج غنی ابزارها به وظایف، اسناد و نشست‌های مرورگر ذخیره‌شده پیوند دارند.
 
-Sample mode can leave the key unset and keeps one conversation in the local database. Intelligence is a separate service and is not included in this repository's MIT license. No project key is shipped. [Configuration and validation boundaries](docs/RICH-THREADS.md).
+در حالت نمونه می‌توان کلید را تنظیم نکرد و یک گفت‌وگو در پایگاه دادهٔ محلی نگه داشته می‌شود. Intelligence یک سرویس جداگانه است و مشمول مجوز MIT این مخزن نیست. هیچ کلید پروژه‌ای همراه مخزن ارائه نمی‌شود. [پیکربندی و مرزهای اعتبارسنجی](docs/RICH-THREADS.md).
 
-## Architecture
+## معماری
+
+<div dir="ltr">
 
 ```mermaid
 flowchart TD
@@ -158,22 +180,42 @@ flowchart TD
   API -. future adapter .-> OpenBot[OpenBot]
 ```
 
-| Directory | Purpose |
+</div>
+
+| پوشه | کاربرد |
 | --- | --- |
-| `apps/mobile` | Shared iOS, Android, and web UI with CopilotKit headless hooks. |
-| `apps/server` | API, CopilotKit runtime, identity boundary, task engine, reviews, files, and persistence. |
-| `apps/worker` | Token-protected Playwright browser service with persistent profiles. |
-| `apps/computer` | Nonroot Linux image, bounded filesystem helper, and real container verification. |
-| `packages/domain` | Shared types and request validation. |
-| `packages/integrations` | Google and browser protocol adapters. |
-| `packages/backends` | Optional OpenBot HTTP adapter and its identity boundary. |
-| `tests` | Workflow, runtime, persistence, provider-contract, and authorization tests. |
+| `apps/mobile` | رابط کاربری مشترک iOS، اندروید و وب با هوک‌های بدون‌رابط CopilotKit. |
+| `apps/server` | API، محیط اجرای CopilotKit، مرز هویت، موتور وظایف، بازبینی‌ها، فایل‌ها و ماندگاری. |
+| `apps/worker` | سرویس مرورگر Playwright محافظت‌شده با توکن و نمایه‌های ماندگار. |
+| `apps/computer` | ایمیج لینوکس غیرروت، ابزار کمکی محدود فایل‌سیستم و راستی‌آزمایی کانتینر واقعی. |
+| `packages/domain` | انواع مشترک و اعتبارسنجی درخواست‌ها. |
+| `packages/integrations` | آداپتورهای پروتکل گوگل و مرورگر. |
+| `packages/backends` | آداپتور HTTP اختیاری OpenBot و مرز هویت آن. |
+| `tests` | آزمون‌های روند کار، محیط اجرا، ماندگاری، قرارداد ارائه‌دهنده و مجوزدهی. |
 
-### OpenBot compatibility
+### سازگاری با OpenBot
 
-OpenMuse's native client and personal-agent workflows are independent of OpenBot. The disabled OpenBot adapter is pinned and contract-tested against upstream interfaces. Live user/session bridging, routine mapping, and computer backend wiring remain future work. OpenBot's Intelligence runtime is not a raw AG-UI endpoint. [Integration contract](docs/OPENBOT-INTEGRATION.md).
+کلاینت بومی و روندهای دستیار شخصی OpenMuse مستقل از OpenBot هستند. آداپتور غیرفعال OpenBot روی نسخهٔ مشخصی ثابت شده و در برابر رابط‌های بالادستی آزمون قرارداد دارد. پل‌زدن زندهٔ کاربر/نشست، نگاشت روال‌ها و اتصال پشتیبان رایانه از کارهای آینده‌اند. محیط اجرای Intelligence در OpenBot یک نقطهٔ پایانی خام AG-UI نیست. [قرارداد یکپارچه‌سازی](docs/OPENBOT-INTEGRATION.md).
 
-## Development
+## فارسی‌سازی
+
+این فورک به‌طور کامل برای کاربران فارسی‌زبان بومی‌سازی شده است:
+
+- **رابط کاربری کاملاً فارسی** در iOS، اندروید و وب.
+- **چیدمان راست‌به‌چپ (RTL)** در همهٔ صفحه‌ها؛ آیکون‌های جهت‌دار قرینه می‌شوند و نشانی‌ها، کد و خروجی ترمینال چپ‌به‌راست می‌مانند.
+- **قلم وزیرمتن** (اثر صابر راستی‌کردار، با مجوز SIL Open Font License) که از طریق `@expo-google-fonts/vazirmatn` و `expo-font` بارگذاری می‌شود.
+- **ماژول کمکی `apps/mobile/src/locale.ts`** شامل ثابت `LOCALE="fa-IR"`، تابع `fw()` برای انتخاب وزن قلم (به‌جای `fontWeight`)، توابع `faNumber` و `faDigits` برای نمایش ارقام فارسی، `faDate` و `faDateTime` برای تاریخ هجری خورشیدی، `faMoney` برای مبلغ با واحد پس از عدد («۱۲٬۰۰۰ تومان») و `toLatinDigits` برای تبدیل ارقام فارسی و عربی ورودی کاربر پیش از اعتبارسنجی.
+- **پاسخ‌های عامل به‌طور پیش‌فرض به فارسی** هستند.
+
+قواعد نگارش، چیدمان، اعداد و تاریخ در [docs/persian-rules.md](docs/persian-rules.md) آمده است که بر پایهٔ رهنمودهای [VibeFarsi](https://github.com/TronIsHere/vibafarsiui) نوشته شده. برای آشنایی کوتاه با فارسی‌سازی پروژه، [docs/FA.md](docs/FA.md) را ببینید.
+
+## استقرار روی ابرآروان
+
+برای استقرار OpenMuse روی زیرساخت ابرآروان (ArvanCloud)، راهنمای [deploy/arvan/README.fa.md](deploy/arvan/README.fa.md) را دنبال کنید.
+
+## توسعه
+
+<div dir="ltr">
 
 ```sh
 pnpm lint
@@ -188,10 +230,14 @@ pnpm test:browser
 pnpm test:computer
 ```
 
-Platform build scripts export JavaScript/Hermes bundles; they do not produce signed app binaries. Browser checks require installed Chromium and public fixture access. CI also exercises the browser and Linux computer containers. See [contribution guidance](CONTRIBUTING.md) and [verification results](docs/VERIFICATION.md).
+</div>
 
-## Contributing and license
+اسکریپت‌های ساخت پلتفرم، باندل‌های JavaScript/Hermes را خروجی می‌گیرند و فایل اجرایی امضاشدهٔ برنامه تولید نمی‌کنند. بررسی‌های مرورگر به Chromium نصب‌شده و دسترسی به فیکسچرهای عمومی نیاز دارند. CI کانتینرهای مرورگر و رایانهٔ لینوکسی را هم آزمایش می‌کند. [راهنمای مشارکت](CONTRIBUTING.md) و [نتایج راستی‌آزمایی](docs/VERIFICATION.md) را ببینید.
 
-Issues and pull requests are welcome. Start with [CONTRIBUTING.md](CONTRIBUTING.md), [ROADMAP.md](ROADMAP.md), and the [security policy](SECURITY.md).
+## مشارکت و مجوز
 
-MIT licensed. Built by CopilotKit. Its original interface and fictional assets are included. Website, email, and document content supplies evidence, not permission to act.
+گزارش مشکل (issue) و درخواست ادغام (pull request) پذیرفته می‌شود. با [CONTRIBUTING.md](CONTRIBUTING.md)، [ROADMAP.md](ROADMAP.md) و [سیاست امنیتی](SECURITY.md) شروع کنید.
+
+با مجوز MIT. ساختهٔ CopilotKit؛ این مخزن فورکی از پروژهٔ اصلی [CopilotKit/OpenMuse](https://github.com/CopilotKit/OpenMuse) است و رابط اصلی و دارایی‌های فرضی آن را در بر دارد. محتوای وب‌سایت‌ها، ایمیل‌ها و اسناد فقط شاهد و قرینه فراهم می‌کند، نه اجازهٔ اقدام.
+
+</div>

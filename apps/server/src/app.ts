@@ -48,7 +48,7 @@ export async function createApp(
   const origins = new Set([...config.allowedOrigins, new URL(config.publicUrl).origin]);
   app.use("*", async (c, next) => {
     const origin = c.req.header("origin");
-    if (origin && !origins.has(origin)) return c.json({ error: "Origin is not allowed" }, 403);
+    if (origin && !origins.has(origin)) return c.json({ error: "این مبدأ مجاز نیست" }, 403);
     c.header("X-Content-Type-Options", "nosniff");
     c.header("Referrer-Policy", "no-referrer");
     c.header("Cache-Control", "no-store");
@@ -67,7 +67,8 @@ export async function createApp(
     "*",
     bodyLimit({
       maxSize: 12 * 1024 * 1024,
-      onError: (c) => c.json({ error: "Request is too large; PDFs must be 10 MB or smaller" }, 413),
+      onError: (c) =>
+        c.json({ error: "درخواست خیلی بزرگ است؛ حجم PDF باید حداکثر ۱۰ مگابایت باشد" }, 413),
     }),
   );
   app.onError((error, c) => {
@@ -76,7 +77,7 @@ export async function createApp(
     if (error instanceof AppError) return c.json({ error: error.message }, error.status);
     if (error.name === "PdfError" || error.name === "RecurringEventError")
       return c.json({ error: error.message }, 422);
-    if (error instanceof SyntaxError) return c.json({ error: "Invalid request data" }, 400);
+    if (error instanceof SyntaxError) return c.json({ error: "داده‌های درخواست نامعتبر است" }, 400);
     // Provider and document errors are useful, but raw stack traces and token-bearing responses are not.
     console.error(`[OpenMuse] ${error.name}`);
     return c.json(
@@ -84,7 +85,7 @@ export async function createApp(
         error:
           error.name === "PdfError" || error.name === "GoogleApiError"
             ? error.message
-            : "Request failed. Check the server setup and try again.",
+            : "درخواست ناموفق بود. تنظیمات سرور را بررسی کنید و دوباره تلاش کنید.",
       },
       502,
     );
@@ -105,7 +106,7 @@ export async function createApp(
       loginAttempts = 0;
     }
     if (++loginAttempts > 30)
-      throw new AppError("Too many sign-in attempts. Try again in a minute.", 429);
+      throw new AppError("تلاش‌های ورود بیش از حد بوده است. یک دقیقهٔ دیگر دوباره تلاش کنید.", 429);
     const body = z.object({ accessKey: z.string().optional() }).parse(await c.req.json());
     const session = await auth.session(body.accessKey);
     await workspace.ensureSample("local-user", actions);
@@ -115,13 +116,16 @@ export async function createApp(
   });
   app.get("/api/google/callback", async (c) => {
     if (c.req.query("error"))
-      return c.html("<h1>Google connection cancelled</h1><p>You can return to OpenMuse.</p>", 400);
+      return c.html(
+        '<!doctype html><html lang="fa" dir="rtl"><meta charset="utf-8"><h1>اتصال گوگل لغو شد</h1><p>می‌توانید به OpenMuse برگردید.</p></html>',
+        400,
+      );
     const state = c.req.query("state"),
       code = c.req.query("code");
-    if (!state || !code) throw new AppError("Google callback is incomplete");
+    if (!state || !code) throw new AppError("پاسخ بازگشتی گوگل ناقص است");
     await google.callback(state, code);
     return c.html(
-      "<h1>Google is connected</h1><p>Return to OpenMuse and refresh your workspace.</p>",
+      '<!doctype html><html lang="fa" dir="rtl"><meta charset="utf-8"><h1>گوگل متصل شد</h1><p>به OpenMuse برگردید و فضای کاری خود را تازه کنید.</p></html>',
     );
   });
   app.use("/api/*", async (c, next) => {
@@ -158,7 +162,7 @@ export async function createApp(
       (Date.parse(query.timeMax) <= Date.parse(query.timeMin) ||
         Date.parse(query.timeMax) - Date.parse(query.timeMin) > 366 * 86400000)
     )
-      throw new AppError("Choose a calendar range between one moment and 366 days", 422);
+      throw new AppError("بازهٔ تقویم باید بیشتر از صفر و حداکثر ۳۶۶ روز باشد", 422);
     return c.json(await workspace.events(c.get("owner"), query));
   });
   app.get("/api/mail/threads/:id", async (c) =>
@@ -184,7 +188,7 @@ export async function createApp(
     const existing = body.id
       ? await db.get<{ createdAt: string }>(c.get("owner"), "drafts", body.id)
       : null;
-    if (body.id && !existing) throw new AppError("Draft not found", 404);
+    if (body.id && !existing) throw new AppError("پیش‌نویس پیدا نشد", 404);
     return c.json(
       await db.put(c.get("owner"), "drafts", {
         ...body,
@@ -202,7 +206,7 @@ export async function createApp(
       existing: false,
     });
     const main = await db.get<{ threadId: string }>(owner, "conversation-settings", "main");
-    if (!main) throw new AppError("Main conversation could not be loaded", 503);
+    if (!main) throw new AppError("گفت‌وگوی اصلی بارگیری نشد", 503);
     if (intelligence) {
       try {
         await intelligence.getOrCreateThread({
@@ -212,7 +216,7 @@ export async function createApp(
         });
       } catch {
         throw new AppError(
-          "Main conversation is unavailable. Check the Rich Threads connection and try again.",
+          "گفت‌وگوی اصلی در دسترس نیست. اتصال Rich Threads را بررسی کنید و دوباره تلاش کنید.",
           502,
         );
       }
@@ -232,13 +236,13 @@ export async function createApp(
   app.post("/api/files", async (c) => {
     const data = await c.req.parseBody();
     const file = data.file;
-    if (!(file instanceof File)) throw new AppError("Choose a PDF file");
+    if (!(file instanceof File)) throw new AppError("یک فایل PDF انتخاب کنید");
     return c.json(
       await files.import(
         c.get("owner"),
         file.name,
         new Uint8Array(await file.arrayBuffer()),
-        "Uploaded by you",
+        "بارگذاری‌شده توسط شما",
       ),
       201,
     );
@@ -323,7 +327,7 @@ export async function createApp(
   app.all("/api/copilotkit/*", async (c) => {
     if (!agentConfigured(config))
       throw new AppError(
-        "Configure a model and provider API key, or a valid AG-UI endpoint, to start chat",
+        "برای شروع گفت‌وگو، یک مدل و کلید API ارائه‌دهنده یا یک نقطهٔ پایانی معتبر AG-UI پیکربندی کنید",
         503,
       );
     const response = await runtime.fetch(c.req.raw);

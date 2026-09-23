@@ -21,9 +21,10 @@ export class Files {
     source: string,
     parentId?: string,
   ): Promise<Artifact> {
-    if (bytes.length > 10 * 1024 * 1024) throw new AppError("PDFs must be 10 MB or smaller", 413);
+    if (bytes.length > 10 * 1024 * 1024)
+      throw new AppError("حجم PDF باید حداکثر ۱۰ مگابایت باشد", 413);
     const metadata = await inspectPdf(bytes);
-    if (metadata.pageCount > 500) throw new AppError("PDFs must have 500 pages or fewer", 422);
+    if (metadata.pageCount > 500) throw new AppError("PDF باید حداکثر ۵۰۰ صفحه داشته باشد", 422);
     const id = randomUUID();
     const safeName = Array.from(name.split(/[\\/]/).at(-1) ?? "document.pdf")
       .filter((character) => character.charCodeAt(0) >= 32 && character.charCodeAt(0) !== 127)
@@ -55,7 +56,7 @@ export class Files {
   }
   async get(owner: string, id: string) {
     const file = await this.db.get<Artifact>(owner, "files", id);
-    if (!file) throw new AppError("File not found", 404);
+    if (!file) throw new AppError("فایل پیدا نشد", 404);
     return file;
   }
   async bytes(owner: string, id: string) {
@@ -68,9 +69,9 @@ export class Files {
     const output = await fillPdf(bytes, values);
     return this.import(
       owner,
-      `${file.name.replace(/\.pdf$/i, "")} — filled.pdf`,
+      `${file.name.replace(/\.pdf$/i, "")} (تکمیل‌شده).pdf`,
       output,
-      `Filled from ${file.name}`,
+      `تکمیل‌شده از ${file.name}`,
       id,
     );
   }

@@ -15,12 +15,16 @@ test("calendar time is rendered and entered in the selected named zone", () => {
 test("a zone crossing the UTC date boundary preserves the selected day", () => {
   assert.equal(zonedInstant("2026-09-15", "08:00", "Asia/Tokyo"), "2026-09-14T23:00:00.000Z");
 });
+test("Persian and Arabic-Indic digits typed by the user are accepted", () => {
+  assert.equal(zonedInstant("۲۰۲۶-۰۹-۱۵", "۱۰:۳۰", "UTC"), "2026-09-15T10:30:00.000Z");
+  assert.equal(zonedInstant("٢٠٢٦-٠٩-١٥", "١٠:٣٠", "UTC"), "2026-09-15T10:30:00.000Z");
+});
 test("invalid calendar dates and out-of-range times do not normalize silently", () => {
   assert.throws(() => zonedInstant("2026-02-31", "09:00", "UTC"));
   assert.throws(() => zonedInstant("2026-09-15", "25:00", "UTC"));
 });
 test("a daylight-saving gap cannot become a different appointment time", () => {
-  assert.throws(() => zonedInstant("2026-03-08", "02:30", "America/Los_Angeles"), /does not exist/);
+  assert.throws(() => zonedInstant("2026-03-08", "02:30", "America/Los_Angeles"), /وجود ندارد/);
   assert.equal(
     zonedInstant("2026-03-08", "03:30", "America/Los_Angeles"),
     "2026-03-08T10:30:00.000Z",
