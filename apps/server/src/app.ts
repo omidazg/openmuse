@@ -24,7 +24,9 @@ import { AgentService } from "./engine/service.ts";
 import { AppError } from "./errors.ts";
 import { Files } from "./files.ts";
 import { GoogleAuth } from "./google-auth.ts";
+import { configCatalog, modelOptions, saveSelectedModel, selectedModel } from "./models.ts";
 import { localThreadRoutes, localThreadsEnabled } from "./threads.ts";
+import { transcribeAudio, transcriptionEnabled } from "./transcribe.ts";
 import { WorkspaceService } from "./workspace.ts";
 
 export async function createApp(
@@ -104,6 +106,7 @@ export async function createApp(
       mode: config.mode,
       agentConfigured: agentConfigured(config),
       browserConfigured: Boolean(config.workerUrl && config.workerToken),
+      transcriptionEnabled: transcriptionEnabled(),
     }),
   );
   let loginWindow = 0,
@@ -157,6 +160,22 @@ export async function createApp(
   app.route("/api/bot", botRoutes(db));
   if (localThreads) app.route("/api/threads", localThreadRoutes(db));
   app.route("/api/computer", computerRoutes(computer, files));
+  app.get("/api/models", async (c) => {
+    const catalog = configCatalog(config);
+    return c.json({
+      models: modelOptions(catalog),
+      selected: (await selectedModel(db, catalog, c.get("owner"))) ?? catalog.defaultModel ?? null,
+    });
+  });
+  app.put("/api/models/selected", async (c) => {
+    const body = z.object({ model: z.string().min(1).max(200) }).parse(await c.req.json());
+    const selected = await saveSelectedModel(db, configCatalog(config), c.get("owner"), body.model);
+    return c.json({ selected });
+  });
+  app.post("/api/transcribe", async (c) => {
+    const data = await c.req.parseBody();
+    return c.json({ text: await transcribeAudio(data.file) });
+  });
   app.get("/api/calendars", async (c) => c.json(await workspace.calendars(c.get("owner"))));
   app.get("/api/calendar/events", async (c) => {
     const query = z

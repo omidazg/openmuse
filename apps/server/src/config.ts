@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { applyMetisProvider } from "./metis.ts";
+import { type ModelCatalog, readModelCatalog } from "./models.ts";
 
 if (existsSync(".env")) process.loadEnvFile(".env");
 applyMetisProvider();
@@ -49,6 +50,8 @@ export interface Config {
   userKeys?: UserKey[];
   encryptionKey?: string;
   model?: string;
+  /** MODELS allowlist people can pick from; omitted means MODEL only. */
+  models?: ModelCatalog;
   agentBackend: "sample" | "model" | "agui";
   agentUrl?: string;
   agentToken?: string;
@@ -116,6 +119,7 @@ export function readConfig(): Config {
     userKeys: parseUserKeys(process.env.OPENMUSE_USER_KEYS),
     encryptionKey: process.env.TOKEN_ENCRYPTION_KEY,
     model: process.env.MODEL,
+    models: readModelCatalog(),
     agentBackend: backend,
     agentUrl: process.env.AGENT_URL,
     agentToken: process.env.AGENT_TOKEN,
