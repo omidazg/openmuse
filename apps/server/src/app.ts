@@ -13,6 +13,7 @@ import { emailDraftSchema, proposalSchema } from "../../../packages/domain/src/i
 import { ActionService } from "./actions.ts";
 import { agentConfigured, makeRuntime } from "./agent.ts";
 import { createAuth } from "./auth.ts";
+import { botRoutes } from "./bot/routes.ts";
 import { BrowserService } from "./browser.ts";
 import { ComputerService, type DockerRunner } from "./computer.ts";
 import { computerRoutes } from "./computer-routes.ts";
@@ -153,6 +154,7 @@ export async function createApp(
     return c.json(snapshot);
   });
   app.route("/api/agent", agentRoutes(agent));
+  app.route("/api/bot", botRoutes(db));
   if (localThreads) app.route("/api/threads", localThreadRoutes(db));
   app.route("/api/computer", computerRoutes(computer, files));
   app.get("/api/calendars", async (c) => c.json(await workspace.calendars(c.get("owner"))));

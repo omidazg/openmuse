@@ -14,6 +14,7 @@ import {
   Inbox,
   Link2,
   Mail,
+  MessageCircle,
   Plus,
   Search,
   ShieldCheck,
@@ -42,6 +43,7 @@ import { BRAND } from "../../../packages/domain/src/brand";
 import { API_URL } from "./api";
 import { localDateTime, zonedInstant } from "./date-time";
 import { faDate, faDigits, faNumber, fw } from "./locale";
+import { MessengerLinkPanel } from "./messenger-link";
 import {
   Button,
   Card,
@@ -1247,6 +1249,14 @@ export function ConnectionsScreen({ query = "" }: { query?: string }) {
       group: "browser",
     },
     {
+      id: "messenger",
+      name: "بله و تلگرام",
+      icon: MessageCircle,
+      color: "#2AABEE",
+      connected: false,
+      group: "messenger",
+    },
+    {
       id: "openbot",
       name: "OpenBot",
       icon: Sparkles,
@@ -1331,8 +1341,20 @@ export function ConnectionsScreen({ query = "" }: { query?: string }) {
       )}
       {selected && (
         <Sheet
-          title={selected === "google" ? "اتصال‌های Google" : "OpenBot"}
-          subtitle={selected === "google" ? google?.account : "رایانه‌ای برای دستیار شما"}
+          title={
+            selected === "google"
+              ? "اتصال‌های Google"
+              : selected === "messenger"
+                ? "اتصال به بله/تلگرام"
+                : "OpenBot"
+          }
+          subtitle={
+            selected === "google"
+              ? google?.account
+              : selected === "messenger"
+                ? "گفت‌وگو با دستیار در پیام‌رسان"
+                : "رایانه‌ای برای دستیار شما"
+          }
           onClose={() => setSelected(undefined)}
         >
           {selected === "google" ? (
@@ -1406,6 +1428,8 @@ export function ConnectionsScreen({ query = "" }: { query?: string }) {
                 تازه‌سازی اتصال‌ها
               </Button>
             </View>
+          ) : selected === "messenger" ? (
+            <MessengerLinkPanel />
           ) : (
             <View style={{ gap: 14 }}>
               <Text style={s.text}>
