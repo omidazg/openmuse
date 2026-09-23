@@ -7,7 +7,17 @@ import {
   useRenderTool,
   useRenderToolCall,
 } from "@copilotkit/react-native/headless";
-import { ArrowDown, ArrowUp, FileText, RotateCcw, Square, X } from "lucide-react-native";
+import {
+  ArrowDown,
+  ArrowUp,
+  FileText,
+  type LucideIcon,
+  Pencil,
+  RefreshCw,
+  RotateCcw,
+  Square,
+  X,
+} from "lucide-react-native";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import {
   KeyboardAvoidingView,
@@ -30,6 +40,7 @@ import { ConversationQueue, type QueuedMessage } from "./conversation-queue";
 import { runConversationTurn } from "./conversation-run";
 import { fw } from "./locale";
 import { MailToolCard } from "./mail-tool-card";
+import { CopyButton, Markdown } from "./markdown-view";
 import { ModelPicker } from "./model-picker";
 import { AnswerActions } from "./share-sheet";
 import { FileThreadCard, TaskThreadCard } from "./thread-artifacts";
@@ -214,6 +225,7 @@ export function ChatScreen({
   const [saveError, setSaveError] = useState("");
   const [historyError, setHistoryError] = useState("");
   const [historyAttempt, setHistoryAttempt] = useState(0);
+  const [editing, setEditing] = useState<{ id: string; text: string } | null>(null);
   useEffect(() => {
     if (!isReady) return;
     let active = true;
@@ -361,6 +373,29 @@ export function ChatScreen({
   );
   const visible = messages.filter((m) => m.role === "user" || m.role === "assistant");
   const replying = busy || agent.isRunning;
+  // Rich Threads keep their history on the CopilotKit server, so only locally saved
+  // conversations can be rewound for edit and regenerate.
+  const canRewind =
+    !richThreads && !replying && loaded && isReady && !saveError && !outbox.pending.length;
+  const lastAssistantId = [...visible].reverse().find((m) => m.role === "assistant")?.id;
+  /** Drops everything from `index` on, then answers again (with an edited question if given). */
+  function rewind(index: number, message?: QueuedMessage) {
+    if (!canRewind || index < 0) return;
+    agent.setMessages(messages.slice(0, index));
+    setEditing(null);
+    followLatest.current = true;
+    void run(message).catch((e) => setError(friendlyError(e)));
+  }
+  function regenerate() {
+    rewind(latestUserIndex + 1);
+  }
+  function submitEdit() {
+    if (!editing) return;
+    const text = editing.text.trim();
+    const index = messages.findIndex((m) => m.id === editing.id);
+    if (!text || index < 0) return;
+    rewind(index, { id: `user-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, text });
+  }
   return (
     <View style={{ flex: 1 }}>
       <ScrollView
@@ -446,42 +481,125 @@ export function ChatScreen({
             const user = message.role === "user";
             const text = typeof message.content === "string" ? message.content : "";
             const toolCalls = "toolCalls" in message ? message.toolCalls || [] : [];
+            const editingThis = user && editing?.id === message.id;
             return (
               <View
                 key={message.id}
                 style={{
                   alignSelf: user ? "flex-end" : "flex-start",
                   maxWidth: user ? "85%" : "95%",
-                  width: toolCalls.length ? "95%" : undefined,
+                  width: toolCalls.length || editingThis ? "95%" : undefined,
                   gap: 8,
                 }}
               >
-                {!!text && (
+                {editingThis ? (
                   <View
                     style={{
-                      paddingHorizontal: 16,
-                      paddingVertical: 13,
+                      padding: 10,
+                      gap: 8,
                       borderRadius: 22,
-                      borderBottomEndRadius: user ? 7 : 22,
-                      borderBottomStartRadius: user ? 22 : 7,
-                      backgroundColor: user ? colors.blue : colors.subtle,
+                      borderWidth: 1,
+                      borderColor: colors.blue,
+                      backgroundColor: colors.card,
                     }}
                   >
-                    <Text
-                      selectable
-                      style={[
-                        s.text,
-                        {
-                          fontSize: 16,
-                          lineHeight: 26,
-                          // Mixed Persian/English: follow each message's own direction.
-                          textAlign: "auto",
-                          writingDirection: "auto",
-                        },
-                      ]}
-                    >
-                      {text}
+                    <TextInput
+                      accessibilityLabel="ویرایش پیام"
+                      value={editing.text}
+                      onChangeText={(value) => setEditing({ id: message.id, text: value })}
+                      multiline
+                      autoFocus
+                      selectionColor={colors.blueDark}
+                      style={{
+                        color: colors.text,
+                        minHeight: 60,
+                        maxHeight: 220,
+                        fontSize: 16,
+                        lineHeight: 26,
+                        ...fw("400"),
+                        textAlign: "auto",
+                        writingDirection: "auto",
+                        paddingHorizontal: 6,
+                      }}
+                    />
+                    <Text style={[s.small, { paddingHorizontal: 6 }]}>
+                      با ارسال، پاسخ‌های بعد از این پیام حذف و پاسخ تازه‌ای ساخته می‌شود.
                     </Text>
+                    <View style={[s.row, { gap: 8, justifyContent: "flex-end" }]}>
+                      <Button small onPress={() => setEditing(null)}>
+                        انصراف
+                      </Button>
+                      <Button
+                        small
+                        primary
+                        disabled={!canRewind || !editing.text.trim()}
+                        onPress={submitEdit}
+                      >
+                        ارسال
+                      </Button>
+                    </View>
+                  </View>
+                ) : (
+                  !!text && (
+                    <View
+                      style={{
+                        paddingHorizontal: 16,
+                        paddingVertical: 13,
+                        borderRadius: 22,
+                        borderBottomEndRadius: user ? 7 : 22,
+                        borderBottomStartRadius: user ? 22 : 7,
+                        backgroundColor: user ? colors.blue : colors.subtle,
+                      }}
+                    >
+                      {user ? (
+                        <Text
+                          selectable
+                          style={[
+                            s.text,
+                            {
+                              fontSize: 16,
+                              lineHeight: 26,
+                              // Mixed Persian/English: follow each message's own direction.
+                              textAlign: "auto",
+                              writingDirection: "auto",
+                            },
+                          ]}
+                        >
+                          {text}
+                        </Text>
+                      ) : (
+                        <Markdown text={text} />
+                      )}
+                    </View>
+                  )
+                )}
+                {!!text && !editingThis && (user ? canRewind : true) && (
+                  <View
+                    style={[
+                      s.row,
+                      { gap: 2, marginTop: -4, alignSelf: user ? "flex-end" : "flex-start" },
+                    ]}
+                  >
+                    {user ? (
+                      <MessageAction
+                        icon={Pencil}
+                        label="ویرایش"
+                        onPress={() => setEditing({ id: message.id, text })}
+                      />
+                    ) : (
+                      <>
+                        <CopyButton text={text} label="کپی پاسخ" />
+                        {message.id === lastAssistantId &&
+                          messages.indexOf(message) > latestUserIndex &&
+                          canRewind && (
+                            <MessageAction
+                              icon={RefreshCw}
+                              label="تولید دوباره"
+                              onPress={regenerate}
+                            />
+                          )}
+                      </>
+                    )}
                   </View>
                 )}
                 {!user && !!text && !replying && (
@@ -865,5 +983,37 @@ export function ChatScreen({
         </View>
       </KeyboardAvoidingView>
     </View>
+  );
+}
+/** A quiet text action under a message («ویرایش»، «تولید دوباره»). */
+function MessageAction({
+  icon: Icon,
+  label,
+  onPress,
+}: {
+  icon: LucideIcon;
+  label: string;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      hitSlop={6}
+      onPress={onPress}
+      style={({ pressed }) => [
+        s.row,
+        {
+          gap: 5,
+          paddingHorizontal: 9,
+          paddingVertical: 4,
+          borderRadius: 14,
+          backgroundColor: pressed ? colors.line : "transparent",
+        },
+      ]}
+    >
+      <Icon size={14} color={colors.muted} />
+      <Text style={s.small}>{label}</Text>
+    </Pressable>
   );
 }
