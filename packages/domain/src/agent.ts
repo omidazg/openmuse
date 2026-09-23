@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { parseAmount } from "./index.ts";
+import type { PersonalSettings } from "./personal.ts";
 
 export type TaskStatus =
   | "queued"
@@ -97,6 +98,7 @@ export interface AgentMemory {
   text: string;
   source: string;
   createdAt: string;
+  updatedAt?: string;
 }
 export interface AgentArtifact {
   id: string;
@@ -130,6 +132,8 @@ export interface AgentWorkspace {
   artifacts: AgentArtifact[];
   notifications: AgentNotification[];
   identity: AgentIdentity;
+  /** Memory toggle and custom instructions. */
+  personal: PersonalSettings;
   worker: { running: boolean; lastTickAt?: string };
 }
 export const createTaskSchema = z.object({

@@ -37,6 +37,7 @@ import type { Usage } from "../usage.ts";
 import type { WorkspaceService } from "../workspace.ts";
 import { analyzeSpending, faDate, faNumber } from "./finance.ts";
 import { executeModelTask } from "./model.ts";
+import { readPersonal } from "./personal.ts";
 import { LostLeaseError, type TaskContext, TaskWorker } from "./worker.ts";
 
 const hash = (text: string) => createHash("sha256").update(text).digest("hex");
@@ -150,7 +151,7 @@ export class AgentService {
   }
   async snapshot(owner: string): Promise<AgentWorkspace> {
     await this.ensure(owner);
-    const [tasks, goals, monitors, ideas, memories, artifacts, notifications, identity] =
+    const [tasks, goals, monitors, ideas, memories, artifacts, notifications, identity, personal] =
       await Promise.all([
         this.db.list<AgentTask>(owner, "tasks"),
         this.db.list<Goal>(owner, "goals"),
@@ -160,6 +161,7 @@ export class AgentService {
         this.db.list<AgentArtifact>(owner, "agent-artifacts"),
         this.db.list<AgentNotification>(owner, "notifications"),
         this.db.get<AgentIdentity>(owner, "agent-settings", "identity"),
+        readPersonal(this.db, owner),
       ]);
     const heartbeat = await this.db.get<{ lastTickAt: string }>("system", "worker-status", "tasks");
     return {
@@ -171,6 +173,7 @@ export class AgentService {
       artifacts,
       notifications,
       identity: identity ?? { name: BRAND.nameFa, tone: "warm" },
+      personal,
       worker: {
         running:
           this.worker.running ||

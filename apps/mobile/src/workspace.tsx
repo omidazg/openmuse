@@ -21,6 +21,7 @@ export type Detail =
   | { type: "task"; taskId: string }
   | { type: "delegate" }
   | { type: "notifications" }
+  | { type: "memory" }
   | { type: "computer" }
   | { type: "display" }
   | { type: "menu" };

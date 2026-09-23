@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { z } from "zod";
 import type {
@@ -7,10 +6,22 @@ import type {
   AgentNotification,
 } from "../../../../packages/domain/src/agent.ts";
 import { AppError } from "../errors.ts";
+import {
+  memoryText,
+  personalSettingsSchema,
+  pinPersona,
+  readPersonal,
+  saveMemory,
+  savePersonal,
+  threadPersona,
+} from "./personal.ts";
 import type { AgentService } from "./service.ts";
 
-const text = z.string().trim().min(1).max(4000);
-const memorySchema = z.object({ text, source: z.string().trim().min(1).max(200).optional() });
+const memorySchema = z.object({
+  text: memoryText,
+  source: z.string().trim().min(1).max(200).optional(),
+});
+const threadIdSchema = z.string().regex(/^[\w.@:=-]{1,128}$/, "شناسهٔ گفت‌وگو نامعتبر است");
 const goalPatchSchema = z.object({
   status: z.enum(["active", "paused", "completed"]).optional(),
   milestones: z
@@ -86,14 +97,13 @@ export function agentRoutes(service: AgentService): Hono<{ Variables: { owner: s
   });
   app.post("/memories", async (c) => {
     const body = memorySchema.parse(await c.req.json());
-    const memory: AgentMemory = {
-      id: randomUUID(),
-      text: body.text,
-      source: body.source ?? "شما",
-      createdAt: new Date().toISOString(),
-    };
-    return c.json(await service.db.put(c.get("owner"), "memories", memory), 201);
+    const owner = c.get("owner");
+    return c.json(await saveMemory(service.db, owner, body.text, body.source ?? "شما"), 201);
   });
+  // Registered before /memories/:id so "clear" is never read as a memory id.
+  app.post("/memories/clear", async (c) =>
+    c.json({ ok: true, removed: await service.db.removeAll(c.get("owner"), "memories") }),
+  );
   app.post("/memories/:id", async (c) => {
     const body = memorySchema.parse(await c.req.json());
     const memory = await service.db.compareAndSwap<AgentMemory>(
@@ -101,7 +111,7 @@ export function agentRoutes(service: AgentService): Hono<{ Variables: { owner: s
       "memories",
       c.req.param("id"),
       {},
-      body,
+      { ...body, updatedAt: new Date().toISOString() },
     );
     if (!memory) throw new AppError("این مورد حافظه پیدا نشد. فهرست حافظه را تازه کنید.", 404);
     return c.json(memory);
@@ -110,6 +120,24 @@ export function agentRoutes(service: AgentService): Hono<{ Variables: { owner: s
     if (!(await service.db.take(c.get("owner"), "memories", c.req.param("id"))))
       throw new AppError("این مورد حافظه پیدا نشد. فهرست حافظه را تازه کنید.", 404);
     return c.json({ ok: true });
+  });
+  app.get("/personal", async (c) => c.json(await readPersonal(service.db, c.get("owner"))));
+  app.post("/personal", async (c) => {
+    const body = personalSettingsSchema.parse(await c.req.json());
+    return c.json(await savePersonal(service.db, c.get("owner"), body));
+  });
+  app.get("/threads/:threadId/persona", async (c) => {
+    const threadId = threadIdSchema.parse(c.req.param("threadId"));
+    const persona = await threadPersona(service.db, c.get("owner"), threadId);
+    return c.json({ personaId: persona?.id ?? null });
+  });
+  app.post("/threads/:threadId/persona", async (c) => {
+    const threadId = threadIdSchema.parse(c.req.param("threadId"));
+    const { personaId } = z
+      .object({ personaId: z.string().min(1).max(64) })
+      .parse(await c.req.json());
+    const persona = await pinPersona(service.db, c.get("owner"), threadId, personaId);
+    return c.json({ personaId: persona.id }, 201);
   });
   app.post("/identity", async (c) => {
     const body = z

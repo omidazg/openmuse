@@ -44,6 +44,7 @@ import { fileExtent, isImage, isPdf } from "./file-kind";
 import { faDate, faDateTime, faNumber, LOCALE, toLatinDigits } from "./locale";
 import { OcrCard } from "./ocr";
 import PdfReader from "./PdfReader";
+import { MemorySheet } from "./personal";
 import {
   Button,
   Card,
@@ -150,6 +151,7 @@ export function Details({ detail }: { detail: Detail }) {
   if (detail.type === "task") return <TaskDetail taskId={detail.taskId} />;
   if (detail.type === "delegate") return <DelegateSheet />;
   if (detail.type === "notifications") return <NotificationsSheet />;
+  if (detail.type === "memory") return <MemorySheet />;
   if (detail.type === "mail") return <MailDetail mail={detail.mail} />;
   if (detail.type === "email") return <EmailEditor draft={detail.draft} />;
   if (detail.type === "event")

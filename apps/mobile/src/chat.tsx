@@ -10,6 +10,7 @@ import {
 import {
   ArrowDown,
   ArrowUp,
+  Brain,
   FileText,
   type LucideIcon,
   Pencil,
@@ -31,6 +32,7 @@ import {
 } from "react-native";
 import { z } from "zod";
 import { BRAND } from "../../../packages/domain/src/brand";
+import { findPersona, type Persona } from "../../../packages/domain/src/personal";
 import { ArtifactCard } from "./agent-ui";
 import { useAgentWorkspace } from "./agent-workspace";
 import { friendlyError } from "./api";
@@ -54,6 +56,7 @@ import { MailToolCard } from "./mail-tool-card";
 import { CopyButton, Markdown } from "./markdown-view";
 import { ModelPicker } from "./model-picker";
 import { useRetryOnReconnect } from "./offline";
+import { PersonaBanner } from "./personal";
 import { AnswerActions } from "./share-sheet";
 import { SpeakButton } from "./speech";
 import { starterSuggestions } from "./starter-suggestions";
@@ -135,13 +138,75 @@ export function WorkspaceTools() {
     ),
   });
   useRenderTool({
-    name: "remember_fact",
+    name: "remember",
     parameters: displayParameters,
     render: ({ result, status }) => (
-      <ServerToolCard name="حافظه" section="apps" result={result} loading={status !== "complete"} />
+      <MemoryToolCard result={result} loading={status !== "complete"} />
+    ),
+  });
+  useRenderTool({
+    name: "forget",
+    parameters: displayParameters,
+    render: ({ result, status }) => (
+      <MemoryToolCard forget result={result} loading={status !== "complete"} />
     ),
   });
   return null;
+}
+/** Compact receipt for remember/forget, linking to «حافظه». */
+function MemoryToolCard({
+  result,
+  loading,
+  forget,
+}: {
+  result: unknown;
+  loading: boolean;
+  forget?: boolean;
+}) {
+  const { open } = useWorkspace();
+  let value = result;
+  if (typeof value === "string") {
+    try {
+      value = JSON.parse(value);
+    } catch {
+      value = undefined;
+    }
+  }
+  const parsed = z
+    .object({ text: z.string().optional(), error: z.string().optional() })
+    .safeParse(value);
+  const failure = parsed.success ? parsed.data.error : undefined;
+  return (
+    <Card style={{ padding: 14, gap: 8 }}>
+      <View style={[s.row, { gap: 8 }]}>
+        <Brain size={17} color={colors.muted} />
+        <Text style={[s.text, { flex: 1 }]}>
+          {loading
+            ? forget
+              ? "در حال حذف از حافظه…"
+              : "در حال ذخیره در حافظه…"
+            : failure
+              ? forget
+                ? "حذف از حافظه انجام نشد"
+                : "ذخیره در حافظه انجام نشد"
+              : forget
+                ? "از حافظه حذف شد"
+                : "به خاطر سپردم"}
+        </Text>
+        {!loading && (
+          <Button small onPress={() => open({ type: "memory" })}>
+            حافظه
+          </Button>
+        )}
+      </View>
+      {!loading && !failure && parsed.success && parsed.data.text && (
+        <Text style={[s.small, { textAlign: "auto", writingDirection: "auto" }]}>
+          {parsed.data.text}
+        </Text>
+      )}
+      {failure && <ErrorNotice error={failure} />}
+    </Card>
+  );
 }
 function ServerToolCard({
   name,
@@ -254,6 +319,7 @@ export function ChatScreen({
   const [historyError, setHistoryError] = useState("");
   const [historyAttempt, setHistoryAttempt] = useState(0);
   const [editing, setEditing] = useState<{ id: string; text: string } | null>(null);
+  const persona = useThreadPersona(multiThread ? threadId : undefined);
   useEffect(() => {
     if (!isReady) return;
     let active = true;
@@ -487,182 +553,204 @@ export function ChatScreen({
               gap: 15,
             }}
           >
-            <Text
-              style={{
-                fontSize: 28,
-                lineHeight: 42,
-                ...fw("500"),
-                color: colors.text,
-                textAlign: "center",
-                maxWidth: 350,
-              }}
-            >
-              کمی کمک، و فرصتی بیشتر برای زندگی.
-            </Text>
-            <Text style={[s.muted, { maxWidth: 320, textAlign: "center" }]}>
-              بگویید به چه فکر می‌کنید. می‌توانم برنامه بریزم، با برنامه‌هایتان کار کنم و برای کمک از
-              رایانهٔ خودم استفاده کنم.
-            </Text>
+            {persona ? (
+              <View style={{ width: "100%", maxWidth: 420 }}>
+                <PersonaBanner persona={persona} />
+              </View>
+            ) : (
+              <>
+                <Text
+                  style={{
+                    fontSize: 28,
+                    lineHeight: 42,
+                    ...fw("500"),
+                    color: colors.text,
+                    textAlign: "center",
+                    maxWidth: 350,
+                  }}
+                >
+                  کمی کمک، و فرصتی بیشتر برای زندگی.
+                </Text>
+                <Text style={[s.muted, { maxWidth: 320, textAlign: "center" }]}>
+                  بگویید به چه فکر می‌کنید. می‌توانم برنامه بریزم، با برنامه‌هایتان کار کنم و برای کمک
+                  از رایانهٔ خودم استفاده کنم.
+                </Text>
+              </>
+            )}
             <View style={{ width: "100%", maxWidth: 360, marginTop: 14, gap: 8 }}>
-              {starterSuggestions({ files: w.files, events: w.events }).map((item) => (
-                <Button key={item.id} onPress={() => enqueue(item.prompt)}>
+              {(persona
+                ? persona.starters.map((text) => ({
+                    id: text,
+                    label: text,
+                    action: () => setDraft(text),
+                  }))
+                : starterSuggestions({ files: w.files, events: w.events }).map((item) => ({
+                    id: item.id,
+                    label: item.label,
+                    action: () => enqueue(item.prompt),
+                  }))
+              ).map((item) => (
+                <Button key={item.id} onPress={item.action}>
                   {item.label}
                 </Button>
               ))}
             </View>
           </View>
         ) : (
-          visible.map((message) => {
-            const user = message.role === "user";
-            const text = typeof message.content === "string" ? message.content : "";
-            const toolCalls = "toolCalls" in message ? message.toolCalls || [] : [];
-            const editingThis = user && editing?.id === message.id;
-            return (
-              <View
-                key={message.id}
-                style={{
-                  alignSelf: user ? "flex-end" : "flex-start",
-                  maxWidth: user ? "85%" : "95%",
-                  width: toolCalls.length || editingThis ? "95%" : undefined,
-                  gap: 8,
-                }}
-              >
-                {editingThis ? (
-                  <View
-                    style={{
-                      padding: 10,
-                      gap: 8,
-                      borderRadius: 22,
-                      borderWidth: 1,
-                      borderColor: colors.blue,
-                      backgroundColor: colors.card,
-                    }}
-                  >
-                    <TextInput
-                      accessibilityLabel="ویرایش پیام"
-                      value={editing.text}
-                      onChangeText={(value) => setEditing({ id: message.id, text: value })}
-                      multiline
-                      autoFocus
-                      selectionColor={colors.blueDark}
-                      style={{
-                        color: colors.text,
-                        minHeight: 60,
-                        maxHeight: 220,
-                        fontSize: 16,
-                        lineHeight: 26,
-                        ...fw("400"),
-                        textAlign: "auto",
-                        writingDirection: "auto",
-                        paddingHorizontal: 6,
-                      }}
-                    />
-                    <Text style={[s.small, { paddingHorizontal: 6 }]}>
-                      با ارسال، پاسخ‌های بعد از این پیام حذف و پاسخ تازه‌ای ساخته می‌شود.
-                    </Text>
-                    <View style={[s.row, { gap: 8, justifyContent: "flex-end" }]}>
-                      <Button small onPress={() => setEditing(null)}>
-                        انصراف
-                      </Button>
-                      <Button
-                        small
-                        primary
-                        disabled={!canRewind || !editing.text.trim()}
-                        onPress={submitEdit}
-                      >
-                        ارسال
-                      </Button>
-                    </View>
-                  </View>
-                ) : (
-                  !!text && (
-                    <View
-                      style={{
-                        paddingHorizontal: 16,
-                        paddingVertical: 13,
-                        borderRadius: 22,
-                        borderBottomEndRadius: user ? 7 : 22,
-                        borderBottomStartRadius: user ? 22 : 7,
-                        backgroundColor: user ? colors.blue : colors.subtle,
-                      }}
-                    >
-                      {user ? (
-                        <Text
-                          selectable
-                          style={[
-                            s.text,
-                            {
-                              fontSize: 16,
-                              lineHeight: 26,
-                              // Mixed Persian/English: follow each message's own direction.
-                              textAlign: "auto",
-                              writingDirection: "auto",
-                            },
-                          ]}
-                        >
-                          {text}
-                        </Text>
-                      ) : (
-                        <Markdown text={text} />
-                      )}
-                    </View>
-                  )
-                )}
-                {!!text && !editingThis && (user ? canRewind : true) && (
-                  <View
-                    style={[
-                      s.row,
-                      { gap: 2, marginTop: -4, alignSelf: user ? "flex-end" : "flex-start" },
-                    ]}
-                  >
-                    {user ? (
-                      <MessageAction
-                        icon={Pencil}
-                        label="ویرایش"
-                        onPress={() => setEditing({ id: message.id, text })}
-                      />
-                    ) : (
-                      <>
-                        <CopyButton text={text} label="کپی پاسخ" />
-                        {message.id === lastAssistantId &&
-                          messages.indexOf(message) > latestUserIndex &&
-                          canRewind && (
-                            <MessageAction
-                              icon={RefreshCw}
-                              label="تولید دوباره"
-                              onPress={regenerate}
-                            />
-                          )}
-                      </>
-                    )}
-                  </View>
-                )}
-                {!user && !!text && !replying && (
-                  <AnswerActions thread={selection.id} messageId={message.id} />
-                )}
-                {!user && !!text && !(replying && message === visible.at(-1)) && (
-                  <SpeakButton api={api} text={text} />
-                )}
-                <BrowserRunContext
-                  value={{
-                    running: busy || agent.isRunning,
-                    active:
-                      (busy || agent.isRunning) && messages.indexOf(message) > latestUserIndex,
+          <>
+            {persona && <PersonaBanner persona={persona} />}
+            {visible.map((message) => {
+              const user = message.role === "user";
+              const text = typeof message.content === "string" ? message.content : "";
+              const toolCalls = "toolCalls" in message ? message.toolCalls || [] : [];
+              const editingThis = user && editing?.id === message.id;
+              return (
+                <View
+                  key={message.id}
+                  style={{
+                    alignSelf: user ? "flex-end" : "flex-start",
+                    maxWidth: user ? "85%" : "95%",
+                    width: toolCalls.length || editingThis ? "95%" : undefined,
+                    gap: 8,
                   }}
                 >
-                  {toolCalls.map((toolCall) => {
-                    const toolMessage = messages.find(
-                      (candidate): candidate is ToolMessage =>
-                        candidate.role === "tool" && candidate.toolCallId === toolCall.id,
-                    );
-                    return (
-                      <View key={toolCall.id}>{renderToolCall({ toolCall, toolMessage })}</View>
-                    );
-                  })}
-                </BrowserRunContext>
-              </View>
-            );
-          })
+                  {editingThis ? (
+                    <View
+                      style={{
+                        padding: 10,
+                        gap: 8,
+                        borderRadius: 22,
+                        borderWidth: 1,
+                        borderColor: colors.blue,
+                        backgroundColor: colors.card,
+                      }}
+                    >
+                      <TextInput
+                        accessibilityLabel="ویرایش پیام"
+                        value={editing.text}
+                        onChangeText={(value) => setEditing({ id: message.id, text: value })}
+                        multiline
+                        autoFocus
+                        selectionColor={colors.blueDark}
+                        style={{
+                          color: colors.text,
+                          minHeight: 60,
+                          maxHeight: 220,
+                          fontSize: 16,
+                          lineHeight: 26,
+                          ...fw("400"),
+                          textAlign: "auto",
+                          writingDirection: "auto",
+                          paddingHorizontal: 6,
+                        }}
+                      />
+                      <Text style={[s.small, { paddingHorizontal: 6 }]}>
+                        با ارسال، پاسخ‌های بعد از این پیام حذف و پاسخ تازه‌ای ساخته می‌شود.
+                      </Text>
+                      <View style={[s.row, { gap: 8, justifyContent: "flex-end" }]}>
+                        <Button small onPress={() => setEditing(null)}>
+                          انصراف
+                        </Button>
+                        <Button
+                          small
+                          primary
+                          disabled={!canRewind || !editing.text.trim()}
+                          onPress={submitEdit}
+                        >
+                          ارسال
+                        </Button>
+                      </View>
+                    </View>
+                  ) : (
+                    !!text && (
+                      <View
+                        style={{
+                          paddingHorizontal: 16,
+                          paddingVertical: 13,
+                          borderRadius: 22,
+                          borderBottomEndRadius: user ? 7 : 22,
+                          borderBottomStartRadius: user ? 22 : 7,
+                          backgroundColor: user ? colors.blue : colors.subtle,
+                        }}
+                      >
+                        {user ? (
+                          <Text
+                            selectable
+                            style={[
+                              s.text,
+                              {
+                                fontSize: 16,
+                                lineHeight: 26,
+                                // Mixed Persian/English: follow each message's own direction.
+                                textAlign: "auto",
+                                writingDirection: "auto",
+                              },
+                            ]}
+                          >
+                            {text}
+                          </Text>
+                        ) : (
+                          <Markdown text={text} />
+                        )}
+                      </View>
+                    )
+                  )}
+                  {!!text && !editingThis && (user ? canRewind : true) && (
+                    <View
+                      style={[
+                        s.row,
+                        { gap: 2, marginTop: -4, alignSelf: user ? "flex-end" : "flex-start" },
+                      ]}
+                    >
+                      {user ? (
+                        <MessageAction
+                          icon={Pencil}
+                          label="ویرایش"
+                          onPress={() => setEditing({ id: message.id, text })}
+                        />
+                      ) : (
+                        <>
+                          <CopyButton text={text} label="کپی پاسخ" />
+                          {message.id === lastAssistantId &&
+                            messages.indexOf(message) > latestUserIndex &&
+                            canRewind && (
+                              <MessageAction
+                                icon={RefreshCw}
+                                label="تولید دوباره"
+                                onPress={regenerate}
+                              />
+                            )}
+                        </>
+                      )}
+                    </View>
+                  )}
+                  {!user && !!text && !replying && (
+                    <AnswerActions thread={selection.id} messageId={message.id} />
+                  )}
+                  {!user && !!text && !(replying && message === visible.at(-1)) && (
+                    <SpeakButton api={api} text={text} />
+                  )}
+                  <BrowserRunContext
+                    value={{
+                      running: busy || agent.isRunning,
+                      active:
+                        (busy || agent.isRunning) && messages.indexOf(message) > latestUserIndex,
+                    }}
+                  >
+                    {toolCalls.map((toolCall) => {
+                      const toolMessage = messages.find(
+                        (candidate): candidate is ToolMessage =>
+                          candidate.role === "tool" && candidate.toolCallId === toolCall.id,
+                      );
+                      return (
+                        <View key={toolCall.id}>{renderToolCall({ toolCall, toolMessage })}</View>
+                      );
+                    })}
+                  </BrowserRunContext>
+                </View>
+              );
+            })}
+          </>
         )}
         {!multiThread && (
           <>
@@ -1056,4 +1144,26 @@ function MessageAction({
       <Text style={s.small}>{label}</Text>
     </Pressable>
   );
+}
+/** The ready-made assistant pinned to a conversation, if any (server is the source of truth). */
+function useThreadPersona(threadId: string | undefined): Persona | undefined {
+  const { api } = useWorkspace();
+  const [persona, setPersona] = useState<Persona>();
+  useEffect(() => {
+    setPersona(undefined);
+    if (!threadId) return;
+    let active = true;
+    void api
+      .request<{ personaId: string | null }>(
+        `/api/agent/threads/${encodeURIComponent(threadId)}/persona`,
+      )
+      .then((result) => {
+        if (active) setPersona(findPersona(result.personaId));
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [api, threadId]);
+  return persona;
 }
