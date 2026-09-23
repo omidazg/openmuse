@@ -34,7 +34,7 @@ const missingKeyMessage =
   "THREADS_BACKEND=intelligence requires CPK_INTELLIGENCE_API_KEY for durable Rich Threads. " +
   "Run `npx copilotkit@latest login` and `npx copilotkit@latest project select`, " +
   "then set the generated server-only key, or set THREADS_BACKEND=local to keep threads " +
-  "in OpenMuse's own database. " +
+  "in the app's own database. " +
   "See https://docs.copilotkit.ai/intelligence/connect-your-runtime";
 
 const ENV_KEYS = [

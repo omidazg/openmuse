@@ -1,6 +1,7 @@
 import { statSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { extname, join, resolve, sep } from "node:path";
+import { BRAND } from "../../../packages/domain/src/brand.ts";
 
 type Fetch = (request: Request, ...rest: never[]) => Response | Promise<Response>;
 
@@ -45,7 +46,7 @@ export function withStaticWeb<F extends Fetch>(fetch: F, dir = process.env.WEB_D
   const root = resolve(dir);
   const index = join(root, "index.html");
   if (!isFile(index)) {
-    console.warn(`[OpenMuse] WEB_DIST=${dir} has no index.html; web app is not served`);
+    console.warn(`[${BRAND.name}] WEB_DIST=${dir} has no index.html; web app is not served`);
     return fetch;
   }
   const serve = async (path: string, status = 200, immutable = false) => {

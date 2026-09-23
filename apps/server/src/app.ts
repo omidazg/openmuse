@@ -86,7 +86,7 @@ export async function createApp(
       return c.json({ error: error.message }, 422);
     if (error instanceof SyntaxError) return c.json({ error: "داده‌های درخواست نامعتبر است" }, 400);
     // Provider and document errors are useful, but raw stack traces and token-bearing responses are not.
-    console.error(`[OpenMuse] ${error.name}`);
+    console.error(`[${BRAND.name}] ${error.name}`);
     return c.json(
       {
         error:

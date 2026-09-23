@@ -1,6 +1,8 @@
   <div align="center">
 
-# OpenMuse
+# DastyarGPT
+
+**Your Persian AI assistant.**
 
 **A personal agent with a browser, terminal, files, and work that keeps going. Compatible with any agent harness.**
 
@@ -14,13 +16,13 @@ Built with CopilotKit React Native for iOS, Android, and web.
 
 Clone this template and customize it however you want.
 
-**[Building on OpenMuse? Meet with the CopilotKit team →](https://www.copilotkit.ai/openmuse)**
+**[Building on upstream OpenMuse? Meet with the CopilotKit team →](https://www.copilotkit.ai/openmuse)**
 
-[![OpenMuse 🪁 — Ask it to browse. Watch the 38-second mobile demo.](assets/demos/2026-09-16/mobile.png)](assets/demos/2026-09-16/mobile.mp4)
+[![DastyarGPT 🪁: ask it to browse. Watch the 38-second mobile demo.](assets/demos/2026-09-16/mobile.png)](assets/demos/2026-09-16/mobile.mp4)
 
 **[Watch the mobile demo · 38 seconds](assets/demos/2026-09-16/mobile.mp4)**
 
-[![OpenMuse 🪁 on the web — Watch the 42-second desktop demo.](assets/demos/2026-09-16/web.png)](assets/demos/2026-09-16/web.mp4)
+[![DastyarGPT 🪁 on the web: watch the 42-second desktop demo.](assets/demos/2026-09-16/web.png)](assets/demos/2026-09-16/web.mp4)
 
 **[Watch the web demo · 42 seconds](assets/demos/2026-09-16/web.mp4)**
 
@@ -30,7 +32,7 @@ Clone this template and customize it however you want.
 
 ## Demo
 
-On iPhone, ask OpenMuse to find interesting stories on Hacker News and summarize CopilotKit. On desktop, ask it to check the school-trip email, open the message, and research exhibits at Monterey Bay Aquarium. The agent shows email and browser results inline. **Take control** opens that same browser session when you need it.
+On iPhone, ask DastyarGPT to find interesting stories on Hacker News and summarize CopilotKit. On desktop, ask it to check the school-trip email, open the message, and research exhibits at Monterey Bay Aquarium. The agent shows email and browser results inline. **Take control** opens that same browser session when you need it.
 
 The 38-second iPhone and 42-second desktop web demos show the current interface, framed in 16:9. The send arrow becomes a stop square inside the input pill while the agent replies, then switches back. Stopping keeps your draft intact. See the [recording notes](docs/DEMO.md) for the model setup and reproduction steps.
 
@@ -38,7 +40,7 @@ The 38-second iPhone and 42-second desktop web demos show the current interface,
 
 ## What it is
 
-OpenMuse is a personal-agent application with an agent computer, visible work, and rich results. It runs its own server, task worker, and browser worker. You can inspect and change the source under the MIT license.
+DastyarGPT (دستیار جی‌پی‌تی) is a Persian, right-to-left personal-agent application with an agent computer, visible work, and rich results. It runs its own server, task worker, and browser worker. You can inspect and change the source under the MIT license.
 
 The computer combines **persistent Chromium and an optional Linux workspace**. The agent can browse public pages, run commands in its own container, work with files, and move PDFs between the computer and the app. You can open its browser or terminal and continue the work. Graphical desktops and autonomous checkout remain future work.
 
@@ -171,7 +173,7 @@ flowchart TD
 
 ### OpenBot compatibility
 
-OpenMuse's native client and personal-agent workflows are independent of OpenBot. The disabled OpenBot adapter is pinned and contract-tested against upstream interfaces. Live user/session bridging, routine mapping, and computer backend wiring remain future work. OpenBot's Intelligence runtime is not a raw AG-UI endpoint. [Integration contract](docs/OPENBOT-INTEGRATION.md).
+DastyarGPT's native client and personal-agent workflows are independent of OpenBot. The disabled OpenBot adapter is pinned and contract-tested against upstream interfaces. Live user/session bridging, routine mapping, and computer backend wiring remain future work. OpenBot's Intelligence runtime is not a raw AG-UI endpoint. [Integration contract](docs/OPENBOT-INTEGRATION.md).
 
 ## Development
 
@@ -194,4 +196,4 @@ Platform build scripts export JavaScript/Hermes bundles; they do not produce sig
 
 Issues and pull requests are welcome. Start with [CONTRIBUTING.md](CONTRIBUTING.md), [ROADMAP.md](ROADMAP.md), and the [security policy](SECURITY.md).
 
-MIT licensed. Built by CopilotKit. Its original interface and fictional assets are included. Website, email, and document content supplies evidence, not permission to act.
+MIT licensed. Based on OpenMuse by CopilotKit (MIT): this repository is a fork of [CopilotKit/OpenMuse](https://github.com/CopilotKit/OpenMuse), and its original interface and fictional assets are included. Website, email, and document content supplies evidence, not permission to act.

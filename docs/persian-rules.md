@@ -1,4 +1,4 @@
-# Persian / RTL rules for OpenMuse (قوانین فارسی‌سازی)
+# Persian / RTL rules for DastyarGPT (قوانین فارسی‌سازی)
 
 This product is for Persian (Farsi) speakers in Iran. Apply these rules to every
 file you touch. Based on the VibeFarsi Persian UI guidelines

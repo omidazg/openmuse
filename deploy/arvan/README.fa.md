@@ -1,6 +1,6 @@
-# راه‌اندازی OpenMuse روی ابرآروان
+# راه‌اندازی دستیار جی‌پی‌تی روی ابرآروان
 
-این راهنما OpenMuse را روی **یک سرور ابری ابرآروان (ECC)** با Docker Compose اجرا می‌کند:
+این راهنما دستیار جی‌پی‌تی را روی **یک سرور ابری ابرآروان (ECC)** با Docker Compose اجرا می‌کند:
 
 | سرویس | نقش |
 | --- | --- |
@@ -9,6 +9,8 @@
 | `browser-worker` | مرورگر Playwright ایزوله (همان سخت‌سازی `infra/compose.yaml`) |
 | `postgres` | پایگاه داده (PostgreSQL 17) |
 | `caddy` | HTTPS خودکار (Let's Encrypt) برای `DOMAIN` |
+
+استقرار آزمایشی فعلی با همین راهنما در `https://37-32-27-135.sslip.io` اجرا می‌شود.
 
 فایل‌ها: `Dockerfile` (ریشهٔ مخزن)، `deploy/arvan/compose.yaml`، `Caddyfile`، `env.example`،
 `bootstrap.sh`، `cloud-init.yaml` (فقط مرجع)، `create-server.sh`، `deploy.sh`.

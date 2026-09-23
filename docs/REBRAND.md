@@ -2,7 +2,7 @@
 
 # راهنمای تغییر نام تجاری (Rebrand)
 
-این فورک قرار است نام تازه‌ای بگیرد. برای اینکه تغییر نام «یک‌جایی» باشد، همهٔ متن‌های نمایشی نام از یک فایل خوانده می‌شوند:
+نام تازهٔ این فورک «دستیار جی‌پی‌تی» (لاتین: DastyarGPT) است. برای اینکه تغییر نام «یک‌جایی» باشد، همهٔ متن‌های نمایشی نام از یک فایل خوانده می‌شوند:
 
 **`packages/domain/src/brand.json`** ← فقط همین فایل را برای نام نمایشی ویرایش کنید.
 
@@ -11,36 +11,37 @@
 
 | کلید | کاربرد | مقدار فعلی |
 | --- | --- | --- |
-| `name` | نام لاتین (پرامپت انگلیسی عامل، نویسندهٔ PDF، نام برنامه در Expo) | `OpenMuse` |
-| `nameFa` | نام در متن‌های فارسی رابط کاربری، عنوان وب، صفحهٔ کنسول مرورگر، پیام‌های خطا | `OpenMuse` |
-| `tagline` | شعار فارسی (عنوان وب) | «فضایی کوچک برای همه‌چیز» |
-| `taglineEn` | شعار انگلیسی | `A little room for everything` |
+| `name` | نام لاتین (پرامپت انگلیسی عامل، نویسندهٔ PDF، نام برنامه در Expo) | `DastyarGPT` |
+| `nameFa` | نام در متن‌های فارسی رابط کاربری، عنوان وب، صفحهٔ کنسول مرورگر، پیام‌های خطا | «دستیار جی‌پی‌تی» |
+| `tagline` | شعار فارسی (عنوان وب) | «دستیار هوشمند فارسی برای کارهای روزمره» |
+| `taglineEn` | شعار انگلیسی | `Your Persian AI assistant` |
 | `mascotName` / `mascotNameEn` | نام نماد (متن جایگزین تصویر نماد) | «کاپیبارا» / `capybara` |
 | `attribution` | اعتبار مجوز MIT — **حذف نشود** | `Based on OpenMuse by CopilotKit (MIT)` |
-| `technical.*` | slug، scheme، شناسهٔ بستهٔ iOS/اندروید — **هشدار پایین را بخوانید** | `openmuse` / `app.openmuse.mobile` |
+| `technical.*` | slug، scheme، شناسهٔ بستهٔ iOS/اندروید — **هشدار پایین را بخوانید** | slug و scheme: `dastyargpt`؛ iOS/اندروید: `ir.dastyargpt.app` |
 
-> ⚠️ مقادیر `technical` (slug، URL scheme، `bundleIdentifier`، `package`) هویت برنامه در فروشگاه‌ها و نصب‌های موجود هستند. تغییرشان یعنی یک برنامهٔ جدید: نصب‌های فعلی به‌روزرسانی نمی‌گیرند و پیوندهای عمیق (`openmuse://…`) و بازگشت OAuth از کار می‌افتند.
+> ⚠️ مقادیر `technical` (slug، URL scheme، `bundleIdentifier`، `package`) هویت برنامه در فروشگاه‌ها و نصب‌های موجود هستند. تغییرشان یعنی یک برنامهٔ جدید: نصب‌های فعلی به‌روزرسانی نمی‌گیرند و پیوندهای عمیق (`openmuse://…`) و بازگشت OAuth از کار می‌افتند. این مقادیر در بازنام‌گذاری به «دستیار جی‌پی‌تی» عمداً عوض شدند (`dastyargpt://…`، `ir.dastyargpt.app`)؛ پس نصب‌ها و پیوندهای عمیق قبلی `openmuse` دیگر به این برنامه نمی‌رسند.
 
 ## چک‌لیست هنگام انتخاب نام
 
 ### الف) نمایشی (امن، بدون شکستن چیزی)
 
-- [ ] `name`، `nameFa`، `tagline`، `taglineEn` را در `packages/domain/src/brand.json` عوض کنید.
+- [x] `name`، `nameFa`، `tagline`، `taglineEn` را در `packages/domain/src/brand.json` عوض کنید.
 - [ ] اگر نماد عوض می‌شود: `mascotName`/`mascotNameEn` و تصویر `apps/mobile/assets/capybara.png` (و `apps/mobile/assets/README.md` دربارهٔ منشأ تصویر).
 - [ ] آیکون برنامه، splash و favicon وب (فعلاً پیش‌فرض Expo؛ در `app.config.ts` فیلدهای `icon`، `splash`، `web.favicon` را اضافه کنید).
-- [ ] متن‌های سخت‌کد در فایل‌هایی که هنگام این کار در دست عامل‌های دیگر بودند (جدول «باقی‌مانده‌ها» پایین) را به `BRAND` وصل کنید.
+- [x] متن‌های سخت‌کد در فایل‌هایی که هنگام این کار در دست عامل‌های دیگر بودند (جدول «باقی‌مانده‌ها» پایین) را به `BRAND` وصل کنید.
 - [ ] شعارهای جانبی هم‌خانوادهٔ برند را بازبینی کنید (عمداً ثابت ماندند): «فضایی کوچک برای روزتان.» در صفحهٔ خوش‌آمد (`apps/mobile/App.tsx`) و «فضایی کوچک برای ساختن» در `apps/mobile/src/computer-workspace.tsx`.
-- [ ] مستندات: `README.md`، `README.en.md`، `docs/*.md` (FA، README، COMPUTER، DEMO، EXPERIENCE، FEATURES، RICH-THREADS، VERIFICATION، OPENBOT-INTEGRATION، persian-rules)، `apps/mobile/README.md`، `apps/worker/README.md`، `deploy/arvan/README.fa.md`، `SECURITY.md`، `CONTRIBUTING.md`، `ROADMAP.md`، قالب‌های `.github/ISSUE_TEMPLATE/*`.
-- [ ] نشان‌های README (نشان CI به `github.com/omidazg/openmuse`)، تصاویر و متن جایگزین دموها (`OpenMuse 🪁`)، و پیوند «با تیم CopilotKit دیدار کنید».
-- [ ] پیام‌های لاگ سرور (`[OpenMuse]`، «OpenMuse … API ready»، «OpenMuse task worker running»، «OpenMuse browser worker…») — اگر داشبورد/هشداری روی این متن‌ها فیلتر می‌کند، هم‌زمان به‌روز کنید.
+- [x] مستندات: `README.md`، `README.en.md`، `docs/*.md` (FA، README، COMPUTER، DEMO، EXPERIENCE، FEATURES، RICH-THREADS، VERIFICATION، OPENBOT-INTEGRATION، persian-rules)، `apps/mobile/README.md`، `apps/worker/README.md`، `deploy/arvan/README.fa.md`، `SECURITY.md`، `CONTRIBUTING.md`، `ROADMAP.md`، `AGENTS.md`، `CLAUDE.md`. پیوندهای پروژهٔ بالادستی (`CopilotKit/OpenMuse`) و `CHANGELOG.md` عمداً بدون تغییر ماندند.
+- [x] قالب‌های `.github/ISSUE_TEMPLATE/*`.
+- [x] نشان‌های README (نشان CI به `github.com/omidazg/openmuse`)، تصاویر و متن جایگزین دموها (`OpenMuse 🪁`)، و پیوند «با تیم CopilotKit دیدار کنید».
+- [x] پیام‌های لاگ سرور (پیش‌تر `[OpenMuse]`، «OpenMuse … API ready»، «OpenMuse task worker running»، «OpenMuse browser worker…») اکنون پیشوند خود را از `BRAND.name` می‌گیرند (`[DastyarGPT]`). اگر داشبورد یا هشداری روی این متن‌ها فیلتر می‌کند، آن را هم به‌روز کنید.
 
 ### ب) اعتبار مجوز (الزامی)
 
-- [ ] در `README.md`، `README.en.md` و `LICENSE` اعتبار «بر پایهٔ OpenMuse ساختهٔ CopilotKit» و متن کامل مجوز MIT باید بماند. خط کپی‌رایت موجود (`Copyright (c) 2026 OpenMuse contributors`) را **حذف نکنید**؛ در صورت نیاز یک خط کپی‌رایت برای نام جدید **اضافه** کنید.
+- [x] در `README.md`، `README.en.md` و `LICENSE` اعتبار «بر پایهٔ OpenMuse ساختهٔ CopilotKit» و متن کامل مجوز MIT باید بماند. خط کپی‌رایت موجود (`Copyright (c) 2026 OpenMuse contributors`) را **حذف نکنید**؛ در صورت نیاز یک خط کپی‌رایت برای نام جدید **اضافه** کنید.
 
 ### ج) فنی (می‌شکند؛ فقط با برنامهٔ مهاجرت)
 
-- [ ] **شناسه‌های برنامه** (`technical` در `brand.json`): slug `openmuse`، scheme `openmuse`، `app.openmuse.mobile` برای iOS/اندروید. تغییر = برنامهٔ جدید در App Store/Play، از دست رفتن پیوندهای عمیق و نیاز به ثبت دوبارهٔ Redirect URIهای OAuth.
+- [x] **شناسه‌های برنامه** (`technical` در `brand.json`): پیش‌تر slug `openmuse`، scheme `openmuse`، `app.openmuse.mobile`؛ اکنون slug و scheme `dastyargpt` و `ir.dastyargpt.app` برای iOS/اندروید. تغییر = برنامهٔ جدید در App Store/Play، از دست رفتن پیوندهای عمیق و نیاز به ثبت دوبارهٔ Redirect URIهای OAuth.
 - [ ] **نام بسته‌ها**: `openmuse` (ریشه، و `--filter openmuse` در `Dockerfile`)، `@openmuse/mobile`، `@openmuse/browser-worker`، مسیر `@openmuse/domain` در `apps/mobile/tsconfig.json`.
 - [ ] **متغیرهای محیطی**: `OPENMUSE_ACCESS_KEY` (در `apps/server/src/config.ts`، `.env.example`، `deploy/arvan/env.example`، `deploy/arvan/compose.yaml`، READMEها)، `OPENMUSE_TEST_SECRET` (آزمون‌ها). برای تغییر، مدتی هر دو نام را بپذیرید.
 - [ ] **پایگاه داده و دادهٔ روی دیسک**: کاربر/پایگاه Postgres `openmuse` در `deploy/arvan/compose.yaml`؛ پوشهٔ داده `.openmuse/` (`DATA_DIR`، `WORKER_DATA_DIR`، `.gitignore`، `.dockerignore`، `biome.json`). تغییر بدون مهاجرت = از دست رفتن داده.

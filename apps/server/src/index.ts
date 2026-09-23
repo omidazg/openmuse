@@ -1,4 +1,5 @@
 import { serve } from "@hono/node-server";
+import { BRAND } from "../../../packages/domain/src/brand.ts";
 import { createApp } from "./app.ts";
 import { assertApiDeploymentConfig, readConfig } from "./config.ts";
 import { createStore } from "./db.ts";
@@ -15,7 +16,7 @@ const { app, agent } = await createApp(db, config);
 if (config.taskWorkerEnabled) agent.start();
 const server = serve(
   { fetch: withStaticWeb(app.fetch), port: config.port, hostname: config.host },
-  () => console.log(`OpenMuse ${config.mode} API ready at ${config.publicUrl}`),
+  () => console.log(`${BRAND.name} ${config.mode} API ready at ${config.publicUrl}`),
 );
 const shutdown = () => {
   server.close(() => {

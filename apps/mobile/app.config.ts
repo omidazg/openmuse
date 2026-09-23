@@ -4,7 +4,7 @@ import type { ExpoConfig } from "expo/config";
 import brand from "../../packages/domain/src/brand.json";
 
 const config: ExpoConfig = {
-  name: brand.name,
+  name: brand.nameFa,
   // Technical identifiers: changing slug/scheme/bundle ids breaks existing installs,
   // deep links and store listings. Keep them stable unless deliberately migrating.
   slug: brand.technical.slug,
@@ -22,7 +22,7 @@ const config: ExpoConfig = {
   },
   web: {
     bundler: "metro",
-    name: `${brand.nameFa} — ${brand.tagline}`,
+    name: `${brand.nameFa} | ${brand.tagline}`,
     shortName: brand.nameFa,
     lang: "fa",
     dir: "rtl",

@@ -124,7 +124,7 @@ export default function App() {
             >
               به {BRAND.nameFa} خوش آمدید.
             </Text>
-            <Text style={[s.muted, { textAlign: "center" }]}>فضایی کوچک برای روزتان.</Text>
+            <Text style={[s.muted, { textAlign: "center" }]}>{BRAND.tagline}.</Text>
             {busy ? (
               <ActivityIndicator color={colors.blueDark} />
             ) : (

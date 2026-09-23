@@ -1,3 +1,4 @@
+import { BRAND } from "../../../packages/domain/src/brand.ts";
 import { createApp } from "./app.ts";
 import { readConfig } from "./config.ts";
 import { createStore } from "./db.ts";
@@ -10,7 +11,7 @@ if (!config.databaseUrl)
 const db = await createStore({ databaseUrl: config.databaseUrl });
 const { agent } = await createApp(db, config);
 agent.start();
-console.log("OpenMuse task worker running");
+console.log(`${BRAND.name} task worker running`);
 let stopping = false;
 const stop = async () => {
   if (stopping) return;
