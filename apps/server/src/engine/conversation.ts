@@ -256,7 +256,17 @@ export class ConversationAgent extends AbstractAgent {
     return new Observable((subscriber) => {
       const subscription = agent
         .run({ ...input, tools: input.tools.filter((t) => t.name === "open_workspace") })
-        .subscribe(subscriber);
+        .subscribe({
+          next: (event) => {
+            if (event.type === EventType.RUN_FINISHED)
+              void this.service.usage
+                ?.recordModelRun(this.owner, (event as { usage?: unknown }).usage)
+                .catch(() => undefined);
+            subscriber.next(event);
+          },
+          error: (error) => subscriber.error(error),
+          complete: () => subscriber.complete(),
+        });
       return () => {
         browserAbort.abort();
         agent.abortRun();

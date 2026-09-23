@@ -11,25 +11,30 @@ import { z } from "zod";
 import { BRAND } from "../../../packages/domain/src/brand.ts";
 import { emailDraftSchema, proposalSchema } from "../../../packages/domain/src/index.ts";
 import { ActionService } from "./actions.ts";
+import { adminRoutes } from "./admin-routes.ts";
 import { agentConfigured, makeRuntime } from "./agent.ts";
 import { createAuth } from "./auth.ts";
 import { BrowserService } from "./browser.ts";
 import { ComputerService, type DockerRunner } from "./computer.ts";
 import { computerRoutes } from "./computer-routes.ts";
-import { type Config, threadsBackend } from "./config.ts";
+import { type Config, otpEnabled, threadsBackend } from "./config.ts";
 import type { Store } from "./db.ts";
 import { agentRoutes } from "./engine/routes.ts";
 import { AgentService } from "./engine/service.ts";
 import { AppError } from "./errors.ts";
 import { Files } from "./files.ts";
 import { GoogleAuth } from "./google-auth.ts";
+import { OtpService } from "./otp.ts";
+import { clientIp, RateLimiter } from "./rate-limit.ts";
 import { localThreadRoutes, localThreadsEnabled } from "./threads.ts";
+import { Usage } from "./usage.ts";
+import { publicUser, type Role } from "./users.ts";
 import { WorkspaceService } from "./workspace.ts";
 
 export async function createApp(
   db: Store,
   config: Config,
-  options: { docker?: DockerRunner } = {},
+  options: { docker?: DockerRunner; fetch?: typeof fetch } = {},
 ) {
   const auth = await createAuth(db, config),
     files = new Files(db, config, auth),
@@ -45,13 +50,17 @@ export async function createApp(
   const browser = new BrowserService(db, config, auth, files);
   const computer = new ComputerService(db, config, options.docker);
   const agent = new AgentService(db, config, workspace, files, actions, browser, computer);
+  const users = auth.users;
+  const usage = new Usage(db, config, users);
+  agent.usage = usage;
+  const otp = new OtpService(db, config, users, auth, options.fetch);
   const intelligence =
     threadsBackend(config) === "intelligence" && config.intelligenceApiKey?.trim()
       ? new CopilotKitIntelligence({ apiKey: config.intelligenceApiKey })
       : undefined;
   const localThreads = localThreadsEnabled(config);
   const runtime = makeRuntime(config, agent, auth, intelligence);
-  const app = new Hono<{ Variables: { owner: string } }>();
+  const app = new Hono<{ Variables: { owner: string; role: Role } }>();
   const origins = new Set([...config.allowedOrigins, new URL(config.publicUrl).origin]);
   app.use("*", async (c, next) => {
     const origin = c.req.header("origin");
@@ -103,22 +112,40 @@ export async function createApp(
       mode: config.mode,
       agentConfigured: agentConfigured(config),
       browserConfigured: Boolean(config.workerUrl && config.workerToken),
+      otpEnabled: otpEnabled(config),
     }),
   );
-  let loginWindow = 0,
-    loginAttempts = 0;
-  app.post("/api/session", async (c) => {
-    if (Date.now() - loginWindow > 60000) {
-      loginWindow = Date.now();
-      loginAttempts = 0;
-    }
-    if (++loginAttempts > 30)
-      throw new AppError("تلاش‌های ورود بیش از حد بوده است. یک دقیقهٔ دیگر دوباره تلاش کنید.", 429);
-    const body = z.object({ accessKey: z.string().optional() }).parse(await c.req.json());
-    const { owner, ...session } = await auth.session(body.accessKey);
+  // Key logins: 10 attempts per client address every 10 minutes, plus a global safety cap.
+  const loginsPerIp = new RateLimiter(10, 10 * 60 * 1000);
+  const loginsGlobal = new RateLimiter(120, 60 * 1000);
+  const opened = async (owner: string) => {
     await workspace.ensureSample(owner, actions);
     await agent.ensure(owner);
     if (config.mode === "sample") await agent.refreshIdeas(owner);
+  };
+  app.post("/api/session", async (c) => {
+    const body = z.object({ accessKey: z.string().max(512).optional() }).parse(await c.req.json());
+    // A keyless probe cannot guess anything, so only real key attempts count.
+    if (body.accessKey && config.mode === "live") {
+      if (!loginsGlobal.take("all"))
+        throw new AppError("تلاش‌های ورود بیش از حد بوده است. یک دقیقهٔ دیگر دوباره تلاش کنید.", 429);
+      if (!loginsPerIp.take(clientIp(c)))
+        throw new AppError("تلاش‌های ورود بیش از حد بوده است. ده دقیقهٔ دیگر دوباره تلاش کنید.", 429);
+    }
+    const { owner, ...session } = await auth.session(body.accessKey);
+    await opened(owner);
+    return c.json(session);
+  });
+  app.post("/api/otp/request", async (c) => {
+    const body = z.object({ phone: z.string().max(32) }).parse(await c.req.json());
+    return c.json(await otp.request(body.phone, clientIp(c)));
+  });
+  app.post("/api/otp/verify", async (c) => {
+    const body = z
+      .object({ phone: z.string().max(32), code: z.string().max(16) })
+      .parse(await c.req.json());
+    const { owner, ...session } = await otp.verify(body.phone, body.code, clientIp(c));
+    await opened(owner);
     return c.json(session);
   });
   app.get("/api/google/callback", async (c) => {
@@ -140,13 +167,33 @@ export async function createApp(
       /^\/api\/files\/[^/]+\/content$|^\/api\/browsers\/[^/]+\/(?:preview|console)$/.test(
         c.req.path,
       );
-    const owner =
-      signedRoute && c.req.query("signature")
-        ? auth.verify(new URL(c.req.url))
-        : await auth.owner(c.req.header("authorization"));
-    c.set("owner", owner);
+    if (signedRoute && c.req.query("signature")) {
+      c.set("owner", auth.verify(new URL(c.req.url)));
+      c.set("role", "user");
+    } else {
+      const identity = await auth.identity(c.req.header("authorization"));
+      c.set("owner", identity.owner);
+      c.set("role", identity.role);
+    }
     await next();
   });
+  app.delete("/api/session", async (c) => {
+    await auth.end(c.req.header("authorization"));
+    return c.json({ ok: true });
+  });
+  app.get("/api/me", async (c) => {
+    const owner = c.get("owner");
+    const user = await users.get(owner);
+    return c.json({
+      owner,
+      role: c.get("role"),
+      user: user ? publicUser(user) : null,
+      usage: await usage.today(owner),
+      limits: await usage.limits(owner),
+      otpEnabled: otpEnabled(config),
+    });
+  });
+  app.route("/api/admin", adminRoutes(users, usage, config));
   app.get("/api/workspace", async (c) => {
     const snapshot = await workspace.snapshot(c.get("owner"), c.req.query("q"));
     snapshot.browsers = snapshot.browsers.map((s) => browser.decorate(c.get("owner"), s));
@@ -338,6 +385,7 @@ export async function createApp(
         "برای شروع گفت‌وگو، یک مدل و کلید API ارائه‌دهنده یا یک نقطهٔ پایانی معتبر AG-UI پیکربندی کنید",
         503,
       );
+    if (await isAgentRun(c.req.raw)) await usage.consume(c.get("owner"), "messages");
     const response = await runtime.fetch(c.req.raw);
     // Runtime 1.70 emits SSE strings; a WHATWG Response body requires byte chunks.
     const encoder = new TextEncoder();
@@ -353,5 +401,19 @@ export async function createApp(
   app.get("/", (c) =>
     c.json({ name: BRAND.name, app: "http://localhost:8081", health: "/api/health" }),
   );
-  return { app, auth, files, actions, workspace, agent, computer };
+  return { app, auth, files, actions, workspace, agent, computer, usage, users, otp };
+}
+
+/** A chat turn: REST `POST …/agent/:id/run` or a single-endpoint `{"method":"agent/run"}` call. */
+async function isAgentRun(request: Request) {
+  if (request.method !== "POST") return false;
+  const path = new URL(request.url).pathname;
+  if (/\/agent\/[^/]+\/run$/.test(path)) return true;
+  if (!/^\/api\/copilotkit\/?$/.test(path)) return false;
+  try {
+    const body = (await request.clone().json()) as { method?: unknown };
+    return body?.method === "agent/run";
+  } catch {
+    return false;
+  }
 }

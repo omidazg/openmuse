@@ -32,6 +32,7 @@ import type { Store } from "../db.ts";
 import { AppError } from "../errors.ts";
 import type { Files } from "../files.ts";
 import { backgroundFailure } from "../log.ts";
+import type { Usage } from "../usage.ts";
 import type { WorkspaceService } from "../workspace.ts";
 import { analyzeSpending, faDate, faNumber } from "./finance.ts";
 import { executeModelTask } from "./model.ts";
@@ -59,6 +60,8 @@ const conditionLabels: Record<Monitor["condition"], string> = {
 };
 export class AgentService {
   readonly worker: TaskWorker;
+  /** Daily usage metering and quotas; absent in isolated engine tests. */
+  usage?: Usage;
   private maintenance?: ReturnType<typeof setInterval>;
   private refreshing = false;
   constructor(
@@ -202,6 +205,7 @@ export class AgentService {
     const id = idempotencyKey ? hash(`task:${idempotencyKey}`) : randomUUID();
     const existing = await this.db.get<AgentTask>(owner, "tasks", id);
     if (existing) return existing;
+    await this.usage?.consume(owner, "tasks");
     if (
       (await this.db.list<AgentTask>(owner, "tasks")).filter((t) => !terminal.has(t.status))
         .length >= 100

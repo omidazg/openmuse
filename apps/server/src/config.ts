@@ -65,6 +65,28 @@ export interface Config {
   computerImage?: string;
   computerDeploymentId?: string;
   allowedOrigins: string[];
+  /** Default daily chat turns per non-admin user (0 = unlimited). */
+  dailyMessageLimit?: number;
+  /** Default daily new tasks per non-admin user (0 = unlimited). */
+  dailyTaskLimit?: number;
+  /** SMS login via Kavenegar Verify Lookup; enabled only when both are set. */
+  kavenegarApiKey?: string;
+  kavenegarTemplate?: string;
+  /** Unknown phone numbers create a free user on first successful OTP login. */
+  otpSignup?: boolean;
+}
+
+export function otpEnabled(config: Pick<Config, "kavenegarApiKey" | "kavenegarTemplate">) {
+  return Boolean(config.kavenegarApiKey?.trim() && config.kavenegarTemplate?.trim());
+}
+
+function readLimit(name: string, fallback: number) {
+  const raw = process.env[name]?.trim();
+  if (!raw) return fallback;
+  const value = Number(raw);
+  if (!Number.isInteger(value) || value < 0)
+    throw new Error(`${name} must be a whole number (0 = unlimited)`);
+  return value;
 }
 
 export type ThreadsBackend = "local" | "intelligence";
@@ -133,6 +155,11 @@ export function readConfig(): Config {
     allowedOrigins: (
       process.env.ALLOWED_ORIGINS ?? "http://localhost:8081,http://127.0.0.1:8081"
     ).split(","),
+    dailyMessageLimit: readLimit("DAILY_MESSAGE_LIMIT", 200),
+    dailyTaskLimit: readLimit("DAILY_TASK_LIMIT", 30),
+    kavenegarApiKey: process.env.KAVENEGAR_API_KEY?.trim() || undefined,
+    kavenegarTemplate: process.env.KAVENEGAR_TEMPLATE?.trim() || undefined,
+    otpSignup: process.env.OTP_SIGNUP === "true",
   };
   if (
     mode === "live" &&
