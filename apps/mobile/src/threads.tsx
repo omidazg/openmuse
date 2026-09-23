@@ -24,8 +24,10 @@ import { ActivityIndicator, Pressable, Text, View } from "react-native";
 import { BRAND } from "../../../packages/domain/src/brand";
 import type { MuseApi } from "./api";
 import { faNumber } from "./locale";
+import { usePreferences } from "./preferences";
 import { useSession } from "./session";
 import { Button, colors, ErrorNotice, Field, LinkRow, Sheet, s } from "./ui";
+import { WhatsNewRow } from "./whats-new";
 import { useWorkspace } from "./workspace";
 
 function newThreadId() {
@@ -226,6 +228,7 @@ export function ThreadsSheet({ onClose }: { onClose: () => void }) {
   } = useMuseThread();
   const { workspace, open, navigate, refresh, api } = useWorkspace();
   const { me, logout, openAdmin, refreshMe } = useSession();
+  const { unseenCount, openWhatsNew } = usePreferences();
   // Usage changes with every message; refresh it whenever the menu opens.
   useEffect(() => refreshMe(), [refreshMe]);
   const richThreads = useThreads({
@@ -447,6 +450,13 @@ export function ThreadsSheet({ onClose }: { onClose: () => void }) {
         <LinkRow icon={CalendarDays} title="تقویم" onPress={() => go("calendar")} />
         <LinkRow icon={FileText} title="فایل‌ها" onPress={() => go("files")} />
         <LinkRow icon={Settings2} title="برنامه‌ها و تنظیمات" onPress={() => go("apps")} />
+        <WhatsNewRow
+          unseen={unseenCount}
+          onPress={() => {
+            onClose();
+            openWhatsNew();
+          }}
+        />
         {me?.role === "admin" && (
           <LinkRow
             icon={Users}
