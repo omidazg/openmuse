@@ -45,6 +45,7 @@ import { CopyButton, Markdown } from "./markdown-view";
 import { ModelPicker } from "./model-picker";
 import { useRetryOnReconnect } from "./offline";
 import { AnswerActions } from "./share-sheet";
+import { SpeakButton } from "./speech";
 import { starterSuggestions } from "./starter-suggestions";
 import { FileThreadCard, TaskThreadCard } from "./thread-artifacts";
 import { type Selection, useMuseThread } from "./threads";
@@ -595,6 +596,9 @@ export function ChatScreen({
                 {!user && !!text && !replying && (
                   <AnswerActions thread={selection.id} messageId={message.id} />
                 )}
+                {!user && !!text && !(replying && message === visible.at(-1)) && (
+                  <SpeakButton api={api} text={text} />
+                )}
                 <BrowserRunContext
                   value={{
                     running: busy || agent.isRunning,
@@ -791,7 +795,8 @@ export function ChatScreen({
                 ))
               ) : (
                 <Text style={s.muted}>
-                  هنوز سندی ندارید. برای پیوست کردن، ابتدا یک PDF را در «فایل‌ها» بارگذاری کنید.
+                  هنوز سندی ندارید. برای پیوست کردن، ابتدا یک PDF یا عکس را در «فایل‌ها» بارگذاری
+                  کنید.
                 </Text>
               )}
             </ScrollView>

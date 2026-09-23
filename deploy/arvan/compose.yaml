@@ -31,6 +31,14 @@ x-app-env: &app-env
   # Voice input (POST /api/transcribe) via the OpenAI-compatible /audio/transcriptions.
   TRANSCRIBE_MODEL: ${TRANSCRIBE_MODEL:-whisper-1}
   TRANSCRIBE_ENABLED: ${TRANSCRIBE_ENABLED:-true}
+  # «خواندن با صدا» (POST /api/tts) via the OpenAI-compatible /audio/speech.
+  TTS_MODEL: ${TTS_MODEL:-gpt-4o-mini-tts}
+  TTS_VOICE: ${TTS_VOICE:-alloy}
+  TTS_MAX_CHARS: ${TTS_MAX_CHARS:-3000}
+  TTS_ENABLED: ${TTS_ENABLED:-true}
+  # Photo understanding and «استخراج متن از تصویر» via /chat/completions with image input.
+  VISION_MODEL: ${VISION_MODEL:-gpt-4.1}
+  VISION_ENABLED: ${VISION_ENABLED:-true}
   METIS_API_KEY: ${METIS_API_KEY:-}
   METIS_BASE_URL: ${METIS_BASE_URL:-}
   OPENAI_API_KEY: ${OPENAI_API_KEY:-}

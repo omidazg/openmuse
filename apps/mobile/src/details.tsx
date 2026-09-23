@@ -40,8 +40,9 @@ import { ComputerSheet } from "./computer";
 import DateTimeEditor from "./DateTimeEditor";
 import { localDateTime, zonedInstant } from "./date-time";
 import { DisplaySheet } from "./display-settings";
-import { fileExtent, isPdf } from "./file-kind";
+import { fileExtent, isImage, isPdf } from "./file-kind";
 import { faDate, faDateTime, faNumber, LOCALE, toLatinDigits } from "./locale";
+import { OcrCard } from "./ocr";
 import PdfReader from "./PdfReader";
 import {
   Button,
@@ -831,9 +832,10 @@ function FileDetail({ file: f }: { file: Artifact }) {
   const [busy, setBusy] = useState(false);
   const url = api.url(f.url || `/api/files/${f.id}/content`);
   const pdf = isPdf(f);
+  const image = isImage(f);
   const [preview, setPreview] = useState<{ text: string; more: boolean } | null>(null);
   useEffect(() => {
-    if (pdf) return;
+    if (pdf || image) return;
     let active = true;
     api
       .request<{ text: string; more: boolean }>(`/api/files/${f.id}/text`)
@@ -846,7 +848,7 @@ function FileDetail({ file: f }: { file: Artifact }) {
     return () => {
       active = false;
     };
-  }, [api, f.id, pdf]);
+  }, [api, f.id, pdf, image]);
   async function fill() {
     setBusy(true);
     setError("");
@@ -892,7 +894,14 @@ function FileDetail({ file: f }: { file: Artifact }) {
       onClose={close}
       wide
     >
-      {pdf ? (
+      {image ? (
+        <Image
+          source={{ uri: url }}
+          accessibilityLabel={f.name}
+          resizeMode="contain"
+          style={{ width: "100%", height: 420, borderRadius: 18, backgroundColor: colors.subtle }}
+        />
+      ) : pdf ? (
         <PdfReader url={url} token={api.token} pageCount={f.pageCount} />
       ) : (
         <Card>
@@ -912,6 +921,11 @@ function FileDetail({ file: f }: { file: Artifact }) {
             !error && <ActivityIndicator />
           )}
         </Card>
+      )}
+      {(image || pdf) && (
+        <View style={{ marginTop: 18 }}>
+          <OcrCard key={f.id} api={api} file={f} />
+        </View>
       )}
       <View style={[s.row, { gap: 10, marginVertical: 18, flexWrap: "wrap" }]}>
         <Button icon={Download} onPress={() => void share()}>
