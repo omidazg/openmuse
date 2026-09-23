@@ -7,7 +7,7 @@ import {
   useRenderTool,
   useRenderToolCall,
 } from "@copilotkit/react-native/headless";
-import { ArrowDown, ArrowUp, FileText, RotateCcw, Square, X } from "lucide-react-native";
+import { ArrowDown, ArrowUp, Brain, FileText, RotateCcw, Square, X } from "lucide-react-native";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import {
   KeyboardAvoidingView,
@@ -20,6 +20,7 @@ import {
 } from "react-native";
 import { z } from "zod";
 import { BRAND } from "../../../packages/domain/src/brand";
+import { findPersona, type Persona } from "../../../packages/domain/src/personal";
 import { ArtifactCard } from "./agent-ui";
 import { useAgentWorkspace } from "./agent-workspace";
 import { friendlyError } from "./api";
@@ -31,6 +32,7 @@ import { runConversationTurn } from "./conversation-run";
 import { fw } from "./locale";
 import { MailToolCard } from "./mail-tool-card";
 import { ModelPicker } from "./model-picker";
+import { PersonaBanner } from "./personal";
 import { FileThreadCard, TaskThreadCard } from "./thread-artifacts";
 import { type Selection, useMuseThread } from "./threads";
 import { Button, Card, CheckRow, colors, ErrorNotice, s } from "./ui";
@@ -109,13 +111,75 @@ export function WorkspaceTools() {
     ),
   });
   useRenderTool({
-    name: "remember_fact",
+    name: "remember",
     parameters: displayParameters,
     render: ({ result, status }) => (
-      <ServerToolCard name="حافظه" section="apps" result={result} loading={status !== "complete"} />
+      <MemoryToolCard result={result} loading={status !== "complete"} />
+    ),
+  });
+  useRenderTool({
+    name: "forget",
+    parameters: displayParameters,
+    render: ({ result, status }) => (
+      <MemoryToolCard forget result={result} loading={status !== "complete"} />
     ),
   });
   return null;
+}
+/** Compact receipt for remember/forget, linking to «حافظه». */
+function MemoryToolCard({
+  result,
+  loading,
+  forget,
+}: {
+  result: unknown;
+  loading: boolean;
+  forget?: boolean;
+}) {
+  const { open } = useWorkspace();
+  let value = result;
+  if (typeof value === "string") {
+    try {
+      value = JSON.parse(value);
+    } catch {
+      value = undefined;
+    }
+  }
+  const parsed = z
+    .object({ text: z.string().optional(), error: z.string().optional() })
+    .safeParse(value);
+  const failure = parsed.success ? parsed.data.error : undefined;
+  return (
+    <Card style={{ padding: 14, gap: 8 }}>
+      <View style={[s.row, { gap: 8 }]}>
+        <Brain size={17} color={colors.muted} />
+        <Text style={[s.text, { flex: 1 }]}>
+          {loading
+            ? forget
+              ? "در حال حذف از حافظه…"
+              : "در حال ذخیره در حافظه…"
+            : failure
+              ? forget
+                ? "حذف از حافظه انجام نشد"
+                : "ذخیره در حافظه انجام نشد"
+              : forget
+                ? "از حافظه حذف شد"
+                : "به خاطر سپردم"}
+        </Text>
+        {!loading && (
+          <Button small onPress={() => open({ type: "memory" })}>
+            حافظه
+          </Button>
+        )}
+      </View>
+      {!loading && !failure && parsed.success && parsed.data.text && (
+        <Text style={[s.small, { textAlign: "auto", writingDirection: "auto" }]}>
+          {parsed.data.text}
+        </Text>
+      )}
+      {failure && <ErrorNotice error={failure} />}
+    </Card>
+  );
 }
 function ServerToolCard({
   name,
@@ -213,6 +277,7 @@ export function ChatScreen({
   const [saveError, setSaveError] = useState("");
   const [historyError, setHistoryError] = useState("");
   const [historyAttempt, setHistoryAttempt] = useState(0);
+  const persona = useThreadPersona(multiThread ? threadId : undefined);
   useEffect(() => {
     if (!isReady) return;
     let active = true;
@@ -395,45 +460,58 @@ export function ChatScreen({
               gap: 15,
             }}
           >
-            <Text
-              style={{
-                fontSize: 28,
-                lineHeight: 42,
-                ...fw("500"),
-                color: colors.text,
-                textAlign: "center",
-                maxWidth: 350,
-              }}
-            >
-              کمی کمک، و فرصتی بیشتر برای زندگی.
-            </Text>
-            <Text style={[s.muted, { maxWidth: 320, textAlign: "center" }]}>
-              بگویید به چه فکر می‌کنید. می‌توانم برنامه بریزم، با برنامه‌هایتان کار کنم و برای کمک از
-              رایانهٔ خودم استفاده کنم.
-            </Text>
+            {persona ? (
+              <View style={{ width: "100%", maxWidth: 420 }}>
+                <PersonaBanner persona={persona} />
+              </View>
+            ) : (
+              <>
+                <Text
+                  style={{
+                    fontSize: 28,
+                    lineHeight: 42,
+                    ...fw("500"),
+                    color: colors.text,
+                    textAlign: "center",
+                    maxWidth: 350,
+                  }}
+                >
+                  کمی کمک، و فرصتی بیشتر برای زندگی.
+                </Text>
+                <Text style={[s.muted, { maxWidth: 320, textAlign: "center" }]}>
+                  بگویید به چه فکر می‌کنید. می‌توانم برنامه بریزم، با برنامه‌هایتان کار کنم و برای کمک
+                  از رایانهٔ خودم استفاده کنم.
+                </Text>
+              </>
+            )}
             <View style={{ width: "100%", maxWidth: 360, marginTop: 14, gap: 8 }}>
-              {[
-                {
-                  text: "امروز چندم است و تعطیلی بعدی کی است؟",
-                  action: () => enqueue("امروز به تقویم شمسی چندم است و تعطیلی رسمی بعدی کی است؟"),
-                },
-                {
-                  text: "خلاصهٔ خبرهای مهم امروز",
-                  action: () => enqueue("خبرهای مهم امروز ایران را از خبرگزاری‌های فارسی خلاصه کن"),
-                },
-                {
-                  text: "قیمت امروز دلار، سکه و طلا",
-                  action: () =>
-                    enqueue("قیمت امروز دلار، سکه و طلای ۱۸ عیار را از tgju.org پیدا کن"),
-                },
-                {
-                  text: "نوشتن نامهٔ اداری",
-                  action: () =>
-                    enqueue(
-                      "یک نامهٔ اداری رسمی برای درخواست مرخصی بنویس؛ اول نام، سمت و تاریخ‌ها را از من بپرس",
-                    ),
-                },
-              ].map((item) => (
+              {(persona
+                ? persona.starters.map((text) => ({ text, action: () => setDraft(text) }))
+                : [
+                    {
+                      text: "امروز چندم است و تعطیلی بعدی کی است؟",
+                      action: () =>
+                        enqueue("امروز به تقویم شمسی چندم است و تعطیلی رسمی بعدی کی است؟"),
+                    },
+                    {
+                      text: "خلاصهٔ خبرهای مهم امروز",
+                      action: () =>
+                        enqueue("خبرهای مهم امروز ایران را از خبرگزاری‌های فارسی خلاصه کن"),
+                    },
+                    {
+                      text: "قیمت امروز دلار، سکه و طلا",
+                      action: () =>
+                        enqueue("قیمت امروز دلار، سکه و طلای ۱۸ عیار را از tgju.org پیدا کن"),
+                    },
+                    {
+                      text: "نوشتن نامهٔ اداری",
+                      action: () =>
+                        enqueue(
+                          "یک نامهٔ اداری رسمی برای درخواست مرخصی بنویس؛ اول نام، سمت و تاریخ‌ها را از من بپرس",
+                        ),
+                    },
+                  ]
+              ).map((item) => (
                 <Button key={item.text} onPress={item.action}>
                   {item.text}
                 </Button>
@@ -441,68 +519,71 @@ export function ChatScreen({
             </View>
           </View>
         ) : (
-          visible.map((message) => {
-            const user = message.role === "user";
-            const text = typeof message.content === "string" ? message.content : "";
-            const toolCalls = "toolCalls" in message ? message.toolCalls || [] : [];
-            return (
-              <View
-                key={message.id}
-                style={{
-                  alignSelf: user ? "flex-end" : "flex-start",
-                  maxWidth: user ? "85%" : "95%",
-                  width: toolCalls.length ? "95%" : undefined,
-                  gap: 8,
-                }}
-              >
-                {!!text && (
-                  <View
-                    style={{
-                      paddingHorizontal: 16,
-                      paddingVertical: 13,
-                      borderRadius: 22,
-                      borderBottomEndRadius: user ? 7 : 22,
-                      borderBottomStartRadius: user ? 22 : 7,
-                      backgroundColor: user ? colors.blue : colors.subtle,
-                    }}
-                  >
-                    <Text
-                      selectable
-                      style={[
-                        s.text,
-                        {
-                          fontSize: 16,
-                          lineHeight: 26,
-                          // Mixed Persian/English: follow each message's own direction.
-                          textAlign: "auto",
-                          writingDirection: "auto",
-                        },
-                      ]}
-                    >
-                      {text}
-                    </Text>
-                  </View>
-                )}
-                <BrowserRunContext
-                  value={{
-                    running: busy || agent.isRunning,
-                    active:
-                      (busy || agent.isRunning) && messages.indexOf(message) > latestUserIndex,
+          <>
+            {persona && <PersonaBanner persona={persona} />}
+            {visible.map((message) => {
+              const user = message.role === "user";
+              const text = typeof message.content === "string" ? message.content : "";
+              const toolCalls = "toolCalls" in message ? message.toolCalls || [] : [];
+              return (
+                <View
+                  key={message.id}
+                  style={{
+                    alignSelf: user ? "flex-end" : "flex-start",
+                    maxWidth: user ? "85%" : "95%",
+                    width: toolCalls.length ? "95%" : undefined,
+                    gap: 8,
                   }}
                 >
-                  {toolCalls.map((toolCall) => {
-                    const toolMessage = messages.find(
-                      (candidate): candidate is ToolMessage =>
-                        candidate.role === "tool" && candidate.toolCallId === toolCall.id,
-                    );
-                    return (
-                      <View key={toolCall.id}>{renderToolCall({ toolCall, toolMessage })}</View>
-                    );
-                  })}
-                </BrowserRunContext>
-              </View>
-            );
-          })
+                  {!!text && (
+                    <View
+                      style={{
+                        paddingHorizontal: 16,
+                        paddingVertical: 13,
+                        borderRadius: 22,
+                        borderBottomEndRadius: user ? 7 : 22,
+                        borderBottomStartRadius: user ? 22 : 7,
+                        backgroundColor: user ? colors.blue : colors.subtle,
+                      }}
+                    >
+                      <Text
+                        selectable
+                        style={[
+                          s.text,
+                          {
+                            fontSize: 16,
+                            lineHeight: 26,
+                            // Mixed Persian/English: follow each message's own direction.
+                            textAlign: "auto",
+                            writingDirection: "auto",
+                          },
+                        ]}
+                      >
+                        {text}
+                      </Text>
+                    </View>
+                  )}
+                  <BrowserRunContext
+                    value={{
+                      running: busy || agent.isRunning,
+                      active:
+                        (busy || agent.isRunning) && messages.indexOf(message) > latestUserIndex,
+                    }}
+                  >
+                    {toolCalls.map((toolCall) => {
+                      const toolMessage = messages.find(
+                        (candidate): candidate is ToolMessage =>
+                          candidate.role === "tool" && candidate.toolCallId === toolCall.id,
+                      );
+                      return (
+                        <View key={toolCall.id}>{renderToolCall({ toolCall, toolMessage })}</View>
+                      );
+                    })}
+                  </BrowserRunContext>
+                </View>
+              );
+            })}
+          </>
         )}
         {!multiThread && (
           <>
@@ -862,4 +943,26 @@ export function ChatScreen({
       </KeyboardAvoidingView>
     </View>
   );
+}
+/** The ready-made assistant pinned to a conversation, if any (server is the source of truth). */
+function useThreadPersona(threadId: string | undefined): Persona | undefined {
+  const { api } = useWorkspace();
+  const [persona, setPersona] = useState<Persona>();
+  useEffect(() => {
+    setPersona(undefined);
+    if (!threadId) return;
+    let active = true;
+    void api
+      .request<{ personaId: string | null }>(
+        `/api/agent/threads/${encodeURIComponent(threadId)}/persona`,
+      )
+      .then((result) => {
+        if (active) setPersona(findPersona(result.personaId));
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [api, threadId]);
+  return persona;
 }

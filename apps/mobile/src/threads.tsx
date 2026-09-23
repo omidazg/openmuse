@@ -1,6 +1,7 @@
 import { useThreads } from "@copilotkit/react-native/headless";
 import {
   Archive,
+  Brain,
   CalendarDays,
   FileText,
   LogOut,
@@ -24,6 +25,7 @@ import { ActivityIndicator, Pressable, Text, View } from "react-native";
 import { BRAND } from "../../../packages/domain/src/brand";
 import type { MuseApi } from "./api";
 import { faNumber } from "./locale";
+import { PersonaList } from "./personal";
 import { useSession } from "./session";
 import { Button, colors, ErrorNotice, Field, LinkRow, Sheet, s } from "./ui";
 import { useWorkspace } from "./workspace";
@@ -136,7 +138,8 @@ const ThreadContext = createContext<{
   error: string;
   retry: () => void;
   select: (selection: Selection) => void;
-  start: () => void;
+  /** New side conversation, optionally pinned to a ready-made assistant first. */
+  start: (personaId?: string) => Promise<void>;
   claimPrompt: (id: number) => boolean;
 } | null>(null);
 export function ThreadsProvider({ children }: { children: ReactNode }) {
@@ -199,7 +202,14 @@ export function ThreadsProvider({ children }: { children: ReactNode }) {
         retry: () => setAttempt((n) => n + 1),
         selection,
         select,
-        start: () => select({ id: newThreadId(), existing: false }),
+        start: async (personaId) => {
+          const id = newThreadId();
+          if (personaId)
+            await api.request(`/api/agent/threads/${encodeURIComponent(id)}/persona`, {
+              personaId,
+            });
+          select({ id, existing: false });
+        },
       }}
     >
       {children}
@@ -285,12 +295,22 @@ export function ThreadsSheet({ onClose }: { onClose: () => void }) {
               primary
               icon={Plus}
               onPress={() => {
-                start();
+                void start();
                 onClose();
               }}
             >
               گفت‌وگوی جانبی تازه
             </Button>
+            <Text style={[s.heading, { marginTop: 12 }]}>دستیارهای آماده</Text>
+            <Text style={s.small}>هر دستیار یک گفت‌وگوی تازه با تخصص خودش شروع می‌کند.</Text>
+            <PersonaList
+              onPick={(persona) =>
+                void mutate(async () => {
+                  await start(persona.id);
+                  onClose();
+                })
+              }
+            />
             <View style={[s.between, { marginTop: 12 }]}>
               <Text style={s.heading}>گفت‌وگوهای جانبی</Text>
               <Button small onPress={() => setArchived(!archived)}>
@@ -446,6 +466,15 @@ export function ThreadsSheet({ onClose }: { onClose: () => void }) {
         />
         <LinkRow icon={CalendarDays} title="تقویم" onPress={() => go("calendar")} />
         <LinkRow icon={FileText} title="فایل‌ها" onPress={() => go("files")} />
+        <LinkRow
+          icon={Brain}
+          title="حافظه"
+          detail="دستورهای سفارشی و نکته‌های ذخیره‌شده"
+          onPress={() => {
+            onClose();
+            open({ type: "memory" });
+          }}
+        />
         <LinkRow icon={Settings2} title="برنامه‌ها و تنظیمات" onPress={() => go("apps")} />
         {me?.role === "admin" && (
           <LinkRow

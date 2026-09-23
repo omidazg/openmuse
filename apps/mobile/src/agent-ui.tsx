@@ -1,6 +1,7 @@
 import {
   ArrowLeft,
   Bell,
+  Brain,
   CalendarDays,
   ChevronLeft,
   CircleDollarSign,
@@ -25,7 +26,6 @@ import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg";
 import type { Artifact, BrowserSession } from "../../../packages/domain/src";
 import type {
   AgentArtifact,
-  AgentMemory,
   AgentTask,
   Evidence,
   Goal,
@@ -1850,7 +1850,6 @@ export function AppsScreen() {
   const [tone, setTone] = useState(data?.identity.tone || "warm");
   const [avatar, setAvatar] = useState(data?.identity.avatar || "sky");
   const [showChatUpdates, setShowChatUpdates] = useState(data?.identity.showChatUpdates !== false);
-  const [memory, setMemory] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   useEffect(() => {
@@ -1871,7 +1870,6 @@ export function AppsScreen() {
     setError("");
     try {
       await mutate(path, body);
-      if (path === "/memories") setMemory("");
     } catch (e) {
       setError(errorText(e));
     } finally {
@@ -1932,8 +1930,16 @@ export function AppsScreen() {
             />
           ))}
       </Card>
+      <Card style={{ paddingVertical: 3, backgroundColor: colors.subtle }}>
+        <LinkRow
+          icon={Brain}
+          title="حافظه"
+          detail="دستورهای سفارشی و نکته‌هایی که دستیار به خاطر می‌سپارد"
+          onPress={() => open({ type: "memory" })}
+        />
+      </Card>
       <Button onPress={() => setSettings(!settings)}>
-        {settings ? "بستن تنظیمات دستیار" : "تنظیم شخصیت و حافظه"}
+        {settings ? "بستن تنظیمات دستیار" : "تنظیم شخصیت دستیار"}
       </Button>
       {settings && (
         <>
@@ -1983,87 +1989,8 @@ export function AppsScreen() {
               ذخیره‌ی ترجیحات
             </Button>
           </Card>
-          <Card style={{ gap: 12 }}>
-            <SectionHeading title="حافظه" />
-            <Text style={s.muted}>زمینه‌ای که می‌توانید بررسی، اصلاح یا فراموش کنید.</Text>
-            {data?.memories.map((item) => (
-              <MemoryRow key={item.id} memory={item} />
-            ))}
-            {!data?.memories.length && (
-              <Text style={s.small}>
-                هنوز چیزی در حافظه نیست. نکته‌ای درباره‌ی خودتان بنویسید تا دستیار آن را به خاطر
-                بسپارد.
-              </Text>
-            )}
-            <Field
-              label="دستیار چه چیزی درباره‌ی شما به خاطر بسپارد؟"
-              value={memory}
-              onChangeText={setMemory}
-              placeholder="جلسه‌های صبح را ترجیح می‌دهم"
-            />
-            <Button
-              busy={busy}
-              disabled={!memory.trim()}
-              onPress={() =>
-                void save("/memories", {
-                  text: memory.trim(),
-                  source: "افزوده‌شده توسط شما در برنامه‌ها",
-                })
-              }
-            >
-              ذخیره در حافظه
-            </Button>
-          </Card>
         </>
       )}
-      <ErrorNotice error={error} />
-    </View>
-  );
-}
-function MemoryRow({ memory }: { memory: AgentMemory }) {
-  const { mutate } = useAgentWorkspace();
-  const [editing, setEditing] = useState(false);
-  const [text, setText] = useState(memory.text);
-  const [error, setError] = useState("");
-  const [busy, setBusy] = useState(false);
-  async function act(forget: boolean) {
-    setBusy(true);
-    setError("");
-    try {
-      await mutate(`/memories/${memory.id}${forget ? "/forget" : ""}`, forget ? {} : { text });
-      setEditing(false);
-    } catch (e) {
-      setError(errorText(e));
-    } finally {
-      setBusy(false);
-    }
-  }
-  return (
-    <View
-      style={{ gap: 8, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: colors.line }}
-    >
-      {editing ? (
-        <Field label="حافظه" value={text} onChangeText={setText} />
-      ) : (
-        <Text style={s.text}>{memory.text}</Text>
-      )}
-      <Text style={s.small}>
-        {memory.source} · {stamp(memory.createdAt)}
-      </Text>
-      <View style={[s.row, { gap: 8 }]}>
-        {editing ? (
-          <Button small busy={busy} disabled={!text.trim()} onPress={() => void act(false)}>
-            ذخیره‌ی اصلاح
-          </Button>
-        ) : (
-          <Button small onPress={() => setEditing(true)}>
-            ویرایش
-          </Button>
-        )}
-        <Button small danger busy={busy} onPress={() => void act(true)}>
-          حذف از حافظه
-        </Button>
-      </View>
       <ErrorNotice error={error} />
     </View>
   );

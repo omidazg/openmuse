@@ -43,6 +43,14 @@ export class Store {
       id,
     ]);
   }
+  /** Deletes every record of one kind for one owner; returns how many were removed. */
+  async removeAll(owner: string, kind: string): Promise<number> {
+    const result = await this.db.query(
+      "DELETE FROM records WHERE owner=$1 AND kind=$2 RETURNING id",
+      [owner, kind],
+    );
+    return result.rows.length;
+  }
   async compareAndSwap<T>(
     owner: string,
     kind: string,
