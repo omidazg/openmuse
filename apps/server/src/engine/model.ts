@@ -7,6 +7,7 @@ import type { AgentTask } from "../../../../packages/domain/src/agent.ts";
 import { BRAND } from "../../../../packages/domain/src/brand.ts";
 import { emailDraftSchema, eventDraftSchema } from "../../../../packages/domain/src/index.ts";
 import { computerInstructions, computerTools } from "../computer-tools.ts";
+import { configCatalog, resolveModel } from "../models.ts";
 import { persianInstructions } from "./conversation.ts";
 import type { AgentService } from "./service.ts";
 import type { TaskContext } from "./worker.ts";
@@ -297,8 +298,12 @@ export async function executeModelTask(
     "identity",
   );
   const memories = await service.db.list<{ text: string; source: string }>(owner, "memories");
+  // Delegated tasks follow the owner's picked model; "auto" resolves to the strong default.
+  const model =
+    (await resolveModel(service.db, configCatalog(config), owner).catch(() => undefined)) ??
+    config.model;
   const agent = new BuiltInAgent({
-    model: config.model,
+    model,
     maxSteps: 16,
     maxRetries: 0,
     tools,

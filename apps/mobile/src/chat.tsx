@@ -29,9 +29,11 @@ import { ConversationQueue, type QueuedMessage } from "./conversation-queue";
 import { runConversationTurn } from "./conversation-run";
 import { fw } from "./locale";
 import { MailToolCard } from "./mail-tool-card";
+import { ModelPicker } from "./model-picker";
 import { FileThreadCard, TaskThreadCard } from "./thread-artifacts";
 import { type Selection, useMuseThread } from "./threads";
 import { Button, Card, CheckRow, colors, ErrorNotice, s } from "./ui";
+import { useVoiceInput, VoiceButton, VoiceStatus } from "./voice-input";
 import { useWorkspace } from "./workspace";
 
 const displayParameters = z.record(z.string(), z.unknown());
@@ -189,6 +191,10 @@ export function ChatScreen({
   const { copilotkit } = useCopilotKit();
   const renderToolCall = useRenderToolCall();
   const [draft, setDraft] = useState("");
+  // Dictated text lands in the composer for review; it is never sent automatically.
+  const voice = useVoiceInput(api, (text) =>
+    setDraft((current) => (current.trim() ? `${current.trimEnd()} ${text}` : text)),
+  );
   const [focused, setFocused] = useState(false);
   const [inputHeight, setInputHeight] = useState(44);
   const [showResults, setShowResults] = useState(false);
@@ -696,6 +702,8 @@ export function ChatScreen({
             elevation: 4,
           }}
         >
+          <ModelPicker api={api} />
+          <VoiceStatus state={voice.state} seconds={voice.seconds} error={voice.error} />
           {attachments.length > 0 && (
             <View style={[s.row, { gap: 6, flexWrap: "wrap", padding: 9 }]}>
               {w.files
@@ -807,6 +815,13 @@ export function ChatScreen({
                   : undefined
               }
             />
+            {voice.available && (
+              <VoiceButton
+                state={voice.state}
+                onPress={voice.toggle}
+                disabled={!loaded || !isReady}
+              />
+            )}
             <Pressable
               accessibilityRole="button"
               accessibilityLabel={replying ? "توقف پاسخ" : "ارسال پیام"}

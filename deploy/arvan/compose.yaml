@@ -24,6 +24,13 @@ x-app-env: &app-env
   THREADS_BACKEND: ${THREADS_BACKEND:-}
   CPK_INTELLIGENCE_API_KEY: ${CPK_INTELLIGENCE_API_KEY:-}
   MODEL: ${MODEL:-}
+  # Models people may pick in chat (id:Persian label, comma-separated); MODEL stays the default.
+  MODELS: "${MODELS:-anthropic/claude-sonnet-5:کلاد سونت ۵ (قوی),openai/gpt-4.1-mini:جی‌پی‌تی ۴٫۱ مینی (سریع و ارزان),google/gemini-2.5-flash:جمنای ۲٫۵ فلش}"
+  # Optional: an allowlisted fast model enables the «خودکار» choice for short messages.
+  MODEL_FAST: ${MODEL_FAST:-}
+  # Voice input (POST /api/transcribe) via the OpenAI-compatible /audio/transcriptions.
+  TRANSCRIBE_MODEL: ${TRANSCRIBE_MODEL:-whisper-1}
+  TRANSCRIBE_ENABLED: ${TRANSCRIBE_ENABLED:-true}
   METIS_API_KEY: ${METIS_API_KEY:-}
   METIS_BASE_URL: ${METIS_BASE_URL:-}
   OPENAI_API_KEY: ${OPENAI_API_KEY:-}
