@@ -3,32 +3,43 @@ import { useEffect, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import type { MuseApi } from "./api";
 import { fw } from "./locale";
-import { colors, ErrorNotice, Sheet, s } from "./ui";
+import { Button, colors, ErrorNotice, Sheet, s } from "./ui";
 
 interface ModelOption {
   id: string;
   label: string;
   default: boolean;
 }
+type ResponseLength = "short" | "normal" | "long";
+const LENGTHS: { id: ResponseLength; label: string }[] = [
+  { id: "short", label: "کوتاه" },
+  { id: "normal", label: "معمولی" },
+  { id: "long", label: "مفصل" },
+];
 
 /**
- * Compact model picker for the chat composer. The server owns the allowlist (MODELS) and
- * remembers the choice per person; it is hidden when there is nothing to choose from.
+ * Compact model and answer-length picker for the chat composer. The server owns the allowlist
+ * (MODELS) and remembers both choices per person; the model list is shown only when there is
+ * something to choose from.
  */
 export function ModelPicker({ api }: { api: MuseApi }) {
   const [models, setModels] = useState<ModelOption[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
+  const [length, setLength] = useState<ResponseLength | null>(null);
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState("");
   const [error, setError] = useState("");
   useEffect(() => {
     let active = true;
     api
-      .request<{ models: ModelOption[]; selected: string | null }>("/api/models")
+      .request<{ models: ModelOption[]; selected: string | null; length?: ResponseLength }>(
+        "/api/models",
+      )
       .then((result) => {
         if (!active) return;
         setModels(result.models);
         setSelected(result.selected);
+        setLength(result.length ?? "normal");
       })
       // Without the list the composer keeps working with the server default.
       .catch(() => undefined);
@@ -36,8 +47,27 @@ export function ModelPicker({ api }: { api: MuseApi }) {
       active = false;
     };
   }, [api]);
-  if (models.length < 2) return null;
+  if (!length) return null;
+  const choosable = models.length > 1;
   const current = models.find((m) => m.id === selected) ?? models.find((m) => m.default);
+  const lengthLabel = LENGTHS.find((l) => l.id === length)?.label ?? "معمولی";
+  async function chooseLength(next: ResponseLength) {
+    if (next === length) return;
+    setSaving(next);
+    setError("");
+    try {
+      const result = await api.request<{ length: ResponseLength }>(
+        "/api/models/length",
+        { length: next },
+        "PUT",
+      );
+      setLength(result.length);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "طول پاسخ ذخیره نشد. دوباره تلاش کنید.");
+    } finally {
+      setSaving("");
+    }
+  }
   async function choose(id: string) {
     if (id === selected) return setOpen(false);
     setSaving(id);
@@ -60,7 +90,11 @@ export function ModelPicker({ api }: { api: MuseApi }) {
     <>
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel={`انتخاب مدل، مدل فعلی: ${current?.label ?? "پیش‌فرض"}`}
+        accessibilityLabel={
+          choosable
+            ? `انتخاب مدل و طول پاسخ، مدل فعلی: ${current?.label ?? "پیش‌فرض"}، پاسخ ${lengthLabel}`
+            : `انتخاب طول پاسخ، اکنون ${lengthLabel}`
+        }
         onPress={() => setOpen(true)}
         style={({ pressed }) => [
           s.row,
@@ -82,19 +116,41 @@ export function ModelPicker({ api }: { api: MuseApi }) {
           numberOfLines={1}
           style={{ flexShrink: 1, fontSize: 12, lineHeight: 18, color: colors.muted, ...fw("500") }}
         >
-          {current?.label ?? "مدل پیش‌فرض"}
+          {choosable
+            ? `${current?.label ?? "مدل پیش‌فرض"}${length === "normal" ? "" : `، پاسخ ${lengthLabel}`}`
+            : `پاسخ ${lengthLabel}`}
         </Text>
         <ChevronDown size={13} color={colors.muted} />
       </Pressable>
       {open && (
         <Sheet
-          title="انتخاب مدل"
-          subtitle="مدل انتخاب‌شده برای گفت‌وگوها و کارهای واگذارشدهٔ شما به کار می‌رود."
+          title={choosable ? "مدل و طول پاسخ" : "طول پاسخ"}
+          subtitle={
+            choosable
+              ? "مدل انتخاب‌شده برای گفت‌وگوها و کارهای واگذارشدهٔ شما به کار می‌رود. «خودکار» پیام‌های ساده را با مدل سریع و کارهای پیچیده را با مدل قوی پاسخ می‌دهد."
+              : "پاسخ‌های دستیار در گفت‌وگو با این اندازه نوشته می‌شوند."
+          }
           onClose={() => setOpen(false)}
         >
           <ErrorNotice error={error} />
+          <Text style={[s.text, fw("600"), { marginBottom: 8 }]}>طول پاسخ</Text>
+          <View style={[s.row, { gap: 8, flexWrap: "wrap", marginBottom: choosable ? 18 : 0 }]}>
+            {LENGTHS.map((option) => (
+              <Button
+                key={option.id}
+                small
+                primary={option.id === length}
+                busy={saving === option.id}
+                disabled={Boolean(saving)}
+                onPress={() => void chooseLength(option.id)}
+              >
+                {option.label}
+              </Button>
+            ))}
+          </View>
+          {choosable && <Text style={[s.text, fw("600"), { marginBottom: 8 }]}>مدل</Text>}
           <View style={{ gap: 4 }}>
-            {models.map((model) => {
+            {(choosable ? models : []).map((model) => {
               const checked = model.id === current?.id;
               return (
                 <Pressable

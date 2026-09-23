@@ -22,7 +22,7 @@ export interface ModelCatalog {
 }
 
 export const AUTO_MODEL = "auto";
-const AUTO_LABEL = "خودکار (سریع برای پیام‌های کوتاه)";
+const AUTO_LABEL = "خودکار (مدل سریع برای پیام‌های ساده)";
 const DEFAULT_LABEL = "مدل پیش‌فرض";
 /** Providers the CopilotKit BuiltInAgent resolves from `provider/model` strings. */
 const MODEL_ID = /^(openai|anthropic|google)\/[A-Za-z0-9][A-Za-z0-9._-]{0,99}$/;
@@ -69,11 +69,22 @@ export function configCatalog(config: { model?: string; models?: ModelCatalog })
   );
 }
 
-/** Options shown in the picker; "auto" appears only when a distinct fast model is allowlisted. */
+/**
+ * Options shown in the picker. "auto" appears only when a distinct fast model is allowlisted, and
+ * then it comes first and is the default for people who have not picked a model.
+ */
 export function modelOptions(catalog: ModelCatalog): ModelOption[] {
   return catalog.fastModel
-    ? [...catalog.models, { id: AUTO_MODEL, label: AUTO_LABEL, default: false }]
+    ? [
+        { id: AUTO_MODEL, label: AUTO_LABEL, default: true },
+        ...catalog.models.map((m) => ({ ...m, default: false })),
+      ]
     : catalog.models;
+}
+
+/** What a person gets before choosing: auto when it is offered, otherwise MODEL. */
+export function defaultChoice(catalog: ModelCatalog): string | undefined {
+  return catalog.fastModel ? AUTO_MODEL : catalog.defaultModel;
 }
 
 /** Throws a Persian 422 for anything outside the allowlist. */
@@ -82,15 +93,115 @@ export function assertAllowedModel(catalog: ModelCatalog, id: string): string {
   throw new AppError("این مدل در فهرست مدل‌های مجاز نیست. یکی از مدل‌های فهرست را انتخاب کنید.", 422);
 }
 
+export type AutoTier = "fast" | "main";
+
+export interface AutoSignals {
+  /** Files referenced from the chat composer («اسناد پیوست‌شده»). */
+  attachments?: boolean;
+  /** Earlier turns in this thread called tools (a follow-up such as «بله، انجام بده»). */
+  toolHistory?: boolean;
+}
+
 /**
- * Short single-line messages without links go to the fast model; everything else, and every
- * delegated task, uses the strong default.
+ * Work that needs tools, browsing, code or careful reasoning goes to the main model. Stems match
+ * at the start of a word («تحلیلی», «ایمیل‌ها»); "~" is an optional space or ZWNJ.
  */
-export function isSimpleMessage(text: string): boolean {
+const COMPLEX_STEMS = [
+  // analysis, reasoning and long-form writing
+  "تحلیل",
+  "بررسی",
+  "مقایسه",
+  "مقاله",
+  "گزارش",
+  "خلاصه",
+  "ترجمه",
+  "نامه",
+  "پایان~نامه",
+  "رزومه",
+  "انشا",
+  "پروپوزال",
+  "استدلال",
+  "اثبات",
+  "محاسبه",
+  "حساب~کن",
+  "حل~کن",
+  "ریاضی",
+  "معادله",
+  "برنامه~ریزی",
+  "برنامه~نویسی",
+  "پایتون",
+  "جاوا",
+  "اسکریپت",
+  "باگ",
+  "دیباگ",
+  // tools and workspace
+  "ایمیل",
+  "تقویم",
+  "جلسه",
+  "رویداد",
+  "یادآوری",
+  "فایل",
+  "پی~دی~اف",
+  "اکسل",
+  "جست~وجو",
+  "جستجو",
+  "سایت",
+  "وب~سایت",
+  "لینک",
+  "قیمت",
+  "پیگیری",
+  "زیر~نظر",
+  "واگذار",
+  "مرورگر",
+  // English words people type
+  "analy",
+  "essay",
+  "article",
+  "report",
+  "summar",
+  "translat",
+  "compar",
+  "debug",
+  "python",
+  "javascript",
+  "email",
+  "calendar",
+  "excel",
+  "search",
+  "brows",
+  "website",
+];
+/** Short words that are also prefixes of everyday words («کد» / «کدام»), matched whole. */
+const COMPLEX_WORDS = ["کد", "کدها", "سند", "اسناد", "هدف", "وب", "code", "sql", "pdf"];
+const LETTER = String.raw`[\p{L}\p{M}\p{N}]`;
+const variants = (words: string[]) => words.map((w) => w.replaceAll("~", String.raw`[\s\u200c]?`));
+const COMPLEX = new RegExp(
+  `(?<!${LETTER})(?:${variants(COMPLEX_STEMS).join("|")})|(?<!${LETTER})(?:${variants(COMPLEX_WORDS).join("|")})(?!${LETTER})`,
+  "iu",
+);
+const CODE = /```|[{};]\s*$|=>|\b(function|class|def|import|const|return|select)\s|<\/?[a-z]+>/im;
+const URL_PATTERN = /https?:\/\/|www\.|\b[a-z0-9-]+\.(com|ir|org|net|io)\b/i;
+const ATTACHMENT = /اسناد پیوست[\u200c ]?شده|شناسهٔ سند/;
+
+/**
+ * The cheap «خودکار» router: short everyday chit-chat and quick questions go to the fast model;
+ * anything long, multi-line, with links, files, code, tool needs or analysis keywords goes to the
+ * main model. Pure and deterministic so it can be tested without a model.
+ */
+export function autoTier(text: string, signals: AutoSignals = {}): AutoTier {
   const value = text.trim();
-  return (
-    value.length > 0 && value.length <= 160 && !/\n/.test(value) && !/https?:\/\//i.test(value)
-  );
+  if (!value) return "fast";
+  if (signals.attachments || signals.toolHistory) return "main";
+  if (value.length > 200) return "main";
+  if (/\n/.test(value)) return "main";
+  if (ATTACHMENT.test(value) || URL_PATTERN.test(value) || CODE.test(value)) return "main";
+  if (COMPLEX.test(value)) return "main";
+  return "fast";
+}
+
+/** Kept for callers that only need a yes/no: true when auto would pick the fast model. */
+export function isSimpleMessage(text: string): boolean {
+  return text.trim().length > 0 && autoTier(text) === "fast";
 }
 
 export async function selectedModel(
@@ -129,10 +240,14 @@ export async function resolveModel(
   catalog: ModelCatalog,
   owner: string,
   message?: string,
+  signals?: AutoSignals,
 ): Promise<string | undefined> {
-  const chosen = await selectedModel(db, catalog, owner);
+  const chosen = (await selectedModel(db, catalog, owner)) ?? defaultChoice(catalog);
   if (chosen === AUTO_MODEL)
-    return message !== undefined && catalog.fastModel && isSimpleMessage(message)
+    return message !== undefined &&
+      catalog.fastModel &&
+      message.trim() &&
+      autoTier(message, signals) === "fast"
       ? catalog.fastModel
       : catalog.defaultModel;
   return chosen ?? catalog.defaultModel;

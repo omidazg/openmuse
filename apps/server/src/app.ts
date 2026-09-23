@@ -26,14 +26,22 @@ import { agentRoutes } from "./engine/routes.ts";
 import { AgentService } from "./engine/service.ts";
 import { AppError } from "./errors.ts";
 import { reportError } from "./errors-report.ts";
+import { fallbackConfigured } from "./fallback.ts";
 import { Files, fileKind } from "./files.ts";
 import { GoogleAuth } from "./google-auth.ts";
 import { MailboxService } from "./mailbox.ts";
-import { configCatalog, modelOptions, saveSelectedModel, selectedModel } from "./models.ts";
+import {
+  configCatalog,
+  defaultChoice,
+  modelOptions,
+  saveSelectedModel,
+  selectedModel,
+} from "./models.ts";
 import { OtpService } from "./otp.ts";
 import { PdfRenderer } from "./pdf-render.ts";
 import { preferenceRoutes } from "./preferences.ts";
 import { clientIp, RateLimiter } from "./rate-limit.ts";
+import { responseLength, responseLengthSchema, saveResponseLength } from "./response-length.ts";
 import { publicShareRoutes, shareRoutes } from "./sharing.ts";
 import { localThreadRoutes, localThreadsEnabled } from "./threads.ts";
 import { transcribeAudio, transcriptionEnabled } from "./transcribe.ts";
@@ -134,6 +142,7 @@ export async function createApp(
       ttsEnabled: ttsEnabled(),
       visionEnabled: visionEnabled(),
       otpEnabled: otpEnabled(config),
+      fallbackConfigured: fallbackConfigured(),
     }),
   );
   // Key logins: 10 attempts per client address every 10 minutes, plus a global safety cap.
@@ -232,8 +241,14 @@ export async function createApp(
     const catalog = configCatalog(config);
     return c.json({
       models: modelOptions(catalog),
-      selected: (await selectedModel(db, catalog, c.get("owner"))) ?? catalog.defaultModel ?? null,
+      selected:
+        (await selectedModel(db, catalog, c.get("owner"))) ?? defaultChoice(catalog) ?? null,
+      length: await responseLength(db, c.get("owner")),
     });
+  });
+  app.put("/api/models/length", async (c) => {
+    const body = z.object({ length: responseLengthSchema }).parse(await c.req.json());
+    return c.json({ length: await saveResponseLength(db, c.get("owner"), body.length) });
   });
   app.put("/api/models/selected", async (c) => {
     const body = z.object({ model: z.string().min(1).max(200) }).parse(await c.req.json());
