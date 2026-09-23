@@ -1,5 +1,10 @@
 # Caddy obtains and renews the HTTPS certificate for $DOMAIN automatically.
 # The DNS A record must point at the server (see README.fa.md for the ArvanCloud CDN notes).
+{
+	# Clients send no SNI when connecting to a bare IP; serve DOMAIN's certificate then.
+	default_sni {$DOMAIN}
+}
+
 # DOMAIN may also be the bare server IP (e.g. while a domain is filtered or not yet
 # registered): Let's Encrypt issues IP certificates only with ACME_PROFILE=shortlived.
 {$DOMAIN} {
