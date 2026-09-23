@@ -15,12 +15,6 @@ const config: ExpoConfig = {
   userInterfaceStyle: "automatic",
   // Icons are rendered from assets/brand/*.svg by scripts/generate-icons.mjs.
   icon: "./assets/icon.png",
-  splash: {
-    image: "./assets/splash-icon.png",
-    resizeMode: "contain",
-    backgroundColor: "#FCFCFC",
-  },
-  newArchEnabled: true,
   ios: {
     supportsTablet: true,
     bundleIdentifier: brand.technical.iosBundleIdentifier,
@@ -42,6 +36,16 @@ const config: ExpoConfig = {
     backgroundColor: "#FCFCFC",
   },
   plugins: [
+    // SDK 57 removed the top-level `splash` field; the splash lives in its plugin.
+    [
+      "expo-splash-screen",
+      {
+        image: "./assets/splash-icon.png",
+        imageWidth: 200,
+        resizeMode: "contain",
+        backgroundColor: "#FCFCFC",
+      },
+    ],
     "expo-document-picker",
     "@config-plugins/react-native-blob-util",
     "@config-plugins/react-native-pdf",
