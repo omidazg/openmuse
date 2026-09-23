@@ -11,9 +11,7 @@ export function browserAddress(value: string): string {
       throw new Error("Invalid address");
     return url.href;
   } catch {
-    throw new Error(
-      "نشانی وب‌سایت را وارد کنید؛ مثلاً copilotkit.ai یا https://news.ycombinator.com",
-    );
+    throw new Error("نشانی وب‌سایت را وارد کنید؛ مثلاً digikala.com یا https://www.tgju.org");
   }
 }
 

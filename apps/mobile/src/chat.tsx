@@ -414,16 +414,25 @@ export function ChatScreen({
             <View style={{ width: "100%", maxWidth: 360, marginTop: 14, gap: 8 }}>
               {[
                 {
-                  text: "چیزهای جالب در Hacker News",
-                  // The demo model matches "Hacker News" in the prompt.
-                  action: () => enqueue("در Hacker News بگرد و چیزهای جالب پیدا کن"),
+                  text: "امروز چندم است و تعطیلی بعدی کی است؟",
+                  action: () => enqueue("امروز به تقویم شمسی چندم است و تعطیلی رسمی بعدی کی است؟"),
                 },
                 {
-                  text: "خلاصهٔ copilotkit.ai",
-                  // The demo model matches "copilotkit.ai" in the prompt.
-                  action: () => enqueue("سایت copilotkit.ai را خلاصه کن"),
+                  text: "خلاصهٔ خبرهای مهم امروز",
+                  action: () => enqueue("خبرهای مهم امروز ایران را از خبرگزاری‌های فارسی خلاصه کن"),
                 },
-                { text: "زیر نظر گرفتن یک وب‌سایت", action: () => navigate("goals") },
+                {
+                  text: "قیمت امروز دلار، سکه و طلا",
+                  action: () =>
+                    enqueue("قیمت امروز دلار، سکه و طلای ۱۸ عیار را از tgju.org پیدا کن"),
+                },
+                {
+                  text: "نوشتن نامهٔ اداری",
+                  action: () =>
+                    enqueue(
+                      "یک نامهٔ اداری رسمی برای درخواست مرخصی بنویس؛ اول نام، سمت و تاریخ‌ها را از من بپرس",
+                    ),
+                },
               ].map((item) => (
                 <Button key={item.text} onPress={item.action}>
                   {item.text}
