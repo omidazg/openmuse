@@ -194,7 +194,7 @@ function addresses(value: string): string[] {
   return value.match(/[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9.-]+/g) ?? [];
 }
 /** Extract text from a parsed HTML tree. Nothing is rendered or fetched. */
-function htmlToPlainText(html: string): string {
+export function htmlToPlainText(html: string): string {
   const root = parseFragment(html);
   const excluded = new Set([
     "script",

@@ -89,11 +89,16 @@ export class AgentService {
     if (this.maintenance) clearInterval(this.maintenance);
     this.maintenance = undefined;
     await this.worker.stop();
+    await this.workspace.mailbox.stop();
     while (this.refreshing) await new Promise((resolve) => setTimeout(resolve, 10));
   }
   private async maintain() {
     if (this.refreshing) return;
     this.refreshing = true;
+    // IMAP mailboxes refresh on their own schedule so a slow server never delays maintenance.
+    void this.workspace.mailbox
+      .refreshDue()
+      .catch((error) => backgroundFailure("mailbox refresh", error));
     try {
       // Recover publications if the process exited after committing an outcome.
       for (const { owner, value } of await this.db.scan<AgentTask>("tasks"))

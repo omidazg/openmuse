@@ -188,6 +188,10 @@ export interface Connection {
   status: "connected" | "disconnected" | "sample" | "unconfigured";
   account?: string;
   capabilities: string[];
+  /** Last successful sync (UTC ISO), for connectors that mirror a mailbox. */
+  syncedAt?: string;
+  /** Persian description of the last background failure, if any. */
+  error?: string;
 }
 export interface Workspace {
   mode: WorkspaceMode;

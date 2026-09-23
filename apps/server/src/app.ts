@@ -10,6 +10,7 @@ import { cors } from "hono/cors";
 import { z } from "zod";
 import { BRAND } from "../../../packages/domain/src/brand.ts";
 import { emailDraftSchema, proposalSchema } from "../../../packages/domain/src/index.ts";
+import type { MailboxDeps } from "../../../packages/integrations/src/mailbox.ts";
 import { ActionService } from "./actions.ts";
 import { adminRoutes } from "./admin-routes.ts";
 import { agentConfigured, makeRuntime } from "./agent.ts";
@@ -25,6 +26,7 @@ import { AgentService } from "./engine/service.ts";
 import { AppError } from "./errors.ts";
 import { Files } from "./files.ts";
 import { GoogleAuth } from "./google-auth.ts";
+import { MailboxService } from "./mailbox.ts";
 import { configCatalog, modelOptions, saveSelectedModel, selectedModel } from "./models.ts";
 import { OtpService } from "./otp.ts";
 import { clientIp, RateLimiter } from "./rate-limit.ts";
@@ -32,23 +34,24 @@ import { localThreadRoutes, localThreadsEnabled } from "./threads.ts";
 import { transcribeAudio, transcriptionEnabled } from "./transcribe.ts";
 import { Usage } from "./usage.ts";
 import { publicUser, type Role } from "./users.ts";
-import { WorkspaceService } from "./workspace.ts";
+import { purposeOf, WorkspaceService } from "./workspace.ts";
 
 export async function createApp(
   db: Store,
   config: Config,
-  options: { docker?: DockerRunner; fetch?: typeof fetch } = {},
+  options: { docker?: DockerRunner; fetch?: typeof fetch; mailbox?: MailboxDeps } = {},
 ) {
   const auth = await createAuth(db, config),
     files = new Files(db, config, auth),
     google = new GoogleAuth(db, config),
-    workspace = new WorkspaceService(db, config, files, google);
+    mailbox = new MailboxService(db, config, options.mailbox),
+    workspace = new WorkspaceService(db, config, files, google, mailbox);
   const actions = new ActionService(db, {
     execute: (owner, input, connectionId, targetVersion) =>
       workspace.execute(owner, input, connectionId, targetVersion),
     prepare: (owner, input, connectionId) => workspace.prepare(owner, input, connectionId),
-    connected: (owner) => workspace.connected(owner),
-    connection: (owner) => workspace.connection(owner),
+    connected: (owner, kind) => workspace.connected(owner, kind && purposeOf(kind)),
+    connection: (owner, kind) => workspace.connection(owner, kind && purposeOf(kind)),
   });
   const browser = new BrowserService(db, config, auth, files);
   const computer = new ComputerService(db, config, options.docker);
@@ -354,6 +357,19 @@ export async function createApp(
     }
     return c.json(await google.connect(c.get("owner"), body.capability === "write"));
   });
+  app.get("/api/mailbox", async (c) => c.json(await mailbox.status(c.get("owner"))));
+  // The body carries an app password: it is validated, encrypted and never echoed or logged.
+  app.post("/api/mailbox/connect", async (c) =>
+    c.json(await mailbox.connect(c.get("owner"), await c.req.json()), 201),
+  );
+  app.post("/api/mailbox/sync", async (c) => {
+    await mailbox.sync(c.get("owner"));
+    return c.json(await mailbox.status(c.get("owner")));
+  });
+  app.post("/api/mailbox/disconnect", async (c) => {
+    await mailbox.disconnect(c.get("owner"));
+    return c.json({ ok: true });
+  });
   app.post("/api/google/disconnect", async (c) => {
     if (config.mode === "sample")
       await db.put(c.get("owner"), "settings", { id: "google", enabled: false });
@@ -425,7 +441,7 @@ export async function createApp(
   app.get("/", (c) =>
     c.json({ name: BRAND.name, app: "http://localhost:8081", health: "/api/health" }),
   );
-  return { app, auth, files, actions, workspace, agent, computer, usage, users, otp };
+  return { app, auth, files, actions, workspace, agent, computer, usage, users, otp, mailbox };
 }
 
 /** A chat turn: REST `POST …/agent/:id/run` or a single-endpoint `{"method":"agent/run"}` call. */
