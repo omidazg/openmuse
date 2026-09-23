@@ -45,6 +45,7 @@ import { responseLength, responseLengthSchema, saveResponseLength } from "./resp
 import { publicShareRoutes, shareRoutes } from "./sharing.ts";
 import { localThreadRoutes, localThreadsEnabled } from "./threads.ts";
 import { transcribeAudio, transcriptionEnabled } from "./transcribe.ts";
+import { translateFile } from "./translate.ts";
 import { TtsService, ttsEnabled } from "./tts.ts";
 import { Usage } from "./usage.ts";
 import { publicUser, type Role } from "./users.ts";
@@ -426,6 +427,16 @@ export async function createApp(
       .object({ fields: z.record(z.string(), z.union([z.string(), z.boolean()])) })
       .parse(await c.req.json());
     return c.json(await files.fill(c.get("owner"), c.req.param("id"), body.fields), 201);
+  });
+  app.get("/api/files/search", async (c) => {
+    const query = z.string().trim().min(1).max(500).parse(c.req.query("q"));
+    const owner = c.get("owner");
+    return c.json(await files.index.search(owner, await files.list(owner), query));
+  });
+  app.post("/api/files/:id/translate", async (c) => {
+    const language = z.enum(["fa", "en", "ar"]);
+    const body = z.object({ to: language, from: language.optional() }).parse(await c.req.json());
+    return c.json(await translateFile(files, c.get("owner"), c.req.param("id"), body), 201);
   });
   app.post("/api/mail/import-attachment", async (c) => {
     const body = z.object({ reference: z.string() }).parse(await c.req.json());

@@ -9,10 +9,12 @@ import {
   extractDocumentText,
 } from "../../../packages/integrations/src/office.ts";
 import { fillPdf, inspectPdf, type RenderHtml } from "../../../packages/integrations/src/pdf.ts";
+import { extractPdfText } from "../../../packages/integrations/src/pdf-text.ts";
 import type { Auth } from "./auth.ts";
 import type { Config } from "./config.ts";
 import type { Store } from "./db.ts";
 import { AppError } from "./errors.ts";
+import { FileIndex } from "./file-search.ts";
 import { detectImageKind, IMAGE_TYPES, type ImageKind, imageKindOf, isHeic } from "./images.ts";
 import type { PdfRenderer } from "./pdf-render.ts";
 
@@ -36,13 +38,17 @@ function storedExtension(file: Pick<Artifact, "mimeType">): string {
 }
 
 export class Files {
+  /** Chunk and embedding index for search_files; files are indexed after upload. */
+  readonly index: FileIndex;
   constructor(
     private readonly db: Store,
     private readonly config: Config,
     private readonly auth: Auth,
     /** Chromium renderer for Persian PDFs; optional so pdf-lib paths keep working without it. */
     readonly renderer?: PdfRenderer,
-  ) {}
+  ) {
+    this.index = new FileIndex(db, (owner, file) => this.plainText(owner, file));
+  }
   async import(
     owner: string,
     name: string,
@@ -110,6 +116,7 @@ export class Files {
     if (text !== undefined)
       await writeFile(join(directory, `${id}.txt`), text, { mode: 0o600, flag: "wx" });
     await this.db.put(owner, "files", artifact);
+    this.index.schedule(owner, artifact);
     return this.signed(owner, artifact);
   }
   /** Chromium HTML-to-PDF function when the browser worker is configured. */
@@ -154,7 +161,22 @@ export class Files {
       throw new AppError(`«${file.name}» یک PDF نیست. این کار فقط برای فایل‌های PDF است.`, 422);
     return this.bytes(owner, id);
   }
-  /** Extracted plain text of a Word, Excel or CSV file. */
+  /**
+   * Full extracted text of any owned file. PDF text is extracted on first use (best effort,
+   * empty for scanned PDFs) and cached next to the file.
+   */
+  async plainText(owner: string, file: Artifact): Promise<string> {
+    const path = join(this.config.dataDir, "files", `${file.id}.txt`);
+    try {
+      return await readFile(path, "utf8");
+    } catch {
+      if (fileKind(file) !== "pdf") return "";
+    }
+    const { text } = await extractPdfText(await this.bytes(owner, file.id));
+    await writeFile(path, text, { mode: 0o600, flag: "wx" }).catch(() => undefined);
+    return text;
+  }
+  /** Extracted plain text of a file (PDFs: best-effort text layer plus form fields). */
   async text(owner: string, id: string, offset = 0, limit = 30_000) {
     const file = await this.get(owner, id);
     const kind = fileKind(file);
@@ -166,7 +188,8 @@ export class Files {
         text: "",
         note: "This is an image. Use extract_from_image with this file ID to describe it or read its text.",
       };
-    if (kind === "pdf")
+    const pdfText = kind === "pdf" ? await this.plainText(owner, file).catch(() => "") : "";
+    if (kind === "pdf" && !pdfText)
       return {
         id: file.id,
         name: file.name,
@@ -174,9 +197,12 @@ export class Files {
         pageCount: file.pageCount,
         fields: file.fields,
         text: "",
-        note: "Text extraction is not available for PDFs; use the listed form fields.",
+        note: "This PDF has no readable text layer (it may be scanned); use the listed form fields.",
       };
-    const all = await readFile(join(this.config.dataDir, "files", `${id}.txt`), "utf8");
+    const all =
+      kind === "pdf"
+        ? pdfText
+        : await readFile(join(this.config.dataDir, "files", `${id}.txt`), "utf8");
     const start = Math.max(0, Math.min(offset, all.length));
     const text = all.slice(start, start + Math.max(1, Math.min(limit, 100_000)));
     return {
