@@ -91,6 +91,11 @@ services:
     restart: unless-stopped
     environment:
       <<: *app-env
+      # ربات‌های بله/تلگرام فقط در همین سرویس long polling می‌کنند (هر توکن فقط یک مصرف‌کننده).
+      # خالی ماندن توکن یعنی آن ربات خاموش است. راهنما: docs/BOT.fa.md
+      BALE_BOT_TOKEN: ${BALE_BOT_TOKEN:-}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_API_BASE: ${TELEGRAM_API_BASE:-}
     volumes:
       - app-data:/data
     networks: [backend]
