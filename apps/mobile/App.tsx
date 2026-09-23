@@ -69,26 +69,60 @@ const titles: Partial<Record<Section, { title: string; subtitle: string }>> = {
   browser: { title: "مرورگر", subtitle: "نشست‌های مرور متصل شما." },
   files: { title: "فایل‌ها", subtitle: "اسناد، فرم‌ها و نسخه‌های تکمیل‌شده." },
 };
+const TOKEN_KEY = "dastyar.session";
+/** Web keeps the 24-hour session token so a refresh does not ask for the key again. */
+function loadToken(): string {
+  try {
+    return globalThis.localStorage?.getItem(TOKEN_KEY) ?? "";
+  } catch {
+    return "";
+  }
+}
+function saveToken(value: string) {
+  try {
+    if (value) globalThis.localStorage?.setItem(TOKEN_KEY, value);
+    else globalThis.localStorage?.removeItem(TOKEN_KEY);
+  } catch {}
+}
+
 export default function App() {
   const fontsReady = useAppFonts();
   const [token, setToken] = useState("");
   const [accessKey, setAccessKey] = useState("");
   const [busy, setBusy] = useState(true);
   const [error, setError] = useState("");
-  const connect = useCallback(async (key?: string) => {
+  const connect = useCallback(async (key?: string, silent = false) => {
     setBusy(true);
     setError("");
     try {
       const session = await createSession(key);
+      saveToken(session.token);
       setToken(session.token);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      // The first automatic attempt has no key; its failure is expected, not an error.
+      if (!silent) setError(e instanceof Error ? e.message : String(e));
     } finally {
       setBusy(false);
     }
   }, []);
   useEffect(() => {
-    void connect();
+    void (async () => {
+      const saved = loadToken();
+      if (saved) {
+        const ok = await fetch(`${API_URL}/api/workspace`, {
+          headers: { Authorization: `Bearer ${saved}` },
+        })
+          .then((r) => r.ok)
+          .catch(() => false);
+        if (ok) {
+          setToken(saved);
+          setBusy(false);
+          return;
+        }
+        saveToken("");
+      }
+      await connect(undefined, true);
+    })();
   }, [connect]);
   if (!fontsReady) return null;
   return (
@@ -135,15 +169,22 @@ export default function App() {
                   value={accessKey}
                   onChangeText={setAccessKey}
                   secureTextEntry
-                  placeholder="برای فضای کار آنلاین لازم است"
+                  placeholder="کلید دسترسی خود را وارد کنید"
                 />
                 <Button primary onPress={() => void connect(accessKey || undefined)}>
                   باز کردن فضای کار
                 </Button>
-                <Text style={[s.small, { marginTop: 15 }]}>
-                  فضاهای کار محلی بدون کلید باز می‌شوند. مطمئن شوید سرور {BRAND.nameFa} در این نشانی
-                  در حال اجراست: <Text style={{ writingDirection: "ltr" }}>{API_URL}</Text>
-                </Text>
+                {__DEV__ ? (
+                  <Text style={[s.small, { marginTop: 15 }]}>
+                    فضاهای کار محلی بدون کلید باز می‌شوند. مطمئن شوید سرور {BRAND.nameFa} در این
+                    نشانی در حال اجراست: <Text style={{ writingDirection: "ltr" }}>{API_URL}</Text>
+                  </Text>
+                ) : (
+                  <Text style={[s.small, { marginTop: 15 }]}>
+                    کلید دسترسی را از مدیر سرویس دریافت کنید. پس از ورود، این دستگاه تا ۲۴ ساعت شما
+                    را به خاطر می‌سپارد.
+                  </Text>
+                )}
               </Card>
             )}
           </View>
