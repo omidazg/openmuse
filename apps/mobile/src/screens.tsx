@@ -3,6 +3,7 @@ import * as FileSystem from "expo-file-system/legacy";
 import {
   ArrowDownToLine,
   ArrowUpLeft,
+  AtSign,
   CalendarDays,
   Check,
   CheckCheck,
@@ -42,6 +43,7 @@ import { BRAND } from "../../../packages/domain/src/brand";
 import { API_URL } from "./api";
 import { localDateTime, zonedInstant } from "./date-time";
 import { faDate, faDigits, faNumber, fw } from "./locale";
+import { MailboxSheet } from "./mailbox-sheet";
 import {
   Button,
   Card,
@@ -1228,7 +1230,16 @@ export function ConnectionsScreen({ query = "" }: { query?: string }) {
   const google = w.connections.find((c) => c.id === "google");
   const connected = google?.status === "connected" || google?.status === "sample";
   const googleUnconfigured = google?.status === "unconfigured";
+  const imap = w.connections.find((c) => c.id === "imap");
   const rows = [
+    {
+      id: "imap",
+      name: "ایمیل (IMAP/SMTP)",
+      icon: AtSign,
+      color: "#1473C8",
+      connected: imap?.status === "connected",
+      group: "imap",
+    },
     { id: "gmail", name: "Gmail", icon: Mail, color: "#EA5B4D", connected, group: "google" },
     {
       id: "calendar",
@@ -1304,20 +1315,30 @@ export function ConnectionsScreen({ query = "" }: { query?: string }) {
                   {row.connected && row.group === "google" && w.mode === "sample" && (
                     <Text style={s.small}>داده‌های محلی</Text>
                   )}
+                  {row.connected && row.group === "imap" && imap?.account && (
+                    <Text style={[s.small, { writingDirection: "ltr", flexShrink: 1 }]}>
+                      {imap.account}
+                    </Text>
+                  )}
                   {row.connected ? (
                     <ChevronLeft size={18} color="#A4A7AA" />
                   ) : (
                     <Text
                       style={{
                         fontSize: 13,
-                        color: row.group === "google" ? colors.blueDark : colors.muted,
+                        color:
+                          row.group === "google" || row.group === "imap"
+                            ? colors.blueDark
+                            : colors.muted,
                       }}
                     >
                       {row.group === "google"
                         ? googleUnconfigured
                           ? "پیکربندی نشده"
                           : "اتصال"
-                        : "راه‌اندازی"}
+                        : row.group === "imap"
+                          ? "اتصال"
+                          : "راه‌اندازی"}
                     </Text>
                   )}
                 </Pressable>
@@ -1329,7 +1350,10 @@ export function ConnectionsScreen({ query = "" }: { query?: string }) {
       {!rows.length && (
         <Text style={s.muted}>اتصالی مطابق جست‌وجو پیدا نشد. عبارت دیگری را امتحان کنید.</Text>
       )}
-      {selected && (
+      {selected === "imap" && (
+        <MailboxSheet connection={imap} onClose={() => setSelected(undefined)} />
+      )}
+      {selected && selected !== "imap" && (
         <Sheet
           title={selected === "google" ? "اتصال‌های Google" : "OpenBot"}
           subtitle={selected === "google" ? google?.account : "رایانه‌ای برای دستیار شما"}

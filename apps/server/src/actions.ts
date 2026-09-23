@@ -24,8 +24,12 @@ interface Options {
     target?: CalendarEvent;
     targetVersion?: string;
   }>;
-  connected: (owner: string) => Promise<boolean>;
-  connection?: (owner: string) => Promise<{ id: string; account: string } | null>;
+  /** `kind` lets mail actions use a mailbox connector while calendar actions use Google. */
+  connected: (owner: string, kind?: ProposalInput["kind"]) => Promise<boolean>;
+  connection?: (
+    owner: string,
+    kind?: ProposalInput["kind"],
+  ) => Promise<{ id: string; account: string } | null>;
   now?: () => number;
 }
 export class ActionService {
@@ -51,9 +55,14 @@ export class ActionService {
       if (existing) return existing;
     }
     const parsed = proposalSchema.parse(raw);
-    const connection = await this.options.connection?.(owner);
+    const connection = await this.options.connection?.(owner, parsed.kind);
     if (this.options.connection && !connection)
-      throw new AppError("پیش از آماده‌کردن اقدام، گوگل را متصل کنید", 409);
+      throw new AppError(
+        parsed.kind === "email.send"
+          ? "پیش از آماده‌کردن ایمیل، صندوق ایمیل یا گوگل را در «برنامه‌ها» متصل کنید."
+          : "پیش از آماده‌کردن اقدام، گوگل را متصل کنید",
+        409,
+      );
     const prepared = await this.options.prepare?.(owner, parsed, connection?.id);
     const input = proposalSchema.parse(prepared?.input ?? parsed);
     const title =
@@ -136,10 +145,10 @@ export class ActionService {
       }
       throw new AppError("مهلت این بازبینی تمام شده است. پیشنهاد تازه‌ای بسازید.", 409);
     }
-    if (decision === "approve" && !(await this.options.connected(owner)))
+    if (decision === "approve" && !(await this.options.connected(owner, proposal.kind)))
       throw new AppError("اتصال گوگل قطع است. پیش از تأیید این اقدام دوباره متصل شوید.", 409);
     if (decision === "approve" && this.options.connection) {
-      const connection = await this.options.connection(owner);
+      const connection = await this.options.connection(owner, proposal.kind);
       if (
         !connection ||
         connection.id !== proposal.connectionId ||

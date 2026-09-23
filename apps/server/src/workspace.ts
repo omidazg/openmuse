@@ -19,9 +19,18 @@ import type { Store } from "./db.ts";
 import { AppError } from "./errors.ts";
 import type { Files } from "./files.ts";
 import type { GoogleAuth } from "./google-auth.ts";
+import { MailboxService } from "./mailbox.ts";
 import { localThreadsEnabled } from "./threads.ts";
 
 const sampleTimeZone = "Asia/Tehran";
+/** Which connector an operation needs: mail prefers an IMAP mailbox; calendar and Gmail need Google. */
+export type ConnectionPurpose = "mail" | "google";
+export function purposeOf(kind: ProposalInput["kind"]): ConnectionPurpose {
+  return kind === "email.send" ? "mail" : "google";
+}
+
+const NO_MAILBOX =
+  "اتصال گوگل قطع است و صندوق ایمیلی هم متصل نیست. در «برنامه‌ها» ایمیل را وصل کنید.";
 
 export class WorkspaceService {
   private seeding = new Map<string, Promise<void>>();
@@ -30,13 +39,31 @@ export class WorkspaceService {
     private readonly config: Config,
     private readonly files: Files,
     private readonly googleAuth: GoogleAuth,
+    readonly mailbox: MailboxService = new MailboxService(db, config),
   ) {}
   google(owner: string, connectionId?: string) {
     return new GoogleClient({
       getAccessToken: () => this.googleAuth.accessToken(owner, connectionId),
     });
   }
-  async connection(owner: string) {
+  /**
+   * The account an operation acts on. Without a purpose this is the primary connection
+   * (Google, else the IMAP mailbox), which tasks record to detect account switches.
+   */
+  async connection(
+    owner: string,
+    purpose?: ConnectionPurpose,
+  ): Promise<{ id: string; account: string } | null> {
+    if (purpose === "mail") {
+      const mailbox = await this.mailbox.status(owner);
+      if (mailbox) return { id: mailbox.connectionId, account: mailbox.account };
+    }
+    const google = await this.googleConnection(owner);
+    if (google || purpose === "google") return google;
+    const mailbox = await this.mailbox.status(owner);
+    return mailbox ? { id: mailbox.connectionId, account: mailbox.account } : null;
+  }
+  private async googleConnection(owner: string) {
     if (this.config.mode === "sample") {
       const value = await this.db.get<{ enabled: boolean; connectionId?: string }>(
         owner,
@@ -50,13 +77,17 @@ export class WorkspaceService {
     const tokens = await this.googleAuth.tokens(owner);
     return tokens ? { id: tokens.connectionId, account: tokens.account } : null;
   }
-  async connected(owner: string) {
+  async connected(owner: string, purpose?: ConnectionPurpose) {
+    if (purpose !== "google" && (await this.mailbox.status(owner))) return true;
+    return this.googleConnected(owner);
+  }
+  private async googleConnected(owner: string) {
     return this.config.mode === "sample"
       ? (await this.db.get<{ enabled: boolean }>(owner, "settings", "google"))?.enabled !== false
       : Boolean(await this.googleAuth.tokens(owner));
   }
   async calendars(owner: string) {
-    const connection = await this.connection(owner);
+    const connection = await this.connection(owner, "google");
     if (!connection) return [];
     if (this.config.mode === "sample")
       return [
@@ -73,7 +104,7 @@ export class WorkspaceService {
     owner: string,
     options: { calendarId?: string; timeMin?: string; timeMax?: string } = {},
   ) {
-    const connection = await this.connection(owner);
+    const connection = await this.connection(owner, "google");
     if (!connection) return [];
     if (this.config.mode === "live") return this.google(owner, connection.id).listEvents(options);
     return (await this.db.list<CalendarEvent>(owner, "events"))
@@ -101,8 +132,13 @@ export class WorkspaceService {
     return result;
   }
   async thread(owner: string, id: string) {
-    const connection = await this.connection(owner);
-    if (!connection) throw new AppError("اتصال گوگل قطع است", 409);
+    if (await this.mailbox.status(owner)) {
+      const messages = await this.mailbox.thread(owner, id);
+      if (!messages.length) throw new AppError("رشتهٔ ایمیل پیدا نشد", 404);
+      return messages;
+    }
+    const connection = await this.connection(owner, "google");
+    if (!connection) throw new AppError(NO_MAILBOX, 409);
     const mail =
       this.config.mode === "sample"
         ? (await this.db.list<Mail>(owner, "mail")).filter((m) => m.threadId === id)
@@ -115,8 +151,9 @@ export class WorkspaceService {
     return mail.sort((a, b) => a.date.localeCompare(b.date));
   }
   async searchMail(owner: string, query: string) {
-    const connection = await this.connection(owner);
-    if (!connection) throw new AppError("اتصال گوگل قطع است", 409);
+    if (await this.mailbox.status(owner)) return this.mailbox.search(owner, query);
+    const connection = await this.connection(owner, "google");
+    if (!connection) throw new AppError(NO_MAILBOX, 409);
     if (this.config.mode === "live")
       return this.cacheMail(
         owner,
@@ -267,12 +304,16 @@ export class WorkspaceService {
   }
   async snapshot(owner: string, query?: string): Promise<Workspace> {
     let mail: Mail[], events: CalendarEvent[];
-    const connected = await this.connected(owner);
+    const connected = await this.googleConnected(owner);
+    const mailbox = await this.mailbox.status(owner);
     if (this.config.mode === "live" && connected) {
-      const connection = await this.connection(owner);
+      const connection = await this.googleConnection(owner);
       if (!connection) throw new AppError("اتصال گوگل قطع است", 409);
       const google = this.google(owner, connection.id);
-      [mail, events] = await Promise.all([google.listMail(query), google.listEvents()]);
+      [mail, events] = await Promise.all([
+        mailbox ? [] : google.listMail(query),
+        google.listEvents(),
+      ]);
       mail = await this.cacheMail(owner, mail, connection.id);
       for (const event of events) await this.db.put(owner, "events", event);
     } else if (this.config.mode === "sample" && connected) {
@@ -286,12 +327,21 @@ export class WorkspaceService {
       mail = [];
       events = [];
     }
+    if (mailbox) {
+      mail = await this.mailbox.list(owner);
+      if (query) {
+        const q = query.toLowerCase();
+        mail = mail.filter((m) => `${m.sender} ${m.subject} ${m.body}`.toLowerCase().includes(q));
+      }
+    }
     const tokens = this.config.mode === "live" ? await this.googleAuth.tokens(owner) : null;
     return {
       mode: this.config.mode,
       profile: {
         name: this.config.mode === "sample" ? "آرش" : "شما",
-        email: tokens?.account ?? (this.config.mode === "sample" ? "arash@example.com" : ""),
+        email:
+          tokens?.account ??
+          (this.config.mode === "sample" ? "arash@example.com" : (mailbox?.account ?? "")),
       },
       mail: mail.sort((a, b) => b.date.localeCompare(a.date)),
       events: events.sort((a, b) => a.start.localeCompare(b.start)),
@@ -315,6 +365,15 @@ export class WorkspaceService {
           account:
             tokens?.account ?? (this.config.mode === "sample" ? "arash@example.com" : undefined),
           capabilities: this.config.mode === "sample" ? ["Gmail", "تقویم"] : (tokens?.scopes ?? []),
+        },
+        {
+          id: "imap",
+          name: "ایمیل (IMAP/SMTP)",
+          status: mailbox ? "connected" : "disconnected",
+          account: mailbox?.account,
+          capabilities: mailbox ? ["خواندن ایمیل", "ارسال با تأیید شما"] : [],
+          syncedAt: mailbox?.lastSyncAt,
+          error: mailbox?.lastError,
         },
         {
           id: "browser",
@@ -365,6 +424,16 @@ export class WorkspaceService {
     connectionId?: string,
     targetVersion?: string,
   ): Promise<string> {
+    if (input.kind === "email.send" && connectionId) {
+      const mailbox = await this.mailbox.status(owner);
+      if (mailbox?.connectionId === connectionId)
+        return this.mailbox.send(
+          owner,
+          connectionId,
+          input.data,
+          await this.attachments(owner, input.data.attachmentIds),
+        );
+    }
     if (this.config.mode === "sample") {
       if (input.kind === "email.send") {
         const id = randomUUID();
@@ -405,16 +474,7 @@ export class WorkspaceService {
         409,
       );
     if (input.kind === "email.send") {
-      const attachments = await Promise.all(
-        input.data.attachmentIds.map(async (id) => {
-          const file = await this.files.get(owner, id);
-          return {
-            name: file.name,
-            mimeType: file.mimeType,
-            bytes: await this.files.bytes(owner, id),
-          };
-        }),
-      );
+      const attachments = await this.attachments(owner, input.data.attachmentIds);
       const receipt = await google.sendEmail(input.data, attachments);
       return `پیام با Gmail ارسال شد · ${receipt.id}`;
     }
@@ -430,8 +490,20 @@ export class WorkspaceService {
     await this.db.put(owner, "events", event);
     return `رویداد تقویم گوگل · ${event.id}`;
   }
+  private attachments(owner: string, ids: string[]) {
+    return Promise.all(
+      ids.map(async (id) => {
+        const file = await this.files.get(owner, id);
+        return {
+          name: file.name,
+          mimeType: file.mimeType,
+          bytes: await this.files.bytes(owner, id),
+        };
+      }),
+    );
+  }
   async importAttachment(owner: string, reference: string): Promise<Artifact> {
-    const connection = await this.connection(owner);
+    const connection = await this.connection(owner, "google");
     if (!connection) throw new AppError("اتصال گوگل قطع است", 409);
     const cached = await this.db.get<{ artifactId: string; connectionId?: string }>(
       owner,
