@@ -1,6 +1,11 @@
+import {
+  gregorianToJalali,
+  jalaliToGregorian,
+} from "../../../packages/domain/src/iran-holidays.ts";
 import type { Config } from "./config.ts";
 import type { Store } from "./db.ts";
 import { AppError } from "./errors.ts";
+import { costMicroUsd, DEFAULT_MODEL_PRICES } from "./pricing.ts";
 import type { Users } from "./users.ts";
 
 export const QUOTA_EXCEEDED = "سقف استفادهٔ امروز شما تمام شده است. فردا دوباره تلاش کنید.";
@@ -18,6 +23,18 @@ export interface DailyUsage {
   inputTokens: number;
   outputTokens: number;
   totalTokens: number;
+  /** Model cost in micro-dollars (1e-6 USD) from the MODEL_PRICES table. */
+  costMicroUsd: number;
+  /** Runs whose tokens were estimated because the gateway reported no usage. */
+  estimatedRuns: number;
+}
+/** Summed usage over a period (today, this Jalali month, or all time). */
+export type UsageTotals = Omit<DailyUsage, "id" | "date">;
+export interface UsageSummary {
+  today: UsageTotals;
+  /** Since the first day of the current Jalali month (Tehran time). */
+  month: UsageTotals;
+  total: UsageTotals;
 }
 export type Metric = "messages" | "tasks";
 /** null means unlimited. */
@@ -39,7 +56,29 @@ const empty = (date: string): DailyUsage => ({
   inputTokens: 0,
   outputTokens: 0,
   totalTokens: 0,
+  costMicroUsd: 0,
+  estimatedRuns: 0,
 });
+const TOTAL_KEYS = [
+  "messages",
+  "tasks",
+  "modelCalls",
+  "inputTokens",
+  "outputTokens",
+  "totalTokens",
+  "costMicroUsd",
+  "estimatedRuns",
+] as const;
+function sum(days: DailyUsage[]): UsageTotals {
+  const totals = Object.fromEntries(TOTAL_KEYS.map((key) => [key, 0])) as UsageTotals;
+  for (const day of days) for (const key of TOTAL_KEYS) totals[key] += Number(day[key]) || 0;
+  return totals;
+}
+/** Gregorian day (YYYY-MM-DD) on which the Jalali month containing `day` starts. */
+export function jalaliMonthStart(day: string) {
+  const { year, month } = gregorianToJalali(day);
+  return jalaliToGregorian(year, month, 1);
+}
 const limit = (value: number | null | undefined, fallback: number) => {
   const chosen = value ?? fallback;
   return chosen > 0 ? chosen : null;
@@ -89,23 +128,70 @@ export class Usage {
     }
     return day;
   }
-  /** Records one model run and its token usage from an AG-UI RUN_FINISHED `usage` array. */
-  async recordModelRun(owner: string, usage?: unknown) {
-    const totals = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
+  /** Today, this Jalali month and all-time totals for one owner. */
+  async summary(owner: string): Promise<UsageSummary> {
+    const today = tehranDay(this.now());
+    const monthStart = jalaliMonthStart(today);
+    const days = (await this.db.list<DailyUsage>(owner, KIND)).map((day) => ({
+      ...empty(day.date),
+      ...day,
+    }));
+    return {
+      today: sum(days.filter((day) => day.date === today)),
+      month: sum(days.filter((day) => day.date >= monthStart)),
+      total: sum(days),
+    };
+  }
+  /**
+   * Records one model run from an AG-UI RUN_FINISHED `usage` array: tokens and their cost. `model`
+   * is the provider/model id the run started with (used when usage names no known model).
+   * `estimate` is used only when the gateway reported no tokens at all.
+   */
+  async recordModelRun(
+    owner: string,
+    usage?: unknown,
+    options: { model?: string; estimate?: { inputTokens: number; outputTokens: number } } = {},
+  ) {
+    const prices = this.config.modelPrices ?? DEFAULT_MODEL_PRICES;
+    const totals = { inputTokens: 0, outputTokens: 0, totalTokens: 0, costMicroUsd: 0 };
     if (Array.isArray(usage))
       for (const entry of usage) {
         if (!entry || typeof entry !== "object") continue;
         const record = entry as Record<string, unknown>;
-        for (const key of Object.keys(totals) as (keyof typeof totals)[]) {
+        const tokens = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
+        for (const key of Object.keys(tokens) as (keyof typeof tokens)[]) {
           const value = record[key];
           if (typeof value === "number" && Number.isSafeInteger(value) && value >= 0)
-            totals[key] += value;
+            tokens[key] = value;
         }
         if (typeof record.totalTokens !== "number")
-          totals.totalTokens +=
-            (Number(record.inputTokens) || 0) + (Number(record.outputTokens) || 0);
+          tokens.totalTokens = tokens.inputTokens + tokens.outputTokens;
+        totals.inputTokens += tokens.inputTokens;
+        totals.outputTokens += tokens.outputTokens;
+        totals.totalTokens += tokens.totalTokens;
+        totals.costMicroUsd += costMicroUsd(
+          prices,
+          tokens,
+          typeof record.model === "string" ? record.model : undefined,
+          options.model,
+        );
       }
+    let estimatedRuns = 0;
+    if (!totals.totalTokens && options.estimate) {
+      const { inputTokens, outputTokens } = options.estimate;
+      totals.inputTokens = inputTokens;
+      totals.outputTokens = outputTokens;
+      totals.totalTokens = inputTokens + outputTokens;
+      totals.costMicroUsd = costMicroUsd(prices, options.estimate, options.model);
+      estimatedRuns = totals.totalTokens ? 1 : 0;
+    }
     const date = tehranDay(this.now());
-    await this.db.increment(owner, KIND, date, { modelCalls: 1, ...totals }, empty(date));
+    await this.db.increment(
+      owner,
+      KIND,
+      date,
+      { modelCalls: 1, ...totals, estimatedRuns },
+      empty(date),
+    );
   }
 }

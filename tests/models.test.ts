@@ -12,6 +12,7 @@ import { createStore } from "../apps/server/src/db.ts";
 import { ConversationAgent } from "../apps/server/src/engine/conversation.ts";
 import {
   AUTO_MODEL,
+  autoTier,
   isSimpleMessage,
   parseModels,
   readModelCatalog,
@@ -104,7 +105,43 @@ test("auto is offered only with a distinct allowlisted MODEL_FAST", () => {
   assert.equal(isSimpleMessage("سلام، امروز چه خبر؟"), true);
   assert.equal(isSimpleMessage("این صفحه را خلاصه کن https://example.org"), false);
   assert.equal(isSimpleMessage("خط اول\nخط دوم"), false);
-  assert.equal(isSimpleMessage("ا".repeat(161)), false);
+  assert.equal(isSimpleMessage("ا".repeat(201)), false);
+});
+
+test("the «خودکار» router sends chit-chat to the fast model and real work to the main model", () => {
+  const fast = [
+    "سلام",
+    "سلام، خوبی؟",
+    "ممنون از کمکت",
+    "پایتخت فرانسه کجاست؟",
+    "کدام فصل برای سفر به شیراز بهتر است؟",
+    "یک اسم خوب برای گربه پیشنهاد بده",
+    "۲ + ۲ چند می‌شود؟",
+    "hello, how are you?",
+  ];
+  for (const text of fast) assert.equal(autoTier(text), "fast", text);
+  const main = [
+    "این متن را تحلیل کن",
+    "یک مقاله دربارهٔ انرژی خورشیدی بنویس",
+    "برنامه‌نویسی با پایتون را از کجا شروع کنم؟",
+    "برنامه ریزی سفر سه‌روزه به اصفهان",
+    "یک نامهٔ رسمی برای مرخصی بنویس",
+    "ایمیل‌های امروزم را ببین",
+    "جلسهٔ فردا را در تقویم بگذار",
+    "این کد را درست کن: const x = 1;",
+    "قیمت دلار امروز چند است؟",
+    "این صفحه را خلاصه کن https://example.org",
+    "digikala.com را بررسی کن",
+    "خط اول\nخط دوم",
+    "ا".repeat(201),
+    "summarize this report",
+  ];
+  for (const text of main) assert.equal(autoTier(text), "main", text);
+  // Attached documents and follow-ups to tool turns always need the main model.
+  assert.equal(autoTier("خلاصه‌اش را بگو", { attachments: true }), "main");
+  assert.equal(autoTier("بله، انجام بده", { toolHistory: true }), "main");
+  assert.equal(autoTier("بله، انجام بده"), "fast");
+  assert.equal(autoTier("این را بخوان\n\nاسناد پیوست‌شده: قرارداد.pdf (شناسهٔ سند: f1)"), "main");
 });
 
 test("GET /api/models lists the allowlist and the choice persists per owner", async (t) => {
@@ -113,9 +150,14 @@ test("GET /api/models lists the allowlist and the choice persists per owner", as
   const initial = await (await fixture.request("/api/models")).json();
   assert.deepEqual(
     initial.models.map((m: { id: string }) => m.id),
-    ["openai/strong-fixture", "openai/fast-fixture", "google/gemini-2.5-flash", AUTO_MODEL],
+    [AUTO_MODEL, "openai/strong-fixture", "openai/fast-fixture", "google/gemini-2.5-flash"],
   );
-  assert.equal(initial.selected, "openai/strong-fixture");
+  // With MODEL_FAST, «خودکار» is the default until someone picks a model.
+  assert.equal(initial.selected, AUTO_MODEL);
+  assert.deepEqual(
+    initial.models.filter((m: { default: boolean }) => m.default).map((m: { id: string }) => m.id),
+    [AUTO_MODEL],
+  );
 
   const saved = await fixture.request("/api/models/selected", {
     method: "PUT",
@@ -134,8 +176,9 @@ test("GET /api/models lists the allowlist and the choice persists per owner", as
     await resolveModel(fixture.db, catalog, "local-user", "سلام"),
     "google/gemini-2.5-flash",
   );
-  // Other owners keep the default.
+  // Other owners keep the default: auto, which is the strong model for tasks and complex turns.
   assert.equal(await resolveModel(fixture.db, catalog, "user-sara"), "openai/strong-fixture");
+  assert.equal(await resolveModel(fixture.db, catalog, "user-sara", "سلام"), "openai/fast-fixture");
 
   await fixture.request("/api/models/selected", {
     method: "PUT",
@@ -173,10 +216,7 @@ test("model ids outside the allowlist are rejected and stale choices fall back",
   const catalog = fixture.config.models;
   assert.ok(catalog);
   assert.equal(await resolveModel(fixture.db, catalog, "local-user"), "openai/strong-fixture");
-  assert.equal(
-    (await (await fixture.request("/api/models")).json()).selected,
-    "openai/strong-fixture",
-  );
+  assert.equal((await (await fixture.request("/api/models")).json()).selected, AUTO_MODEL);
 });
 
 test("chat turns use the owner's chosen model", async (t) => {

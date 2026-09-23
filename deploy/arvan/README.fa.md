@@ -363,6 +363,21 @@ SMOKE_ACCESS_KEY=<کلید> ./deploy/arvan/smoke.sh https://dastyar-gpt.ir
 هر push به `fa-arvan` اجرا می‌شود؛ در مخزن GitHub ← Settings ← Secrets این دو را بسازید:
 `SMOKE_URL` (مثلاً `https://37.32.27.135`) و `SMOKE_ACCESS_KEY`.
 
+### ارزیابی کیفیت فارسی (`pnpm eval`)
+
+`tests/evals/persian.json` حدود ۳۰ پرسش فارسی دارد (نام دستیار، تقویم شمسی، حساب با رقم فارسی، نامهٔ
+رسمی، نیم‌فاصله و املا، رد درخواست‌های ناامن) و برای هر پاسخ چند بررسی ساده انجام می‌شود. این ارزیابی با
+مدل واقعی کار می‌کند، پس جزو `pnpm test` نیست و فقط دستی اجرا می‌شود:
+
+```bash
+EVAL_BASE_URL=https://37.32.27.135 EVAL_ACCESS_KEY=<کلید> pnpm eval
+# فقط چند مورد:
+EVAL_ONLY=name-1,math-multiply EVAL_BASE_URL=... EVAL_ACCESS_KEY=... pnpm eval
+```
+
+برای گواهی خودامضا `NODE_TLS_REJECT_UNAUTHORIZED=0` را هم بگذارید. هر پرسش در گفت‌وگوی تازه فرستاده
+می‌شود و هزینهٔ مدل دارد؛ بهتر است همان کلید آزمون دود را به کار ببرید.
+
 ## ۱۳. نگهداری دیسک
 
 دیسک سرور فعلی ۲۳ گیگابایت است و بیشترِ آن را ایمیج‌ها و کش build مصرف می‌کنند.

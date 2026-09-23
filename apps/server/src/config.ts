@@ -2,6 +2,7 @@ import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { applyMetisProvider } from "./metis.ts";
 import { type ModelCatalog, readModelCatalog } from "./models.ts";
+import { type PriceTable, parseModelPrices } from "./pricing.ts";
 
 if (existsSync(".env")) process.loadEnvFile(".env");
 applyMetisProvider();
@@ -79,6 +80,14 @@ export interface Config {
   kavenegarTemplate?: string;
   /** Unknown phone numbers create a free user on first successful OTP login. */
   otpSignup?: boolean;
+  /** USD per 1M tokens for cost tracking (MODEL_PRICES merged over the defaults). */
+  modelPrices?: PriceTable;
+  /** Server-wide hard cap on output tokens per model step (MAX_OUTPUT_TOKENS); unset = none. */
+  maxOutputTokens?: number;
+  /** Replays answers to identical stateless first-turn prompts (RESPONSE_CACHE=on). */
+  responseCache?: boolean;
+  /** Cache lifetime in seconds (RESPONSE_CACHE_TTL, default 3600). */
+  responseCacheTtl?: number;
 }
 
 export function otpEnabled(config: Pick<Config, "kavenegarApiKey" | "kavenegarTemplate">) {
@@ -92,6 +101,21 @@ function readLimit(name: string, fallback: number) {
   if (!Number.isInteger(value) || value < 0)
     throw new Error(`${name} must be a whole number (0 = unlimited)`);
   return value;
+}
+
+function readPositive(name: string): number | undefined {
+  const raw = process.env[name]?.trim();
+  if (!raw || raw === "0") return undefined;
+  const value = Number(raw);
+  if (!Number.isInteger(value) || value < 0)
+    throw new Error(`${name} must be a whole number (0 or empty = off)`);
+  return value;
+}
+
+function readSwitch(name: string): boolean {
+  const raw = process.env[name]?.trim().toLowerCase() || "off";
+  if (!["on", "off", "true", "false"].includes(raw)) throw new Error(`${name} must be on or off`);
+  return raw === "on" || raw === "true";
 }
 
 export type ThreadsBackend = "local" | "intelligence";
@@ -167,6 +191,10 @@ export function readConfig(): Config {
     kavenegarApiKey: process.env.KAVENEGAR_API_KEY?.trim() || undefined,
     kavenegarTemplate: process.env.KAVENEGAR_TEMPLATE?.trim() || undefined,
     otpSignup: process.env.OTP_SIGNUP === "true",
+    modelPrices: parseModelPrices(process.env.MODEL_PRICES),
+    maxOutputTokens: readPositive("MAX_OUTPUT_TOKENS"),
+    responseCache: readSwitch("RESPONSE_CACHE"),
+    responseCacheTtl: readPositive("RESPONSE_CACHE_TTL") ?? 3600,
   };
   if (
     mode === "live" &&

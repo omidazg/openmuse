@@ -13,7 +13,13 @@ export type DailyUsage = {
   inputTokens: number;
   outputTokens: number;
   totalTokens: number;
+  /** Model cost in micro-dollars (1e-6 USD). */
+  costMicroUsd?: number;
+  estimatedRuns?: number;
 };
+type Totals = { costMicroUsd: number; totalTokens: number; modelCalls: number };
+type Period = "today" | "month" | "total";
+export type UsageSummary = Record<Period, Totals>;
 export type Limits = { messages: number | null; tasks: number | null };
 type Quota = { dailyMessages?: number | null; dailyTasks?: number | null };
 export type AdminUser = {
@@ -30,6 +36,7 @@ export type AdminUser = {
   sessions: number;
   usage: DailyUsage;
   limits: Limits;
+  summary?: UsageSummary;
 };
 type Confirm = { id: string; action: "disable" | "rotate" | "sessions" };
 
@@ -41,6 +48,13 @@ const used = (count: number, limit: number | null, noun: string) =>
   limit === null
     ? `${faNumber(count)} ${noun}`
     : `${faNumber(count)} از ${faNumber(limit)} ${noun}`;
+
+/** Micro-dollars as «۰٫۰۱۲۳ دلار»: four decimals below one cent, otherwise two. */
+const usd = (micro = 0) =>
+  `${faNumber(micro / 1e6, { maximumFractionDigits: micro && micro < 10000 ? 4 : 2 })} دلار`;
+/** «امروز ۰٫۰۱ دلار، این ماه ۰٫۴ دلار، کل ۱٫۲ دلار» */
+const costLine = (summary: UsageSummary) =>
+  `امروز ${usd(summary.today.costMicroUsd)}، این ماه ${usd(summary.month.costMicroUsd)}، کل ${usd(summary.total.costMicroUsd)}`;
 
 /** Copies on web; on phones opens the share sheet so the key can go to a password manager or chat. */
 async function copyText(text: string) {
@@ -318,6 +332,7 @@ function UserRow({
         امروز: {used(user.usage.messages, user.limits.messages, "پیام")}،{" "}
         {used(user.usage.tasks, user.limits.tasks, "کار")}، {faNumber(user.usage.totalTokens)} توکن
       </Text>
+      {user.summary && <Text style={s.small}>هزینهٔ مدل: {costLine(user.summary)}</Text>}
       <Text style={s.small}>
         {user.sessions ? `${faNumber(user.sessions)} نشست باز` : "بدون نشست باز"}
         {user.source === "env" ? "؛ کلید در تنظیمات سرور تعریف شده است" : ""}
@@ -415,6 +430,7 @@ export function AdminSheet({
 }) {
   const [users, setUsers] = useState<AdminUser[]>();
   const [defaults, setDefaults] = useState<{ messages: number; tasks: number }>();
+  const [totals, setTotals] = useState<UsageSummary>();
   const [error, setError] = useState("");
   const [creating, setCreating] = useState(false);
   const [secret, setSecret] = useState<{ title: string; key: string }>();
@@ -423,9 +439,11 @@ export function AdminSheet({
       const result = await api.request<{
         users: AdminUser[];
         defaults: { messages: number; tasks: number };
+        totals?: UsageSummary;
       }>("/api/admin/users");
       setUsers(result.users);
       setDefaults(result.defaults);
+      setTotals(result.totals);
       setError("");
     } catch (e) {
       setError(`فهرست کاربران بارگذاری نشد. ${e instanceof Error ? e.message : String(e)}`);
@@ -435,7 +453,11 @@ export function AdminSheet({
     void load();
   }, [load]);
   return (
-    <Sheet title="مدیریت کاربران" subtitle="کاربران، کلیدهای دسترسی و مصرف امروز" onClose={onClose}>
+    <Sheet
+      title="مدیریت کاربران"
+      subtitle="کاربران، کلیدهای دسترسی، مصرف امروز و هزینهٔ مدل"
+      onClose={onClose}
+    >
       <View style={{ gap: 14 }}>
         {secret && (
           <KeyReveal title={secret.title} value={secret.key} onDone={() => setSecret(undefined)} />
@@ -465,6 +487,17 @@ export function AdminSheet({
             سقف پیش‌فرض هر کاربر در روز: {limitLabel(defaults.messages || null)} پیام و{" "}
             {limitLabel(defaults.tasks || null)} کار. مدیرها سقف ندارند.
           </Text>
+        )}
+        {totals && (
+          <Card style={{ gap: 6 }}>
+            <Text style={s.heading}>هزینهٔ مدل همهٔ کاربران</Text>
+            <Text style={s.text}>{costLine(totals)}</Text>
+            <Text style={s.small}>
+              این ماه: {faNumber(totals.month.modelCalls)} اجرای مدل و{" "}
+              {faNumber(totals.month.totalTokens)} توکن. «این ماه» از اول ماه شمسی جاری به وقت تهران
+              حساب می‌شود و هزینه‌ها با جدول قیمت سرور (MODEL_PRICES) برآورد می‌شوند.
+            </Text>
+          </Card>
         )}
         {!users && !error && <ActivityIndicator color={colors.blueDark} />}
         {users?.length === 0 && (

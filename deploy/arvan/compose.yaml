@@ -26,8 +26,21 @@ x-app-env: &app-env
   MODEL: ${MODEL:-}
   # Models people may pick in chat (id:Persian label, comma-separated); MODEL stays the default.
   MODELS: "${MODELS:-anthropic/claude-sonnet-5:کلاد سونت ۵ (قوی),openai/gpt-4.1-mini:جی‌پی‌تی ۴٫۱ مینی (سریع و ارزان),google/gemini-2.5-flash:جمنای ۲٫۵ فلش}"
-  # Optional: an allowlisted fast model enables the «خودکار» choice for short messages.
+  # Optional: an allowlisted fast model enables «خودکار», the default choice, which routes simple
+  # messages to MODEL_FAST and everything else to MODEL by a heuristic.
   MODEL_FAST: ${MODEL_FAST:-}
+  # Cost tracking: JSON of USD per 1M tokens, merged over the built-in defaults.
+  MODEL_PRICES: ${MODEL_PRICES:-}
+  # Hard cap on output tokens per model call (empty = provider default).
+  MAX_OUTPUT_TOKENS: ${MAX_OUTPUT_TOKENS:-}
+  # In-memory cache for identical short first-turn prompts (per user and model).
+  RESPONSE_CACHE: ${RESPONSE_CACHE:-off}
+  RESPONSE_CACHE_TTL: ${RESPONSE_CACHE_TTL:-3600}
+  # Optional OpenAI-compatible fallback gateway, tried once when the main gateway fails.
+  FALLBACK_BASE_URL: ${FALLBACK_BASE_URL:-}
+  FALLBACK_API_KEY: ${FALLBACK_API_KEY:-}
+  FALLBACK_MODEL: ${FALLBACK_MODEL:-}
+  FALLBACK_TIMEOUT_MS: ${FALLBACK_TIMEOUT_MS:-45000}
   # Voice input (POST /api/transcribe) via the OpenAI-compatible /audio/transcriptions.
   TRANSCRIBE_MODEL: ${TRANSCRIBE_MODEL:-whisper-1}
   TRANSCRIBE_ENABLED: ${TRANSCRIBE_ENABLED:-true}

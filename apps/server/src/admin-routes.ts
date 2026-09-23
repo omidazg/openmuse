@@ -61,11 +61,28 @@ export function adminRoutes(users: Users, usage: Usage, config: Config) {
         sessions: sessions.get(user.id) ?? 0,
         usage: await usage.today(user.id),
         limits: await usage.limits(user.id),
+        // Cost and tokens today, this Jalali month and all time.
+        summary: await usage.summary(user.id),
       })),
     );
     rows.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+    const periods = ["today", "month", "total"] as const;
+    const totals = Object.fromEntries(
+      periods.map((period) => [
+        period,
+        rows.reduce(
+          (sum, row) => ({
+            costMicroUsd: sum.costMicroUsd + row.summary[period].costMicroUsd,
+            totalTokens: sum.totalTokens + row.summary[period].totalTokens,
+            modelCalls: sum.modelCalls + row.summary[period].modelCalls,
+          }),
+          { costMicroUsd: 0, totalTokens: 0, modelCalls: 0 },
+        ),
+      ]),
+    );
     return c.json({
       users: rows,
+      totals,
       defaults: {
         messages: config.dailyMessageLimit ?? 200,
         tasks: config.dailyTaskLimit ?? 30,
