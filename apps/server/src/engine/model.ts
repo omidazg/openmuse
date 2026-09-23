@@ -349,6 +349,10 @@ export async function executeModelTask(
           text += event.delta;
         if (event.type === EventType.RUN_ERROR && "message" in event)
           runError = String(event.message);
+        if (event.type === EventType.RUN_FINISHED)
+          void service.usage
+            ?.recordModelRun(owner, (event as { usage?: unknown }).usage)
+            .catch(() => undefined);
       },
       error: (error) => {
         clearTimeout(timeout);

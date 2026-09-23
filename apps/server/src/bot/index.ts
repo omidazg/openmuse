@@ -37,9 +37,17 @@ export function startBots(
   if (!bots.length) return undefined;
   const service = new BotService(db, bots, {
     reply: assistantReply(agent),
-    // TODO(quota): pass the shared usage-quota check here once the quota module exists, e.g.
-    // quota: async (owner) => ((await quotas.allow(owner)) ? undefined : "سهمیهٔ امروز شما تمام شده است."),
-    quota: options.quota,
+    // Bot messages share the owner's daily chat quota with the app.
+    quota:
+      options.quota ??
+      (async (owner) => {
+        try {
+          await agent.usage?.consume(owner, "messages");
+          return undefined;
+        } catch (error) {
+          return error instanceof Error ? error.message : "سقف استفادهٔ امروز شما تمام شده است.";
+        }
+      }),
   });
   service.start();
   console.log(`${BRAND.name} messenger bots polling: ${service.platforms.join(", ")}`);

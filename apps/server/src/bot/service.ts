@@ -20,7 +20,7 @@ import { splitMessage, toLatinDigits, toPlainText } from "./text.ts";
 
 /**
  * Usage-quota hook. Return a Persian message to refuse the request, or nothing to allow it.
- * TODO(quota): wire the shared quota module here once it lands (see startBots in index.ts).
+ * The quota check is wired to the shared daily usage limits in startBots (index.ts).
  */
 export type QuotaCheck = (owner: string) => Promise<string | undefined | null>;
 

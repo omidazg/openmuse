@@ -3,11 +3,13 @@ import {
   Archive,
   CalendarDays,
   FileText,
+  LogOut,
   MessageCircle,
   Monitor,
   Plus,
   RefreshCw,
   Settings2,
+  Users,
 } from "lucide-react-native";
 import {
   createContext,
@@ -22,6 +24,7 @@ import { ActivityIndicator, Pressable, Text, View } from "react-native";
 import { BRAND } from "../../../packages/domain/src/brand";
 import type { MuseApi } from "./api";
 import { faNumber } from "./locale";
+import { useSession } from "./session";
 import { Button, colors, ErrorNotice, Field, LinkRow, Sheet, s } from "./ui";
 import { useWorkspace } from "./workspace";
 
@@ -222,6 +225,9 @@ export function ThreadsSheet({ onClose }: { onClose: () => void }) {
     start,
   } = useMuseThread();
   const { workspace, open, navigate, refresh, api } = useWorkspace();
+  const { me, logout, openAdmin, refreshMe } = useSession();
+  // Usage changes with every message; refresh it whenever the menu opens.
+  useEffect(() => refreshMe(), [refreshMe]);
   const richThreads = useThreads({
     agentId: "default",
     enabled: backend === "intelligence",
@@ -441,8 +447,30 @@ export function ThreadsSheet({ onClose }: { onClose: () => void }) {
         <LinkRow icon={CalendarDays} title="تقویم" onPress={() => go("calendar")} />
         <LinkRow icon={FileText} title="فایل‌ها" onPress={() => go("files")} />
         <LinkRow icon={Settings2} title="برنامه‌ها و تنظیمات" onPress={() => go("apps")} />
+        {me?.role === "admin" && (
+          <LinkRow
+            icon={Users}
+            title="مدیریت کاربران"
+            detail="کلیدهای دسترسی، غیرفعال‌سازی و مصرف"
+            onPress={() => {
+              onClose();
+              openAdmin();
+            }}
+          />
+        )}
         <Button small icon={RefreshCw} onPress={() => void mutate(refresh)}>
           به‌روزرسانی فضای کار
+        </Button>
+        {me && me.limits.messages !== null && (
+          <Text style={s.small}>
+            مصرف امروز: {faNumber(me.usage.messages)} از {faNumber(me.limits.messages)} پیام
+            {me.limits.tasks !== null
+              ? `، ${faNumber(me.usage.tasks)} از ${faNumber(me.limits.tasks)} کار`
+              : ""}
+          </Text>
+        )}
+        <Button small danger icon={LogOut} onPress={logout}>
+          خروج از حساب
         </Button>
       </View>
     </Sheet>
