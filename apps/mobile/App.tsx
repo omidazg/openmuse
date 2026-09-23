@@ -34,13 +34,22 @@ import {
   IdeasScreen,
 } from "./src/agent-ui";
 import { AgentWorkspaceProvider, useAgentWorkspace } from "./src/agent-workspace";
-import { API_URL, createSession, MuseApi } from "./src/api";
+import {
+  API_URL,
+  createSession,
+  endSession,
+  fetchHealth,
+  MuseApi,
+  onUnauthorized,
+} from "./src/api";
 import { ChatScreen, WorkspaceTools } from "./src/chat";
 import { ComputerEntry } from "./src/computer";
 import { ComputerDraftProvider } from "./src/computer-drafts";
 import { Details } from "./src/details";
 import { faNumber, fw, useAppFonts } from "./src/locale";
+import { PhoneLogin } from "./src/login";
 import { BrowserScreen, CalendarScreen, FilesScreen, MailScreen } from "./src/screens";
+import { SessionProvider } from "./src/session";
 import { ThreadsProvider, ThreadsSheet, useMuseThread } from "./src/threads";
 import { Button, Card, colors, ErrorNotice, Field, IconButton, Mascot, s } from "./src/ui";
 import { type Detail, useWorkspace, WorkspaceContext } from "./src/workspace";
@@ -91,6 +100,30 @@ export default function App() {
   const [accessKey, setAccessKey] = useState("");
   const [busy, setBusy] = useState(true);
   const [error, setError] = useState("");
+  const [otpEnabled, setOtpEnabled] = useState(false);
+  const [method, setMethod] = useState<"key" | "phone">("key");
+  /** Back to the login screen, e.g. after logout or when the server ends the session. */
+  const signOut = useCallback((message = "") => {
+    saveToken("");
+    setToken("");
+    setError(message);
+    setBusy(false);
+  }, []);
+  const logout = useCallback(() => {
+    void endSession(token);
+    signOut();
+  }, [token, signOut]);
+  useEffect(() => {
+    if (!token) return;
+    onUnauthorized((message) => signOut(message));
+    return () => onUnauthorized(undefined);
+  }, [token, signOut]);
+  useEffect(() => {
+    void fetchHealth().then((health) => {
+      setOtpEnabled(Boolean(health?.otpEnabled));
+      if (health?.otpEnabled) setMethod("phone");
+    });
+  }, []);
   const connect = useCallback(async (key?: string, silent = false) => {
     setBusy(true);
     setError("");
@@ -133,7 +166,7 @@ export default function App() {
           runtimeUrl={`${API_URL}/api/copilotkit`}
           headers={{ Authorization: `Bearer ${token}` }}
         >
-          <WorkspaceApp token={token} />
+          <WorkspaceApp token={token} logout={logout} />
         </CopilotKitProvider>
       ) : (
         <SafeAreaView
@@ -163,17 +196,39 @@ export default function App() {
               <ActivityIndicator color={colors.blueDark} />
             ) : (
               <Card style={{ width: "100%" }}>
+                {otpEnabled && (
+                  <View style={{ flexDirection: "row", gap: 8, marginBottom: 16 }}>
+                    <Button small primary={method === "phone"} onPress={() => setMethod("phone")}>
+                      شمارهٔ موبایل
+                    </Button>
+                    <Button small primary={method === "key"} onPress={() => setMethod("key")}>
+                      کلید دسترسی
+                    </Button>
+                  </View>
+                )}
                 <ErrorNotice error={error} />
-                <Field
-                  label="کلید دسترسی فضای کار"
-                  value={accessKey}
-                  onChangeText={setAccessKey}
-                  secureTextEntry
-                  placeholder="کلید دسترسی خود را وارد کنید"
-                />
-                <Button primary onPress={() => void connect(accessKey || undefined)}>
-                  باز کردن فضای کار
-                </Button>
+                {otpEnabled && method === "phone" ? (
+                  <PhoneLogin
+                    onSession={(value) => {
+                      saveToken(value);
+                      setError("");
+                      setToken(value);
+                    }}
+                  />
+                ) : (
+                  <>
+                    <Field
+                      label="کلید دسترسی فضای کار"
+                      value={accessKey}
+                      onChangeText={setAccessKey}
+                      secureTextEntry
+                      placeholder="کلید دسترسی خود را وارد کنید"
+                    />
+                    <Button primary onPress={() => void connect(accessKey || undefined)}>
+                      باز کردن فضای کار
+                    </Button>
+                  </>
+                )}
                 {__DEV__ ? (
                   <Text style={[s.small, { marginTop: 15 }]}>
                     فضاهای کار محلی بدون کلید باز می‌شوند. مطمئن شوید سرور {BRAND.nameFa} در این
@@ -193,7 +248,7 @@ export default function App() {
     </SafeAreaProvider>
   );
 }
-function WorkspaceApp({ token }: { token: string }) {
+function WorkspaceApp({ token, logout }: { token: string; logout: () => void }) {
   const api = useMemo(() => new MuseApi(token), [token]);
   const [workspace, setWorkspace] = useState<Workspace>();
   const [section, setSection] = useState<Section>("chat");
@@ -266,19 +321,21 @@ function WorkspaceApp({ token }: { token: string }) {
     <WorkspaceContext.Provider
       value={{ workspace, api, section, navigate, refresh, open, close, notify: setToast, ask }}
     >
-      <AgentWorkspaceProvider>
-        <ComputerDraftProvider key={token}>
-          <ThreadsProvider>
-            <WorkspaceShell
-              detail={detail}
-              toast={toast}
-              clearToast={() => setToast("")}
-              error={error}
-              prompt={prompt}
-            />
-          </ThreadsProvider>
-        </ComputerDraftProvider>
-      </AgentWorkspaceProvider>
+      <SessionProvider api={api} logout={logout}>
+        <AgentWorkspaceProvider>
+          <ComputerDraftProvider key={token}>
+            <ThreadsProvider>
+              <WorkspaceShell
+                detail={detail}
+                toast={toast}
+                clearToast={() => setToast("")}
+                error={error}
+                prompt={prompt}
+              />
+            </ThreadsProvider>
+          </ComputerDraftProvider>
+        </AgentWorkspaceProvider>
+      </SessionProvider>
     </WorkspaceContext.Provider>
   );
 }

@@ -22,6 +22,7 @@ import { z } from "zod";
 import { BRAND } from "../../../packages/domain/src/brand";
 import { ArtifactCard } from "./agent-ui";
 import { useAgentWorkspace } from "./agent-workspace";
+import { friendlyError } from "./api";
 import { BackgroundUpdates } from "./background-updates";
 import { BrowserRunContext, BrowserToolCard } from "./browser-tool-card";
 import { BrowserThreadCard } from "./computer";
@@ -291,7 +292,7 @@ export function ChatScreen({
   );
   const flush = useCallback(() => {
     if (!loaded || !isReady || runLock.current || agent.isRunning) return;
-    void queue.flush(run).catch((e) => setError(e instanceof Error ? e.message : String(e)));
+    void queue.flush(run).catch((e) => setError(friendlyError(e)));
   }, [agent, isReady, loaded, queue, run]);
   const enqueue = useCallback(
     (text: string) => {
@@ -314,7 +315,7 @@ export function ChatScreen({
       onError: (event) => {
         if (event.context?.agentId && event.context.agentId !== agentId) return;
         const failure = event.error instanceof Error ? event.error : new Error(String(event.error));
-        setError(failure.message);
+        setError(friendlyError(failure));
       },
     });
     return () => subscription.unsubscribe();
@@ -573,7 +574,7 @@ export function ChatScreen({
                 .then(() => {
                   if (!queue.getSnapshot().paused) flush();
                 })
-                .catch((e) => setError(e instanceof Error ? e.message : String(e)));
+                .catch((e) => setError(friendlyError(e)));
             }}
           >
             تلاش دوباره
