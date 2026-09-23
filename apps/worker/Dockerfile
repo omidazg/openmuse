@@ -3,6 +3,7 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev --ignore-scripts && mkdir /data && chown pwuser:pwuser /data /app
 COPY --chown=pwuser:pwuser src ./src
+COPY --chown=pwuser:pwuser assets ./assets
 USER pwuser
 ENV NODE_ENV=production WORKER_DATA_DIR=/data WORKER_HOST=0.0.0.0
 EXPOSE 8790

@@ -24,6 +24,7 @@ import type {
   Mail,
   ProposalInput,
 } from "../../../../packages/domain/src/index.ts";
+import { artifactHtml } from "../../../../packages/integrations/src/pdf-html.ts";
 import type { ActionService } from "../actions.ts";
 import type { BrowserService } from "../browser.ts";
 import { ComputerService } from "../computer.ts";
@@ -641,6 +642,18 @@ export class AgentService {
     };
     await this.db.put(owner, "agent-artifacts", value);
     return value;
+  }
+  /** Export a saved plan, comparison or report as a Persian PDF in Files. */
+  async exportArtifactPdf(owner: string, id: string) {
+    const artifact = await this.db.get<AgentArtifact>(owner, "agent-artifacts", id);
+    if (!artifact) throw new AppError("این نتیجه پیدا نشد", 404);
+    return this.files.createPdf(
+      owner,
+      artifact.title,
+      artifactHtml(artifact),
+      `خروجی PDF از «${artifact.title}»`,
+      artifact.title,
+    );
   }
   async prepare(
     owner: string,

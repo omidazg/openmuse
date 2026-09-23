@@ -149,7 +149,7 @@ export class WorkspaceService {
     const file = await this.files.import(
       owner,
       "رضایت‌نامهٔ اردو.pdf",
-      await createSamplePdf(),
+      await createSamplePdf({ renderHtml: this.files.renderHtml }),
       "Gmail · دبیرستان فرهنگ",
     );
     // Sample times are wall-clock hours in Tehran (UTC+03:30, no DST); storage stays UTC.

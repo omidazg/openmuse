@@ -2,16 +2,29 @@ import { createHash, timingSafeEqual } from "node:crypto";
 import { createServer, type IncomingMessage } from "node:http";
 import { createBrowserManager, validateSessionId } from "./browser.ts";
 import { WorkerError } from "./errors.ts";
+import {
+  createPdfRenderer,
+  MAX_PDF_HTML_BYTES,
+  type PdfRequest,
+  validatePdfRequest,
+} from "./pdf.ts";
 
-async function readBody(request: IncomingMessage): Promise<Record<string, unknown>> {
+async function readBody(
+  request: IncomingMessage,
+  limit = 64 * 1024,
+): Promise<Record<string, unknown>> {
   if (!request.headers["content-type"]?.startsWith("application/json"))
     throw new WorkerError("INVALID_BODY", "A JSON request body is required.");
   const chunks: Buffer[] = [];
   let size = 0;
   for await (const chunk of request) {
     size += Buffer.byteLength(chunk);
-    if (size > 64 * 1024)
-      throw new WorkerError("BODY_TOO_LARGE", "Request body exceeds 64 KiB.", 413);
+    if (size > limit)
+      throw new WorkerError(
+        "BODY_TOO_LARGE",
+        `Request body exceeds ${Math.round(limit / 1024)} KiB.`,
+        413,
+      );
     chunks.push(Buffer.from(chunk));
   }
   try {
@@ -35,11 +48,14 @@ export async function createWorkerServer(options: {
   dataDir: string;
   maxSessions?: number;
   idleTimeoutMs?: number;
+  /** HTML-to-PDF renderer; tests inject a fake instead of launching Chromium. */
+  pdf?: { render(request: PdfRequest): Promise<Uint8Array>; close(): Promise<void> };
 }) {
   if (options.token.length < 32)
     throw new Error("WORKER_TOKEN must contain at least 32 characters.");
   const tokenHash = createHash("sha256").update(`Bearer ${options.token}`).digest();
   const browser = await createBrowserManager(options);
+  const pdf = options.pdf ?? createPdfRenderer();
   const server = createServer(async (request, response) => {
     response.setHeader("cache-control", "no-store");
     response.setHeader("x-content-type-options", "nosniff");
@@ -58,6 +74,16 @@ export async function createWorkerServer(options: {
         .digest();
       if (!timingSafeEqual(headerHash, tokenHash))
         throw new WorkerError("UNAUTHORIZED", "Worker authentication is required.", 401);
+      if (pathname === "/pdf" && request.method === "POST") {
+        const body = validatePdfRequest(await readBody(request, MAX_PDF_HTML_BYTES + 64 * 1024));
+        const bytes = await pdf.render(body);
+        response.writeHead(200, {
+          "content-type": "application/pdf",
+          "content-length": bytes.length,
+        });
+        response.end(bytes);
+        return;
+      }
       if (pathname === "/sessions" && request.method === "GET") {
         json(200, browser.list());
         return;
@@ -123,6 +149,7 @@ export async function createWorkerServer(options: {
       server.closeAllConnections();
       await new Promise<void>((resolve) => server.close(() => resolve()));
       await browser.close();
+      await pdf.close();
     },
   };
 }
