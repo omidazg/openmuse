@@ -152,6 +152,32 @@ export function documentHtml(options: {
   ].join("\n");
 }
 
+/** One turn of an exported or shared conversation. */
+export interface ConversationEntry {
+  role: "user" | "assistant";
+  text: string;
+}
+
+/**
+ * A titled conversation: heading, meta line (Jalali date) and one section per message,
+ * labelled with who wrote it. Used for PDF export and for the public share page.
+ */
+export function conversationHtml(options: {
+  title: string;
+  meta: string;
+  messages: ConversationEntry[];
+  labels: Record<ConversationEntry["role"], string>;
+}): string {
+  return [
+    `<header><h1 dir="auto">${inline(options.title)}</h1>`,
+    `<p class="meta">${escapeHtml(options.meta)}</p></header>`,
+    ...options.messages.map(
+      (message) =>
+        `<section class="message ${message.role}"><p class="role">${escapeHtml(options.labels[message.role])}</p>\n${markdownToHtml(message.text)}</section>`,
+    ),
+  ].join("\n");
+}
+
 /** HTML for a saved plan, comparison or report artifact. */
 export function artifactHtml(artifact: {
   kind: string;

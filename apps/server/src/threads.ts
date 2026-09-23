@@ -21,7 +21,7 @@ export interface LocalThread {
   updatedAt: string;
 }
 
-const THREADS = "threads",
+export const THREADS = "threads",
   MESSAGES = "thread-messages";
 const threadId = z.string().regex(/^[\w.@:=-]{1,128}$/, "شناسهٔ گفت‌وگو نامعتبر است");
 
@@ -30,7 +30,7 @@ export function localThreadsEnabled(config: Config) {
   return config.mode === "live" && threadsBackend(config) === "local";
 }
 
-function textOf(message: unknown): string {
+export function textOf(message: unknown): string {
   const content = (message as { content?: unknown }).content;
   if (typeof content === "string") return content;
   if (Array.isArray(content))
@@ -40,7 +40,7 @@ function textOf(message: unknown): string {
   return "";
 }
 
-function defaultName(messages: unknown[]) {
+export function defaultName(messages: unknown[]) {
   const first = messages.find((m) => (m as { role?: string }).role === "user");
   const text = first ? textOf(first).replace(/\s+/g, " ").trim() : "";
   return text.length > 60 ? `${text.slice(0, 59)}…` : text;

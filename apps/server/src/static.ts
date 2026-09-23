@@ -38,7 +38,7 @@ function isFile(path: string) {
 
 /**
  * Serves the exported Expo web app (WEB_DIST) next to the API when that directory exists.
- * `/api/*` is always passed through to the API; unknown extension-less paths fall back to
+ * `/api/*` and `/s/*` are always passed through to the API; unknown extension-less paths fall back to
  * index.html so client-side routes keep working.
  */
 export function withStaticWeb<F extends Fetch>(fetch: F, dir = process.env.WEB_DIST): F {
@@ -65,7 +65,9 @@ export function withStaticWeb<F extends Fetch>(fetch: F, dir = process.env.WEB_D
     if (
       (method !== "GET" && method !== "HEAD") ||
       url.pathname === "/api" ||
-      url.pathname.startsWith("/api/")
+      url.pathname.startsWith("/api/") ||
+      // Public read-only share pages are rendered by the API.
+      url.pathname.startsWith("/s/")
     )
       return fetch(request, ...rest);
     let pathname: string;
