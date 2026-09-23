@@ -25,10 +25,7 @@ export interface UserRecord {
   source: "env" | "db";
   /** sha256 hex of the access key (db users only). The plaintext key is never stored. */
   keyHash?: string;
-  /** Subscribed plan id ("free" or a PLANS id); paid plans lapse to free after currentPeriodEnd. */
-  plan: string;
-  /** ISO end of the paid period; absent on the free plan. */
-  currentPeriodEnd?: string;
+  plan: "free";
   quota?: QuotaOverrides;
   createdAt: string;
   updatedAt?: string;
@@ -178,18 +175,6 @@ export class Users {
     };
     await this.db.put(SYSTEM, USERS, next);
     if (next.status === "disabled") await this.deleteSessions(id);
-    return next;
-  }
-  /** Sets the subscription; "free" clears the period end. */
-  async setPlan(id: string, plan: string, currentPeriodEnd?: string) {
-    const user = await this.require(id);
-    const next: UserRecord = {
-      ...user,
-      plan,
-      currentPeriodEnd: plan === "free" ? undefined : currentPeriodEnd,
-      updatedAt: new Date().toISOString(),
-    };
-    await this.db.put(SYSTEM, USERS, next);
     return next;
   }
   async rotateKey(id: string) {

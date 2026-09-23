@@ -69,28 +69,6 @@ export function configCatalog(config: { model?: string; models?: ModelCatalog })
   );
 }
 
-/**
- * The catalog narrowed to one plan's models (e.g. a free plan limited to cheaper models).
- * The default moves to the first allowed model when the global default is not in the plan.
- */
-export function restrictCatalog(catalog: ModelCatalog, allowed?: string[]): ModelCatalog {
-  if (!allowed?.length) return catalog;
-  const set = new Set(allowed);
-  const models = catalog.models.filter((m) => set.has(m.id));
-  if (!models.length) return catalog;
-  const defaultModel =
-    catalog.defaultModel && set.has(catalog.defaultModel) ? catalog.defaultModel : models[0].id;
-  const fastModel =
-    catalog.fastModel && set.has(catalog.fastModel) && catalog.fastModel !== defaultModel
-      ? catalog.fastModel
-      : undefined;
-  return {
-    models: models.map((m) => ({ ...m, default: m.id === defaultModel })),
-    defaultModel,
-    fastModel,
-  };
-}
-
 /** Options shown in the picker; "auto" appears only when a distinct fast model is allowlisted. */
 export function modelOptions(catalog: ModelCatalog): ModelOption[] {
   return catalog.fastModel

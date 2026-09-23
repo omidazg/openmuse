@@ -7,15 +7,7 @@ import {
   useRenderTool,
   useRenderToolCall,
 } from "@copilotkit/react-native/headless";
-import {
-  ArrowDown,
-  ArrowUp,
-  CreditCard,
-  FileText,
-  RotateCcw,
-  Square,
-  X,
-} from "lucide-react-native";
+import { ArrowDown, ArrowUp, FileText, RotateCcw, Square, X } from "lucide-react-native";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import {
   KeyboardAvoidingView,
@@ -39,8 +31,6 @@ import { runConversationTurn } from "./conversation-run";
 import { fw } from "./locale";
 import { MailToolCard } from "./mail-tool-card";
 import { ModelPicker } from "./model-picker";
-import { useSession } from "./session";
-import { QUOTA_EXCEEDED } from "./session-errors";
 import { FileThreadCard, TaskThreadCard } from "./thread-artifacts";
 import { type Selection, useMuseThread } from "./threads";
 import { Button, Card, CheckRow, colors, ErrorNotice, s } from "./ui";
@@ -211,9 +201,6 @@ export function ChatScreen({
   const [showResults, setShowResults] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const { me, openBilling } = useSession();
-  // Out of today's quota: offer an upgrade instead of only "try tomorrow".
-  const upgrade = error === QUOTA_EXCEEDED && Boolean(me?.billingEnabled);
   const [loaded, setLoaded] = useState(false);
   const [picking, setPicking] = useState(false);
   const [attachments, setAttachments] = useState<string[]>([]);
@@ -583,22 +570,7 @@ export function ChatScreen({
           </View>
         )}
         <ErrorNotice error={error} />
-        {upgrade && (
-          <Card style={{ gap: 8, backgroundColor: colors.sky }}>
-            <Text style={s.text}>
-              با اشتراک حرفه‌ای، سقف روزانهٔ پیام و کار بالاتر می‌رود و همین حالا می‌توانید ادامه دهید.
-            </Text>
-            <Button
-              primary
-              icon={CreditCard}
-              style={{ alignSelf: "flex-start" }}
-              onPress={openBilling}
-            >
-              خرید اشتراک
-            </Button>
-          </Card>
-        )}
-        {error && !upgrade && (
+        {error && (
           <Button
             style={{ alignSelf: "flex-start" }}
             icon={RotateCcw}

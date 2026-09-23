@@ -51,11 +51,6 @@ x-app-env: &app-env
   KAVENEGAR_API_KEY: ${KAVENEGAR_API_KEY:-}
   KAVENEGAR_TEMPLATE: ${KAVENEGAR_TEMPLATE:-}
   OTP_SIGNUP: ${OTP_SIGNUP:-false}
-  # Optional subscriptions via Zarinpal; billing stays off (404, UI hidden) unless the merchant id is set.
-  ZARINPAL_MERCHANT_ID: ${ZARINPAL_MERCHANT_ID:-}
-  ZARINPAL_SANDBOX: ${ZARINPAL_SANDBOX:-false}
-  # Plans as JSON (Toman, Persian names); empty = built-in free + pro. The worker needs it for task quotas and models.
-  PLANS: ${PLANS:-}
 
   # Optional error tracking (Sentry-compatible, e.g. self-hosted GlitchTip). Empty = off.
   SENTRY_DSN: ${SENTRY_DSN:-}

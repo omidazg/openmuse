@@ -1,24 +1,8 @@
-import {
-  Copy,
-  CreditCard,
-  KeyRound,
-  Plus,
-  ReceiptText,
-  RefreshCw,
-  UserPlus,
-  Users,
-} from "lucide-react-native";
+import { Copy, KeyRound, Plus, RefreshCw, UserPlus, Users } from "lucide-react-native";
 import { useCallback, useEffect, useState } from "react";
 import { ActivityIndicator, Platform, Share, Text, View } from "react-native";
 import type { MuseApi } from "./api";
-import {
-  type PaymentInfo,
-  paymentStatusLabel,
-  paymentStatusTint,
-  type SubscriptionInfo,
-  subscriptionLabel,
-} from "./billing";
-import { faDateTime, faDigits, faMoney, faNumber, fw, toLatinDigits } from "./locale";
+import { faDigits, faNumber, fw, toLatinDigits } from "./locale";
 import { Button, Card, Chip, colors, Empty, ErrorNotice, Field, Sheet, s } from "./ui";
 
 export type DailyUsage = {
@@ -40,23 +24,12 @@ export type AdminUser = {
   role: "admin" | "user";
   status: "active" | "disabled";
   source: "env" | "db";
-  plan: string;
-  currentPeriodEnd?: string;
+  plan: "free";
   quota?: Quota;
   createdAt: string;
   sessions: number;
   usage: DailyUsage;
   limits: Limits;
-  /** Plan in force now (a lapsed paid plan reads as free). Older servers omit it. */
-  subscription?: SubscriptionInfo;
-};
-type PlanOption = { id: string; name: string; days: number; price: number };
-type AdminPayment = PaymentInfo & {
-  owner: string;
-  ownerName: string;
-  code: number | null;
-  grantedBy: string | null;
-  note: string | null;
 };
 type Confirm = { id: string; action: "disable" | "rotate" | "sessions" };
 
@@ -276,196 +249,21 @@ function EditUser({
   );
 }
 
-/** Grant or extend a plan by hand, e.g. after a cash or card-to-card payment. */
-function GrantPlan({
-  api,
-  user,
-  plans,
-  onSaved,
-  onCancel,
-}: {
-  api: MuseApi;
-  user: AdminUser;
-  plans: PlanOption[];
-  onSaved: () => void;
-  onCancel: () => void;
-}) {
-  const paidPlans = plans.filter((plan) => plan.id !== "free");
-  const [planId, setPlanId] = useState(paidPlans[0]?.id ?? "free");
-  const plan = plans.find((p) => p.id === planId);
-  const [days, setDays] = useState(plan ? faDigits(plan.days) : "");
-  const [amount, setAmount] = useState("");
-  const [note, setNote] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-  const free = planId === "free";
-  async function save() {
-    const dayCount = toLatinDigits(days).trim();
-    const paid = toLatinDigits(amount)
-      .replace(/[,٬\s]/g, "")
-      .trim();
-    if (!free && !/^\d{1,4}$/.test(dayCount)) {
-      setError("تعداد روز باید یک عدد صحیح بین ۱ و ۳۶۶۰ باشد.");
-      return;
-    }
-    if (paid && !/^\d{1,10}$/.test(paid)) {
-      setError("مبلغ باید یک عدد صحیح به تومان باشد. اگر رایگان است، خانه را خالی بگذارید.");
-      return;
-    }
-    setBusy(true);
-    setError("");
-    try {
-      await api.request(`/api/admin/users/${encodeURIComponent(user.id)}/plan`, {
-        planId,
-        ...(free ? {} : { days: Number(dayCount) }),
-        ...(paid ? { amount: Number(paid) } : {}),
-        ...(note.trim() ? { note: note.trim() } : {}),
-      });
-      onSaved();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setBusy(false);
-    }
-  }
-  return (
-    <View style={{ marginTop: 12, gap: 4 }}>
-      <ErrorNotice error={error} />
-      <View style={[s.row, { gap: 8, flexWrap: "wrap", marginBottom: 14 }]}>
-        {plans.map((option) => (
-          <Button
-            key={option.id}
-            small
-            primary={option.id === planId}
-            onPress={() => {
-              setPlanId(option.id);
-              if (option.id !== "free") setDays(faDigits(option.days));
-            }}
-          >
-            {option.id === "free" ? "بازگشت به رایگان" : option.name}
-          </Button>
-        ))}
-      </View>
-      {free ? (
-        <Text style={[s.small, { marginBottom: 14 }]}>
-          اشتراک فعلی همین حالا تمام می‌شود و سقف‌های طرح رایگان اعمال می‌شود.
-        </Text>
-      ) : (
-        <>
-          <Field
-            label="تعداد روز (به پایان دورهٔ فعلی اضافه می‌شود)"
-            value={days}
-            onChangeText={setDays}
-            keyboardType="number-pad"
-          />
-          <Field
-            label="مبلغ دریافتی به تومان (اختیاری)"
-            value={amount}
-            onChangeText={setAmount}
-            keyboardType="number-pad"
-            placeholder="۱۹۹٬۰۰۰"
-          />
-          <Field
-            label="یادداشت (اختیاری)"
-            value={note}
-            onChangeText={setNote}
-            placeholder="پرداخت نقدی"
-          />
-        </>
-      )}
-      <View style={[s.row, { gap: 8 }]}>
-        <Button small primary danger={free} busy={busy} onPress={() => void save()}>
-          {free ? "پایان اشتراک" : "ثبت اشتراک"}
-        </Button>
-        <Button small onPress={onCancel}>
-          انصراف
-        </Button>
-      </View>
-    </View>
-  );
-}
-
-/** Every payment and manual grant, newest first. */
-function PaymentsList({ api }: { api: MuseApi }) {
-  const [payments, setPayments] = useState<AdminPayment[]>();
-  const [error, setError] = useState("");
-  useEffect(() => {
-    void api
-      .request<{ payments: AdminPayment[] }>("/api/admin/payments")
-      .then((result) => setPayments(result.payments))
-      .catch((e) =>
-        setError(`فهرست پرداخت‌ها بارگذاری نشد. ${e instanceof Error ? e.message : String(e)}`),
-      );
-  }, [api]);
-  return (
-    <Card style={{ gap: 4 }}>
-      <Text style={s.heading}>پرداخت‌ها</Text>
-      <ErrorNotice error={error} />
-      {!payments && !error && <ActivityIndicator color={colors.blueDark} />}
-      {payments?.length === 0 && (
-        <Empty
-          icon={ReceiptText}
-          title="هنوز پرداختی ثبت نشده است"
-          detail="پرداخت‌های زرین‌پال و اشتراک‌هایی که دستی ثبت می‌کنید اینجا نمایش داده می‌شوند."
-        />
-      )}
-      {payments?.map((payment) => (
-        <View
-          key={payment.id}
-          style={{
-            paddingVertical: 10,
-            borderBottomWidth: 1,
-            borderBottomColor: colors.line,
-            gap: 3,
-          }}
-        >
-          <View style={[s.row, { gap: 8, flexWrap: "wrap" }]}>
-            <Text style={[s.text, fw("600")]}>{payment.ownerName}</Text>
-            <Chip tint={paymentStatusTint[payment.status]}>
-              {paymentStatusLabel[payment.status]}
-            </Chip>
-            <Chip>{payment.gateway === "manual" ? "ثبت دستی" : "زرین‌پال"}</Chip>
-          </View>
-          <Text style={s.small}>
-            اشتراک {payment.planName}، {faNumber(payment.days)} روز،{" "}
-            {payment.amount ? faMoney(payment.amount) : "بدون مبلغ"}
-          </Text>
-          <Text style={s.small}>{faDateTime(payment.paidAt ?? payment.createdAt)}</Text>
-          {payment.refId ? (
-            <Text style={s.small}>
-              کد پیگیری: <Text style={ltr}>{faDigits(payment.refId)}</Text>
-            </Text>
-          ) : null}
-          {payment.status === "failed" && payment.code !== null ? (
-            <Text style={s.small}>
-              کد پاسخ درگاه: <Text style={ltr}>{faDigits(payment.code)}</Text>
-            </Text>
-          ) : null}
-          {payment.note ? <Text style={s.small}>یادداشت: {payment.note}</Text> : null}
-        </View>
-      ))}
-    </Card>
-  );
-}
-
 function UserRow({
   api,
   user,
   me,
-  plans,
   reload,
   reveal,
 }: {
   api: MuseApi;
   user: AdminUser;
   me?: string;
-  plans: PlanOption[];
   reload: () => Promise<void>;
   reveal: (title: string, key: string) => void;
 }) {
   const [confirm, setConfirm] = useState<Confirm>();
   const [editing, setEditing] = useState(false);
-  const [granting, setGranting] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const locked = user.id === "local-user" || user.id === me;
@@ -514,16 +312,8 @@ function UserRow({
         <Chip tint={user.status === "active" ? colors.green : colors.dangerSoft}>
           {user.status === "active" ? "فعال" : "غیرفعال"}
         </Chip>
-        {user.subscription && (
-          <Chip tint={user.subscription.currentPeriodEnd ? colors.sky : undefined}>
-            {user.subscription.plan.name}
-          </Chip>
-        )}
       </View>
       {user.phone ? <Text style={[s.small, ltr]}>{faDigits(user.phone)}</Text> : null}
-      {user.subscription?.currentPeriodEnd ? (
-        <Text style={s.small}>{subscriptionLabel(user.subscription)}</Text>
-      ) : null}
       <Text style={s.small}>
         امروز: {used(user.usage.messages, user.limits.messages, "پیام")}،{" "}
         {used(user.usage.tasks, user.limits.tasks, "کار")}، {faNumber(user.usage.totalTokens)} توکن
@@ -572,27 +362,11 @@ function UserRow({
             void reload();
           }}
         />
-      ) : granting ? (
-        <GrantPlan
-          api={api}
-          user={user}
-          plans={plans}
-          onCancel={() => setGranting(false)}
-          onSaved={() => {
-            setGranting(false);
-            void reload();
-          }}
-        />
       ) : (
         <View style={[s.row, { gap: 8, flexWrap: "wrap" }]}>
           <Button small onPress={() => setEditing(true)}>
             ویرایش
           </Button>
-          {plans.length > 1 && user.role !== "admin" && (
-            <Button small icon={CreditCard} onPress={() => setGranting(true)}>
-              ثبت اشتراک
-            </Button>
-          )}
           {user.status === "disabled" ? (
             <Button
               small
@@ -641,8 +415,6 @@ export function AdminSheet({
 }) {
   const [users, setUsers] = useState<AdminUser[]>();
   const [defaults, setDefaults] = useState<{ messages: number; tasks: number }>();
-  const [plans, setPlans] = useState<PlanOption[]>([]);
-  const [showPayments, setShowPayments] = useState(false);
   const [error, setError] = useState("");
   const [creating, setCreating] = useState(false);
   const [secret, setSecret] = useState<{ title: string; key: string }>();
@@ -651,11 +423,9 @@ export function AdminSheet({
       const result = await api.request<{
         users: AdminUser[];
         defaults: { messages: number; tasks: number };
-        plans?: PlanOption[];
       }>("/api/admin/users");
       setUsers(result.users);
       setDefaults(result.defaults);
-      setPlans(result.plans ?? []);
       setError("");
     } catch (e) {
       setError(`فهرست کاربران بارگذاری نشد. ${e instanceof Error ? e.message : String(e)}`);
@@ -681,21 +451,15 @@ export function AdminSheet({
             }}
           />
         ) : (
-          <View style={[s.row, { gap: 8, flexWrap: "wrap" }]}>
+          <View style={[s.row, { gap: 8 }]}>
             <Button primary icon={Plus} onPress={() => setCreating(true)}>
               کاربر تازه
             </Button>
             <Button icon={RefreshCw} onPress={() => void load()}>
               به‌روزرسانی
             </Button>
-            {plans.length > 1 && (
-              <Button icon={ReceiptText} onPress={() => setShowPayments(!showPayments)}>
-                {showPayments ? "بستن پرداخت‌ها" : "پرداخت‌ها"}
-              </Button>
-            )}
           </View>
         )}
-        {showPayments && <PaymentsList api={api} />}
         {defaults && (
           <Text style={s.small}>
             سقف پیش‌فرض هر کاربر در روز: {limitLabel(defaults.messages || null)} پیام و{" "}
@@ -716,7 +480,6 @@ export function AdminSheet({
             api={api}
             user={user}
             me={me}
-            plans={plans}
             reload={load}
             reveal={(title, key) => setSecret({ title, key })}
           />

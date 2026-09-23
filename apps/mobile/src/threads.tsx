@@ -2,7 +2,6 @@ import { useThreads } from "@copilotkit/react-native/headless";
 import {
   Archive,
   CalendarDays,
-  CreditCard,
   FileText,
   LogOut,
   MessageCircle,
@@ -24,7 +23,6 @@ import {
 import { ActivityIndicator, Pressable, Text, View } from "react-native";
 import { BRAND } from "../../../packages/domain/src/brand";
 import type { MuseApi } from "./api";
-import { subscriptionLabel } from "./billing";
 import { faNumber } from "./locale";
 import { useSession } from "./session";
 import { Button, colors, ErrorNotice, Field, LinkRow, Sheet, s } from "./ui";
@@ -227,7 +225,7 @@ export function ThreadsSheet({ onClose }: { onClose: () => void }) {
     start,
   } = useMuseThread();
   const { workspace, open, navigate, refresh, api } = useWorkspace();
-  const { me, logout, openAdmin, openBilling, refreshMe } = useSession();
+  const { me, logout, openAdmin, refreshMe } = useSession();
   // Usage changes with every message; refresh it whenever the menu opens.
   useEffect(() => refreshMe(), [refreshMe]);
   const richThreads = useThreads({
@@ -457,21 +455,6 @@ export function ThreadsSheet({ onClose }: { onClose: () => void }) {
             onPress={() => {
               onClose();
               openAdmin();
-            }}
-          />
-        )}
-        {me?.billingEnabled && (
-          <LinkRow
-            icon={CreditCard}
-            title="اشتراک"
-            detail={
-              me.subscription
-                ? `${subscriptionLabel(me.subscription)}؛ خرید و تمدید`
-                : "طرح‌ها، خرید و تمدید"
-            }
-            onPress={() => {
-              onClose();
-              openBilling();
             }}
           />
         )}

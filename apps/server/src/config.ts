@@ -2,7 +2,6 @@ import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { applyMetisProvider } from "./metis.ts";
 import { type ModelCatalog, readModelCatalog } from "./models.ts";
-import { assertPlanModels, type Plan, parsePlans } from "./plans.ts";
 
 if (existsSync(".env")) process.loadEnvFile(".env");
 applyMetisProvider();
@@ -80,16 +79,6 @@ export interface Config {
   kavenegarTemplate?: string;
   /** Unknown phone numbers create a free user on first successful OTP login. */
   otpSignup?: boolean;
-  /** Subscription plans (PLANS); omitted means the built-in free and pro plans. */
-  plans?: Plan[];
-  /** Zarinpal merchant id; online payments are enabled only when it is set. */
-  zarinpalMerchantId?: string;
-  /** Use sandbox.zarinpal.com instead of the live gateway. */
-  zarinpalSandbox?: boolean;
-}
-
-export function billingEnabled(config: Pick<Config, "zarinpalMerchantId">) {
-  return Boolean(config.zarinpalMerchantId?.trim());
 }
 
 export function otpEnabled(config: Pick<Config, "kavenegarApiKey" | "kavenegarTemplate">) {
@@ -178,15 +167,7 @@ export function readConfig(): Config {
     kavenegarApiKey: process.env.KAVENEGAR_API_KEY?.trim() || undefined,
     kavenegarTemplate: process.env.KAVENEGAR_TEMPLATE?.trim() || undefined,
     otpSignup: process.env.OTP_SIGNUP === "true",
-    plans: parsePlans(process.env.PLANS),
-    zarinpalMerchantId: process.env.ZARINPAL_MERCHANT_ID?.trim() || undefined,
-    zarinpalSandbox: process.env.ZARINPAL_SANDBOX === "true",
   };
-  if (config.plans && config.models)
-    assertPlanModels(
-      config.plans,
-      config.models.models.map((m) => m.id),
-    );
   if (
     mode === "live" &&
     (!config.accessKey || config.accessKey.length < 24 || !config.encryptionKey)

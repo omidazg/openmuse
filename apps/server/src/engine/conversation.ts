@@ -345,9 +345,8 @@ export class ConversationAgent extends AbstractAgent {
       let agent: BuiltInAgent | undefined;
       let subscription: { unsubscribe(): void } | undefined;
       let closed = false;
-      // The owner's picked model (validated against MODELS and their plan) is read on every turn.
-      void (this.service.usage?.catalog(this.owner) ?? Promise.resolve(configCatalog(this.config)))
-        .then((catalog) => resolveModel(this.service.db, catalog, this.owner, text))
+      // The owner's picked model (validated against MODELS) is read on every turn.
+      void resolveModel(this.service.db, configCatalog(this.config), this.owner, text)
         .catch(() => this.config.model)
         .then((model) => {
           if (closed) return;

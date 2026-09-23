@@ -337,9 +337,8 @@ export async function executeModelTask(
   const memories = await service.db.list<{ text: string; source: string }>(owner, "memories");
   // Delegated tasks follow the owner's picked model; "auto" resolves to the strong default.
   const model =
-    (await (service.usage?.catalog(owner) ?? Promise.resolve(configCatalog(config)))
-      .then((catalog) => resolveModel(service.db, catalog, owner))
-      .catch(() => undefined)) ?? config.model;
+    (await resolveModel(service.db, configCatalog(config), owner).catch(() => undefined)) ??
+    config.model;
   const agent = new BuiltInAgent({
     model,
     maxSteps: 16,
