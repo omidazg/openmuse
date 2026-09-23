@@ -49,6 +49,8 @@ import { Details } from "./src/details";
 import { Landing } from "./src/landing";
 import { faNumber, fw, useAppFonts } from "./src/locale";
 import { PhoneLogin } from "./src/login";
+import { OfflineBanner } from "./src/offline";
+import { PreferencesProvider, usePreferences } from "./src/preferences";
 import { BrowserScreen, CalendarScreen, FilesScreen, MailScreen } from "./src/screens";
 import { SessionProvider } from "./src/session";
 import { ThreadsProvider, ThreadsSheet, useMuseThread } from "./src/threads";
@@ -306,13 +308,15 @@ function WorkspaceApp({ token, logout }: { token: string; logout: () => void }) 
         <AgentWorkspaceProvider>
           <ComputerDraftProvider key={token}>
             <ThreadsProvider>
-              <WorkspaceShell
-                detail={detail}
-                toast={toast}
-                clearToast={() => setToast("")}
-                error={error}
-                prompt={prompt}
-              />
+              <PreferencesProvider api={api}>
+                <WorkspaceShell
+                  detail={detail}
+                  toast={toast}
+                  clearToast={() => setToast("")}
+                  error={error}
+                  prompt={prompt}
+                />
+              </PreferencesProvider>
             </ThreadsProvider>
           </ComputerDraftProvider>
         </AgentWorkspaceProvider>
@@ -345,6 +349,7 @@ function WorkspaceShell({
     enabled: richThreads,
   } = useMuseThread();
   const [threadsOpen, setThreadsOpen] = useState(false);
+  const { unseenCount } = usePreferences();
   const { width } = useWindowDimensions();
   const desktop = width >= 900;
   const pending =
@@ -397,9 +402,27 @@ function WorkspaceShell({
             <View style={{ position: "absolute", start: 0, top: 16, zIndex: 1 }}>
               <IconButton
                 icon={Menu}
-                label="باز کردن گفت‌وگوها و منو"
+                label={
+                  unseenCount
+                    ? "باز کردن گفت‌وگوها و منو، تازه‌های دیده‌نشده دارید"
+                    : "باز کردن گفت‌وگوها و منو"
+                }
                 onPress={() => setThreadsOpen(true)}
               />
+              {unseenCount > 0 && (
+                <View
+                  pointerEvents="none"
+                  style={{
+                    width: 6,
+                    height: 6,
+                    borderRadius: 4,
+                    position: "absolute",
+                    top: 7,
+                    end: 9,
+                    backgroundColor: colors.blueDark,
+                  }}
+                />
+              )}
             </View>
             <View style={{ alignItems: "center", gap: 1 }}>
               <Pressable
@@ -460,6 +483,7 @@ function WorkspaceShell({
               )}
             </View>
           </View>
+          <OfflineBanner />
           <View style={{ flex: 1, minHeight: 0 }}>
             {section !== "chat" && (
               <ScrollView

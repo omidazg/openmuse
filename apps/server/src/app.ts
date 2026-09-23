@@ -32,6 +32,7 @@ import { MailboxService } from "./mailbox.ts";
 import { configCatalog, modelOptions, saveSelectedModel, selectedModel } from "./models.ts";
 import { OtpService } from "./otp.ts";
 import { PdfRenderer } from "./pdf-render.ts";
+import { preferenceRoutes } from "./preferences.ts";
 import { clientIp, RateLimiter } from "./rate-limit.ts";
 import { publicShareRoutes, shareRoutes } from "./sharing.ts";
 import { localThreadRoutes, localThreadsEnabled } from "./threads.ts";
@@ -219,6 +220,7 @@ export async function createApp(
   });
   app.route("/api/agent", agentRoutes(agent));
   app.route("/api/bot", botRoutes(db));
+  app.route("/api/preferences", preferenceRoutes(db));
   if (localThreads) app.route("/api/threads", localThreadRoutes(db));
   app.route("/api", shareRoutes(db, config));
   app.route("/api/computer", computerRoutes(computer, files));

@@ -42,7 +42,9 @@ import { fw } from "./locale";
 import { MailToolCard } from "./mail-tool-card";
 import { CopyButton, Markdown } from "./markdown-view";
 import { ModelPicker } from "./model-picker";
+import { useRetryOnReconnect } from "./offline";
 import { AnswerActions } from "./share-sheet";
+import { starterSuggestions } from "./starter-suggestions";
 import { FileThreadCard, TaskThreadCard } from "./thread-artifacts";
 import { type Selection, useMuseThread } from "./threads";
 import { Button, Card, CheckRow, colors, ErrorNotice, s } from "./ui";
@@ -339,6 +341,14 @@ export function ChatScreen({
     });
     return () => subscription.unsubscribe();
   }, [copilotkit, agentId, queue]);
+  const retryTurn = useCallback(() => {
+    void run()
+      .then(() => {
+        if (!queue.getSnapshot().paused) flush();
+      })
+      .catch((e) => setError(friendlyError(e)));
+  }, [run, flush, queue]);
+  useRetryOnReconnect(error, !busy && !agent.isRunning && loaded && isReady, retryTurn);
   async function stop() {
     queue.pause();
     try {
@@ -448,30 +458,9 @@ export function ChatScreen({
               رایانهٔ خودم استفاده کنم.
             </Text>
             <View style={{ width: "100%", maxWidth: 360, marginTop: 14, gap: 8 }}>
-              {[
-                {
-                  text: "امروز چندم است و تعطیلی بعدی کی است؟",
-                  action: () => enqueue("امروز به تقویم شمسی چندم است و تعطیلی رسمی بعدی کی است؟"),
-                },
-                {
-                  text: "خلاصهٔ خبرهای مهم امروز",
-                  action: () => enqueue("خبرهای مهم امروز ایران را از خبرگزاری‌های فارسی خلاصه کن"),
-                },
-                {
-                  text: "قیمت امروز دلار، سکه و طلا",
-                  action: () =>
-                    enqueue("قیمت امروز دلار، سکه و طلای ۱۸ عیار را از tgju.org پیدا کن"),
-                },
-                {
-                  text: "نوشتن نامهٔ اداری",
-                  action: () =>
-                    enqueue(
-                      "یک نامهٔ اداری رسمی برای درخواست مرخصی بنویس؛ اول نام، سمت و تاریخ‌ها را از من بپرس",
-                    ),
-                },
-              ].map((item) => (
-                <Button key={item.text} onPress={item.action}>
-                  {item.text}
+              {starterSuggestions({ files: w.files, events: w.events }).map((item) => (
+                <Button key={item.id} onPress={() => enqueue(item.prompt)}>
+                  {item.label}
                 </Button>
               ))}
             </View>
@@ -706,13 +695,7 @@ export function ChatScreen({
             style={{ alignSelf: "flex-start" }}
             icon={RotateCcw}
             disabled={busy || agent.isRunning || !loaded || !isReady}
-            onPress={() => {
-              void run()
-                .then(() => {
-                  if (!queue.getSnapshot().paused) flush();
-                })
-                .catch((e) => setError(friendlyError(e)));
-            }}
+            onPress={retryTurn}
           >
             تلاش دوباره
           </Button>
