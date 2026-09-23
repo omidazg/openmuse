@@ -31,6 +31,10 @@ x-app-env: &app-env
   # Voice input (POST /api/transcribe) via the OpenAI-compatible /audio/transcriptions.
   TRANSCRIBE_MODEL: ${TRANSCRIBE_MODEL:-whisper-1}
   TRANSCRIBE_ENABLED: ${TRANSCRIBE_ENABLED:-true}
+  # جست‌وجو در فایل‌ها: مدل embedding روی /embeddings سازگار با OpenAI (متیس)؛ off = فقط جست‌وجوی کلیدواژه‌ای.
+  EMBEDDING_MODEL: ${EMBEDDING_MODEL:-openai/text-embedding-3-small}
+  # ترجمهٔ سند (Word/PDF) با /chat/completions سازگار با OpenAI.
+  TRANSLATE_MODEL: ${TRANSLATE_MODEL:-openai/gpt-4.1-mini}
   METIS_API_KEY: ${METIS_API_KEY:-}
   METIS_BASE_URL: ${METIS_BASE_URL:-}
   OPENAI_API_KEY: ${OPENAI_API_KEY:-}

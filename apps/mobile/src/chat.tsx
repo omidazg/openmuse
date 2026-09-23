@@ -22,6 +22,7 @@ import { z } from "zod";
 import { BRAND } from "../../../packages/domain/src/brand";
 import { ArtifactCard } from "./agent-ui";
 import { useAgentWorkspace } from "./agent-workspace";
+import { AnswerSources } from "./answer-sources";
 import { friendlyError } from "./api";
 import { BackgroundUpdates } from "./background-updates";
 import { BrowserRunContext, BrowserToolCard } from "./browser-tool-card";
@@ -500,6 +501,7 @@ export function ChatScreen({
                     );
                   })}
                 </BrowserRunContext>
+                <AnswerSources messages={messages} message={message} />
               </View>
             );
           })
