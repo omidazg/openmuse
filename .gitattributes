@@ -1,3 +1,5 @@
 * text=auto
+# Shell scripts run on Linux servers and in Git Bash; CRLF breaks them.
+*.sh text eol=lf
 *.png binary
 *.mp4 binary

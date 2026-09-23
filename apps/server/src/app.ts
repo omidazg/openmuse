@@ -24,6 +24,7 @@ import type { Store } from "./db.ts";
 import { agentRoutes } from "./engine/routes.ts";
 import { AgentService } from "./engine/service.ts";
 import { AppError } from "./errors.ts";
+import { reportError } from "./errors-report.ts";
 import { Files } from "./files.ts";
 import { GoogleAuth } from "./google-auth.ts";
 import { MailboxService } from "./mailbox.ts";
@@ -102,6 +103,7 @@ export async function createApp(
     if (error instanceof SyntaxError) return c.json({ error: "داده‌های درخواست نامعتبر است" }, 400);
     // Provider and document errors are useful, but raw stack traces and token-bearing responses are not.
     console.error(`[${BRAND.name}] ${error.name}`);
+    void reportError(error, { component: "api", method: c.req.method, route: c.req.routePath });
     return c.json(
       {
         error:

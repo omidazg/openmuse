@@ -11,6 +11,10 @@
 #   REPO_DIR    checkout on the server (default: /opt/openmuse)
 #   ENV_FILE    local env file to upload (default: deploy/arvan/.env); only when the server has none
 #   FORCE_ENV   1 = overwrite the server's .env with ENV_FILE
+#   SMOKE       1 = run smoke.sh from THIS machine afterwards (the server cannot reach its
+#               own public IP); uses SMOKE_URL or https://<DOMAIN from the server .env>
+#               and SMOKE_ACCESS_KEY if set
+#   DISK_WARN_PCT  warn when the server's root disk is fuller than this (default 85)
 set -euo pipefail
 
 : "${SERVER:?Set SERVER=user@host}"
@@ -47,14 +51,34 @@ if [ -f "$ENV_FILE" ] && { [ "${FORCE_ENV:-0}" = 1 ] || ! ssh "${SSH_OPTS[@]}" "
 fi
 
 echo "==> Building and starting containers"
-ssh "${SSH_OPTS[@]}" "$SERVER" sudo bash -s -- "$REPO_DIR" <<'REMOTE'
+ssh "${SSH_OPTS[@]}" "$SERVER" sudo bash -s -- "$REPO_DIR" "${DISK_WARN_PCT:-85}" <<'REMOTE'
 set -euo pipefail
 cd "$1/deploy/arvan"
 [ -f .env ] || { echo ".env missing in $PWD; set ENV_FILE or copy env.example" >&2; exit 1; }
 docker compose config --quiet
+export GIT_SHA="$(git -C "$1" rev-parse --short HEAD)"
 docker compose up -d --build --remove-orphans
+# Disk is small: drop dangling images and build cache older than a week after each build.
 docker image prune -f >/dev/null
+docker builder prune -f --filter until=168h >/dev/null || true
+bash "$1/deploy/arvan/host/install-maintenance.sh" >/dev/null || echo "WARN: prune timer not installed" >&2
 docker compose ps
+echo "==> Disk usage"
+df -h / | sed 's/^/    /'
+docker system df | sed 's/^/    /'
+used=$(df -P / | awk 'NR==2 {gsub("%","",$5); print $5}')
+if [ "$used" -ge "$2" ]; then
+  echo "WARNING: root disk ${used}% full (>= $2%). هشدار: دیسک ${used}٪ پر است؛ «docker system prune» یا پاک‌سازی پشتیبان‌ها را بررسی کنید." >&2
+fi
 REMOTE
 
-echo "==> Done. Check: curl -fsS https://<DOMAIN>/api/health"
+if [ "${SMOKE:-0}" = 1 ]; then
+  if [ -z "${SMOKE_URL:-}" ]; then
+    domain=$(ssh "${SSH_OPTS[@]}" "$SERVER" "sudo sed -n 's/^DOMAIN=//p' '$REPO_DIR/deploy/arvan/.env'" | tail -1 | tr -d "\"'\r")
+    SMOKE_URL="https://$domain"
+  fi
+  echo "==> Smoke test against $SMOKE_URL (Caddy may need a minute for a new certificate)"
+  SMOKE_RETRIES="${SMOKE_RETRIES:-6}" bash "$HERE/smoke.sh" "$SMOKE_URL"
+else
+  echo "==> Done. Check from your machine: SMOKE=1 or ./deploy/arvan/smoke.sh https://<DOMAIN>"
+fi

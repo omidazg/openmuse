@@ -3,7 +3,9 @@ import { createApp } from "./app.ts";
 import { startBots } from "./bot/index.ts";
 import { readConfig } from "./config.ts";
 import { createStore } from "./db.ts";
+import { installProcessErrorReporting } from "./errors-report.ts";
 
+installProcessErrorReporting("worker");
 const config = readConfig();
 if (!config.databaseUrl)
   throw new Error(
