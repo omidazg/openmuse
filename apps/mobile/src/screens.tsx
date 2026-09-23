@@ -49,6 +49,7 @@ import {
 import { API_URL } from "./api";
 import { localDateTime, zonedInstant } from "./date-time";
 import { DOCUMENT_PICKER_TYPES, fileExtent, fileKindLabel, uploadMimeType } from "./file-kind";
+import { prepareUpload } from "./image-upload";
 import { faDate, faDigits, faNumber, fw } from "./locale";
 import { MailboxSheet } from "./mailbox-sheet";
 import { MessengerLinkPanel } from "./messenger-link";
@@ -1031,7 +1032,8 @@ export function FilesScreen() {
       if (Platform.OS === "web") {
         const form = new FormData();
         if (!file.file) throw new Error("فایل انتخاب‌شده خوانده نشد. آن را دوباره انتخاب کنید.");
-        form.append("file", file.file, file.name);
+        const prepared = await prepareUpload(file.file);
+        form.append("file", prepared, prepared.name || file.name);
         artifact = await api.request<Artifact>("/api/files", form);
       } else {
         const result = await FileSystem.uploadAsync(`${API_URL}/api/files`, file.uri, {
@@ -1133,7 +1135,7 @@ export function FilesScreen() {
           <Empty
             icon={FileText}
             title="اسناد شما اینجا هستند"
-            detail="یک PDF، سند Word، فایل Excel یا CSV وارد کنید یا پیوست یک ایمیل را باز کنید. دستیار متن اسناد را می‌خواند و فیلدهای فرم‌های PDF را پر می‌کند."
+            detail="یک PDF، سند Word، فایل Excel، CSV یا عکس (مثل فاکتور یا کارت ویزیت) وارد کنید یا پیوست یک ایمیل را باز کنید. دستیار متن اسناد و تصاویر را می‌خواند و فیلدهای فرم‌های PDF را پر می‌کند."
           />
         </Card>
       )}

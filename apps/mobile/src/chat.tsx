@@ -31,6 +31,7 @@ import { runConversationTurn } from "./conversation-run";
 import { fw } from "./locale";
 import { MailToolCard } from "./mail-tool-card";
 import { ModelPicker } from "./model-picker";
+import { SpeakButton } from "./speech";
 import { FileThreadCard, TaskThreadCard } from "./thread-artifacts";
 import { type Selection, useMuseThread } from "./threads";
 import { Button, Card, CheckRow, colors, ErrorNotice, s } from "./ui";
@@ -483,6 +484,9 @@ export function ChatScreen({
                     </Text>
                   </View>
                 )}
+                {!user && !!text && !(replying && message === visible.at(-1)) && (
+                  <SpeakButton api={api} text={text} />
+                )}
                 <BrowserRunContext
                   value={{
                     running: busy || agent.isRunning,
@@ -685,7 +689,8 @@ export function ChatScreen({
                 ))
               ) : (
                 <Text style={s.muted}>
-                  هنوز سندی ندارید. برای پیوست کردن، ابتدا یک PDF را در «فایل‌ها» بارگذاری کنید.
+                  هنوز سندی ندارید. برای پیوست کردن، ابتدا یک PDF یا عکس را در «فایل‌ها» بارگذاری
+                  کنید.
                 </Text>
               )}
             </ScrollView>

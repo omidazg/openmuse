@@ -35,8 +35,10 @@ import { PdfRenderer } from "./pdf-render.ts";
 import { clientIp, RateLimiter } from "./rate-limit.ts";
 import { localThreadRoutes, localThreadsEnabled } from "./threads.ts";
 import { transcribeAudio, transcriptionEnabled } from "./transcribe.ts";
+import { TtsService, ttsEnabled } from "./tts.ts";
 import { Usage } from "./usage.ts";
 import { publicUser, type Role } from "./users.ts";
+import { extractFromFile, visionEnabled } from "./vision.ts";
 import { purposeOf, WorkspaceService } from "./workspace.ts";
 
 export async function createApp(
@@ -127,6 +129,8 @@ export async function createApp(
       agentConfigured: agentConfigured(config),
       browserConfigured: Boolean(config.workerUrl && config.workerToken),
       transcriptionEnabled: transcriptionEnabled(),
+      ttsEnabled: ttsEnabled(),
+      visionEnabled: visionEnabled(),
       otpEnabled: otpEnabled(config),
     }),
   );
@@ -236,6 +240,32 @@ export async function createApp(
       throw new AppError("تعداد تبدیل صدا زیاد بوده است. چند دقیقهٔ دیگر دوباره تلاش کنید.", 429);
     const data = await c.req.parseBody();
     return c.json({ text: await transcribeAudio(data.file) });
+  });
+  const tts = new TtsService();
+  app.post("/api/tts", async (c) => {
+    const body = (await c.req.json().catch(() => ({}))) as { text?: unknown };
+    const speech = await tts.speak(c.get("owner"), body.text);
+    c.header("Content-Type", "audio/mpeg");
+    c.header("X-TTS-Truncated", String(speech.truncated));
+    return c.body(Buffer.from(speech.audio));
+  });
+  // «استخراج متن از تصویر» for images and scanned PDFs; results are kept per file.
+  const ocrs = new RateLimiter(20, 10 * 60 * 1000);
+  const ocrCache = new Map<string, string>();
+  app.post("/api/files/:id/ocr", async (c) => {
+    const owner = c.get("owner");
+    const file = await files.get(owner, c.req.param("id"));
+    const key = `${owner}:${file.id}`;
+    const cached = ocrCache.get(key);
+    if (cached !== undefined) return c.json({ text: cached });
+    if (!visionEnabled()) throw new AppError("استخراج متن روی این سرور فعال نیست.", 503);
+    if (!ocrs.take(owner))
+      throw new AppError("تعداد استخراج متن زیاد بوده است. چند دقیقهٔ دیگر دوباره تلاش کنید.", 429);
+    const result = await extractFromFile(files, owner, file.id, "text");
+    const text = "text" in result && typeof result.text === "string" ? result.text : "";
+    if (ocrCache.size >= 200) ocrCache.delete(ocrCache.keys().next().value as string);
+    ocrCache.set(key, text);
+    return c.json({ text });
   });
   app.get("/api/calendars", async (c) => c.json(await workspace.calendars(c.get("owner"))));
   app.get("/api/calendar/events", async (c) => {

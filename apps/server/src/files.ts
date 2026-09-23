@@ -13,14 +13,26 @@ import type { Auth } from "./auth.ts";
 import type { Config } from "./config.ts";
 import type { Store } from "./db.ts";
 import { AppError } from "./errors.ts";
+import { detectImageKind, IMAGE_TYPES, type ImageKind, imageKindOf, isHeic } from "./images.ts";
 import type { PdfRenderer } from "./pdf-render.ts";
 
 const kindByMime = new Map(
   Object.entries(DOCUMENT_TYPES).map(([kind, type]) => [type.mimeType, kind as DocumentKind]),
 );
 
-export function fileKind(file: Pick<Artifact, "mimeType">): DocumentKind {
-  return kindByMime.get(file.mimeType) ?? "pdf";
+export function fileKind(file: Pick<Artifact, "mimeType">): DocumentKind | ImageKind {
+  return imageKindOf(file.mimeType) ?? kindByMime.get(file.mimeType) ?? "pdf";
+}
+
+export function isImageFile(file: Pick<Artifact, "mimeType">): boolean {
+  return imageKindOf(file.mimeType) !== undefined;
+}
+
+function storedExtension(file: Pick<Artifact, "mimeType">): string {
+  const kind = fileKind(file);
+  return kind in IMAGE_TYPES
+    ? IMAGE_TYPES[kind as ImageKind].extension
+    : DOCUMENT_TYPES[kind as DocumentKind].extension;
 }
 
 export class Files {
@@ -41,24 +53,32 @@ export class Files {
   ): Promise<Artifact> {
     if (bytes.length > 10 * 1024 * 1024)
       throw new AppError("حجم سند باید حداکثر ۱۰ مگابایت باشد", 413);
-    const kind = detectDocumentKind(name, bytes, mimeType);
-    if (!kind)
+    const image = detectImageKind(bytes);
+    const kind = image ? undefined : detectDocumentKind(name, bytes, mimeType);
+    if (!image && isHeic(bytes))
       throw new AppError(
-        "این نوع فایل پشتیبانی نمی‌شود. یک PDF، سند Word ‏(docx)، فایل Excel ‏(xlsx) یا CSV انتخاب کنید.",
+        "تصویر HEIC پشتیبانی نمی‌شود. آن را با قالب JPG یا PNG ذخیره کنید و دوباره بارگذاری کنید.",
+        415,
+      );
+    if (!image && !kind)
+      throw new AppError(
+        "این نوع فایل پشتیبانی نمی‌شود. یک PDF، سند Word ‏(docx)، فایل Excel ‏(xlsx)، CSV یا تصویر JPG، PNG یا WebP انتخاب کنید.",
         422,
       );
-    const type = DOCUMENT_TYPES[kind];
+    const type = image ? IMAGE_TYPES[image] : DOCUMENT_TYPES[kind as DocumentKind];
     let pageCount = 1;
     let fields: Artifact["fields"];
     let text: string | undefined;
     let textTruncated = false;
-    if (kind === "pdf") {
+    if (image) {
+      // Images keep pageCount 1; their text comes from the vision model on request (vision.ts).
+    } else if (kind === "pdf") {
       const metadata = await inspectPdf(bytes);
       if (metadata.pageCount > 500) throw new AppError("PDF باید حداکثر ۵۰۰ صفحه داشته باشد", 422);
       pageCount = metadata.pageCount;
       fields = metadata.fields;
     } else {
-      const extracted = extractDocumentText(kind, bytes);
+      const extracted = extractDocumentText(kind as DocumentKind, bytes);
       pageCount = extracted.parts;
       text = extracted.text;
       textTruncated = extracted.truncated;
@@ -125,9 +145,7 @@ export class Files {
   }
   async bytes(owner: string, id: string) {
     const file = await this.get(owner, id);
-    return readFile(
-      join(this.config.dataDir, "files", `${id}.${DOCUMENT_TYPES[fileKind(file)].extension}`),
-    );
+    return readFile(join(this.config.dataDir, "files", `${id}.${storedExtension(file)}`));
   }
   /** Bytes of an owned PDF; other document types are rejected with a Persian error. */
   async pdfBytes(owner: string, id: string) {
@@ -140,6 +158,14 @@ export class Files {
   async text(owner: string, id: string, offset = 0, limit = 30_000) {
     const file = await this.get(owner, id);
     const kind = fileKind(file);
+    if (kind in IMAGE_TYPES)
+      return {
+        id: file.id,
+        name: file.name,
+        kind,
+        text: "",
+        note: "This is an image. Use extract_from_image with this file ID to describe it or read its text.",
+      };
     if (kind === "pdf")
       return {
         id: file.id,
