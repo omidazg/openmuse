@@ -309,7 +309,7 @@ function UserRow({
         <Chip tint={user.role === "admin" ? colors.lavender : undefined}>
           {user.role === "admin" ? "مدیر" : "کاربر"}
         </Chip>
-        <Chip tint={user.status === "active" ? colors.green : "#FBEFED"}>
+        <Chip tint={user.status === "active" ? colors.green : colors.dangerSoft}>
           {user.status === "active" ? "فعال" : "غیرفعال"}
         </Chip>
       </View>
