@@ -11,7 +11,15 @@ const config: ExpoConfig = {
   scheme: brand.technical.scheme,
   version: "0.1.0",
   orientation: "default",
-  userInterfaceStyle: "light",
+  // Follows the system light/dark setting (see src/theme.ts).
+  userInterfaceStyle: "automatic",
+  // Icons are rendered from assets/brand/*.svg by scripts/generate-icons.mjs.
+  icon: "./assets/icon.png",
+  splash: {
+    image: "./assets/splash-icon.png",
+    resizeMode: "contain",
+    backgroundColor: "#FCFCFC",
+  },
   newArchEnabled: true,
   ios: {
     supportsTablet: true,
@@ -19,6 +27,10 @@ const config: ExpoConfig = {
   },
   android: {
     package: brand.technical.androidPackage,
+    adaptiveIcon: {
+      foregroundImage: "./assets/adaptive-icon.png",
+      backgroundColor: "#1B74CC",
+    },
   },
   web: {
     bundler: "metro",
@@ -26,6 +38,8 @@ const config: ExpoConfig = {
     shortName: brand.nameFa,
     lang: "fa",
     dir: "rtl",
+    favicon: "./assets/favicon.png",
+    backgroundColor: "#FCFCFC",
   },
   plugins: [
     "expo-document-picker",

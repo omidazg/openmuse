@@ -710,7 +710,7 @@ export class ComputerService {
                 { stopInFlight: false, stopConfirmed: false },
               );
               result.stderr +=
-                "\nCould not confirm container stop. The computer remains locked; retry Stop after checking Docker.";
+                "\nتوقف کانتینر تأیید نشد و رایانه همچنان قفل است. Docker را بررسی کنید و دوباره «توقف» را بزنید.";
             }
           }
         }

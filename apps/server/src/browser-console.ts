@@ -2,7 +2,7 @@ import { BRAND } from "../../../packages/domain/src/brand.ts";
 /** The console renders only a screenshot; remote page code never runs in this document. */
 export function browserConsole(previewUrl: string) {
   const preview = JSON.stringify(previewUrl).replace(/</g, "\\u003c");
-  return `<!doctype html><html lang="fa" dir="rtl"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  return `<!doctype html><html lang="fa" dir="rtl"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light dark">
 <title>مرورگر ${BRAND.nameFa}</title><style>
 *{box-sizing:border-box}body{margin:0;background:#fcfcfc;color:#172125;font:14px/1.7 Vazirmatn,Tahoma,-apple-system,BlinkMacSystemFont,system-ui,sans-serif}
 header{padding:12px;display:flex;align-items:center;justify-content:space-between;gap:12px}#status{color:#697176;font-size:12px}#status.live{color:#248258}
@@ -12,6 +12,7 @@ form{padding:0 12px 10px;display:flex;gap:8px}input{flex:1;min-width:0;backgroun
 nav{display:flex;gap:6px;padding:0 12px 12px;flex-wrap:wrap}nav button{font-size:12px;min-height:36px;padding:7px 12px}
 #stage{overflow:hidden;background:#eef1f3;border-radius:18px;min-height:160px;margin:0 8px}img{display:block;width:100%;height:auto;cursor:crosshair;touch-action:pan-y}img.stale{opacity:.45;pointer-events:none}
 #error{margin:0 12px 12px;color:#984a41;background:#fbefed;padding:12px;border-radius:14px}#error:empty{display:none}footer{padding:12px;color:#697176;font-size:12px;line-height:1.5}
+@media (prefers-color-scheme:dark){body{background:#111416;color:#e8ecee}button{background:#1a1e21;border-color:#2c3338}button:hover{background:#172a3a}input{background:#22282c}#type{background:#1e4e75}#stage{background:#22282c}#error{background:#3a2020;color:#f08c82}#status,footer{color:#9ba4a9}#status.live{color:#62c794}}
 </style><header><strong>مرورگر</strong><span id="status" role="status">در حال اتصال…</span><button id="refresh" aria-label="تازه‌سازی پیش‌نمایش مرورگر">↻</button></header>
 <form><input id="text" dir="auto" aria-label="متن برای تایپ در مرورگر" placeholder="در فیلد انتخاب‌شده بنویسید" autocomplete="off"><button id="type" type="submit">ارسال متن</button></form>
 <nav aria-label="صفحه‌کلید مرورگر"><button data-key="Enter">Enter ↵</button><button data-key="Tab">Tab ⇥</button><button data-key="Backspace">پاک‌کردن ⌫</button><button id="up">بالا ↑</button><button id="down">پایین ↓</button></nav>

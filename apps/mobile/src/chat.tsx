@@ -454,7 +454,7 @@ export function ChatScreen({
                       borderRadius: 22,
                       borderBottomEndRadius: user ? 7 : 22,
                       borderBottomStartRadius: user ? 22 : 7,
-                      backgroundColor: user ? colors.blue : "#EEEEF0",
+                      backgroundColor: user ? colors.blue : colors.subtle,
                     }}
                   >
                     <Text
@@ -550,7 +550,7 @@ export function ChatScreen({
                 gap: 7,
                 paddingHorizontal: 19,
                 paddingVertical: 18,
-                backgroundColor: "#EEEEF0",
+                backgroundColor: colors.subtle,
                 borderRadius: 28,
               },
             ]}
@@ -691,10 +691,10 @@ export function ChatScreen({
         )}
         <View
           style={{
-            backgroundColor: "#FFF",
+            backgroundColor: colors.card,
             borderRadius: 32,
             borderWidth: 1,
-            borderColor: focused ? "#C7E4F9" : "#EEF0F2",
+            borderColor: focused ? colors.blue : colors.line,
             padding: 8,
             shadowColor: "#18384B",
             shadowOpacity: focused ? 0.1 : 0.06,
@@ -780,7 +780,7 @@ export function ChatScreen({
                       : "در حال بارگذاری گفت‌وگو…"
                     : "پیام خود را بنویسید…"
               }
-              placeholderTextColor="#949B9F"
+              placeholderTextColor={colors.faint}
               selectionColor={colors.blueDark}
               onFocus={() => setFocused(true)}
               onBlur={() => setFocused(false)}
@@ -832,7 +832,7 @@ export function ChatScreen({
                 width: 44,
                 height: 44,
                 borderRadius: 24,
-                backgroundColor: replying || draft.trim() ? colors.blue : "#F3F5F6",
+                backgroundColor: replying || draft.trim() ? colors.blue : colors.subtle,
                 alignItems: "center",
                 justifyContent: "center",
                 transform: [{ scale: pressed ? 0.94 : 1 }],
@@ -844,7 +844,7 @@ export function ChatScreen({
                 <ArrowUp
                   size={25}
                   strokeWidth={1.8}
-                  color={draft.trim() ? colors.text : "#9CB5C5"}
+                  color={draft.trim() ? colors.text : colors.faint}
                 />
               )}
             </Pressable>

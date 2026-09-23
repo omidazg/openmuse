@@ -8,6 +8,7 @@ import {
 } from "@expo-google-fonts/vazirmatn";
 import { useFonts } from "expo-font";
 import { I18nManager, Platform, type TextStyle } from "react-native";
+import { themeCss } from "./theme";
 
 /** Display locale for user-facing dates and numbers. Machine formats keep "en-US". */
 export const LOCALE = "fa-IR";
@@ -90,7 +91,7 @@ export function faMoney(amount: number, unit = "تومان"): string {
   return `${faNumber(amount)} ${unit}`;
 }
 
-/** Right-to-left layout for the whole app. Imported once from index.js. */
+/** Right-to-left layout and (on web) the light/dark color variables for the whole app. Called once from index.js. */
 export function applyRtl(): void {
   if (Platform.OS === "web") {
     if (typeof document === "undefined") return;
@@ -103,7 +104,8 @@ export function applyRtl(): void {
       // Beats react-native-web's atomic font classes, but inline styles (e.g. monospace) still win.
       style.textContent = `html body, html body :where(div, span, input, textarea, button, a) {
   font-family: ${FONT}, Vazirmatn, Tahoma, sans-serif;
-}`;
+}
+${themeCss()}`;
       document.head.appendChild(style);
     }
     return;
