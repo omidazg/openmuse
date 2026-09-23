@@ -28,6 +28,7 @@ import { BrowserRunContext, BrowserToolCard } from "./browser-tool-card";
 import { BrowserThreadCard } from "./computer";
 import { ConversationQueue, type QueuedMessage } from "./conversation-queue";
 import { runConversationTurn } from "./conversation-run";
+import { isMotionReduced } from "./display";
 import { fw } from "./locale";
 import { MailToolCard } from "./mail-tool-card";
 import { ModelPicker } from "./model-picker";
@@ -604,7 +605,7 @@ export function ChatScreen({
           onPress={() => {
             followLatest.current = true;
             setAwayFromLatest(false);
-            list.current?.scrollToEnd({ animated: true });
+            list.current?.scrollToEnd({ animated: !isMotionReduced() });
           }}
         >
           آخرین پیام‌ها

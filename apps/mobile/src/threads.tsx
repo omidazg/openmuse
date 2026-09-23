@@ -23,6 +23,7 @@ import {
 import { ActivityIndicator, Pressable, Text, View } from "react-native";
 import { BRAND } from "../../../packages/domain/src/brand";
 import type { MuseApi } from "./api";
+import { DisplayMenuRows } from "./display-settings";
 import { faNumber } from "./locale";
 import { useSession } from "./session";
 import { Button, colors, ErrorNotice, Field, LinkRow, Sheet, s } from "./ui";
@@ -447,6 +448,7 @@ export function ThreadsSheet({ onClose }: { onClose: () => void }) {
         <LinkRow icon={CalendarDays} title="تقویم" onPress={() => go("calendar")} />
         <LinkRow icon={FileText} title="فایل‌ها" onPress={() => go("files")} />
         <LinkRow icon={Settings2} title="برنامه‌ها و تنظیمات" onPress={() => go("apps")} />
+        <DisplayMenuRows onClose={onClose} />
         {me?.role === "admin" && (
           <LinkRow
             icon={Users}
