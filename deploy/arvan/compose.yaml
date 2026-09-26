@@ -193,6 +193,9 @@ services:
     environment:
       DOMAIN: ${DOMAIN}
       ACME_PROFILE: ${ACME_PROFILE:-classic}
+      # Optional bare server IP that redirects to DOMAIN (see Caddyfile).
+      SERVER_IP: ${SERVER_IP:-}
+      DEFAULT_SNI: ${SERVER_IP:-${DOMAIN}}
     ports:
       - "80:80"
       - "443:443"
@@ -295,6 +298,9 @@ services:
 
 networks:
   frontend:
+    # Dual stack, so Caddy sees the real IPv6 address of a visitor or CDN edge instead of the
+    # docker-proxy gateway (Docker allocates a ULA subnet).
+    enable_ipv6: true
   # Not `internal`: the API needs outbound access to model providers / Google,
   # and the browser worker needs the public web.
   backend:

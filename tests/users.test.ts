@@ -4,10 +4,11 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, test } from "node:test";
+import { Hono } from "hono";
 import { createApp } from "../apps/server/src/app.ts";
 import { type Config, parseUserKeys } from "../apps/server/src/config.ts";
 import { createStore, type Store } from "../apps/server/src/db.ts";
-import { RateLimiter } from "../apps/server/src/rate-limit.ts";
+import { clientIp, RateLimiter } from "../apps/server/src/rate-limit.ts";
 import { QUOTA_EXCEEDED, tehranDay } from "../apps/server/src/usage.ts";
 import { normalizePhone, sha256 } from "../apps/server/src/users.ts";
 
@@ -89,6 +90,18 @@ test("rate limiter allows N attempts per window and then recovers", () => {
   assert.equal(limiter.take("b"), true);
   now = 1001;
   assert.equal(limiter.take("a"), true);
+});
+
+test("client address prefers Caddy's X-Real-IP over the CDN edge in X-Forwarded-For", async () => {
+  const app = new Hono().get("/", (c) => c.text(clientIp(c)));
+  const ip = async (headers: Record<string, string>) =>
+    (await app.request("/", { headers })).text();
+  assert.equal(
+    await ip({ "x-real-ip": "5.160.1.2", "x-forwarded-for": "5.160.1.2, 185.143.233.130" }),
+    "5.160.1.2",
+  );
+  assert.equal(await ip({ "x-forwarded-for": "9.9.9.9, 172.18.0.1" }), "172.18.0.1");
+  assert.equal(await ip({}), "unknown");
 });
 
 test("env keys keep their owners; admin creates, disables, re-enables and rotates db users", async () => {

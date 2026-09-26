@@ -5,7 +5,7 @@
 #   SERVER=root@37.32.27.135 ./deploy/arvan/set-domain.sh dastyar-gpt.ir
 #
 # Over SSH it backs up the server .env, sets DOMAIN=<domain> and ACME_PROFILE=classic
-# (shortlived for a bare IP), and rebuilds: EXPO_PUBLIC_API_URL is baked into the web
+# (shortlived for a bare IP) plus SERVER_IP (the old IP redirects to the domain), and rebuilds: EXPO_PUBLIC_API_URL is baked into the web
 # bundle at build time, and Caddy must request a certificate for the new name.
 #
 # Env: SERVER (required), SSH_KEY, REPO_DIR (default /opt/openmuse),
@@ -29,6 +29,9 @@ SSH_OPTS=(-o StrictHostKeyChecking=accept-new)
 [ -n "${SSH_KEY:-}" ] && SSH_OPTS+=(-i "$SSH_KEY")
 
 server_ip="${SERVER#*@}"
+# With a real domain, old bare-IP links keep working as a redirect to it (Caddyfile).
+ip_site=""
+[ "$PROFILE" = classic ] && [[ "$server_ip" =~ ^[0-9.]+$ ]] && ip_site="$server_ip"
 if [ "$PROFILE" = classic ] && [ "${SKIP_DNS_CHECK:-0}" != 1 ]; then
   resolved=""
   if command -v dig >/dev/null; then
@@ -44,22 +47,23 @@ if [ "$PROFILE" = classic ] && [ "${SKIP_DNS_CHECK:-0}" != 1 ]; then
   fi
 fi
 
-echo "==> $SERVER: DOMAIN=$DOMAIN_NEW ACME_PROFILE=$PROFILE"
-ssh "${SSH_OPTS[@]}" "$SERVER" sudo bash -s -- "$REPO_DIR" "$DOMAIN_NEW" "$PROFILE" <<'REMOTE'
+echo "==> $SERVER: DOMAIN=$DOMAIN_NEW ACME_PROFILE=$PROFILE SERVER_IP=$ip_site"
+ssh "${SSH_OPTS[@]}" "$SERVER" sudo bash -s -- "$REPO_DIR" "$DOMAIN_NEW" "$PROFILE" "$ip_site" <<'REMOTE'
 set -euo pipefail
 cd "$1/deploy/arvan"
-domain="$2"; profile="$3"
+domain="$2"; profile="$3"; ip_site="${4:-}"
 [ -f .env ] || { echo ".env missing in $PWD" >&2; exit 1; }
 backup=".env.bak-$(date -u +%Y%m%dT%H%M%SZ)"
 cp -p .env "$backup"
 chmod 600 "$backup"
-echo "old: $(grep -E '^(DOMAIN|ACME_PROFILE)=' .env | tr '\n' ' ')"
+echo "old: $(grep -E '^(DOMAIN|ACME_PROFILE|SERVER_IP)=' .env | tr '\n' ' ')"
 set_var() {
   if grep -q "^$1=" .env; then sed -i "s|^$1=.*|$1=$2|" .env; else printf '%s=%s\n' "$1" "$2" >>.env; fi
 }
 set_var DOMAIN "$domain"
 set_var ACME_PROFILE "$profile"
-echo "new: $(grep -E '^(DOMAIN|ACME_PROFILE)=' .env | tr '\n' ' ') (previous file: $backup)"
+set_var SERVER_IP "$ip_site"
+echo "new: $(grep -E '^(DOMAIN|ACME_PROFILE|SERVER_IP)=' .env | tr '\n' ' ') (previous file: $backup)"
 docker compose config --quiet
 export GIT_SHA="$(git -C "$1" rev-parse --short HEAD)"
 # Rebuilds the app image (web bundle gets the new API URL); recreates app, worker, caddy

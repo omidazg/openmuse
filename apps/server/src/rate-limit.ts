@@ -27,11 +27,13 @@ export class RateLimiter {
 }
 
 /**
- * Client address. Caddy is the only proxy in front of the API and sets X-Forwarded-For to the
- * connecting address (appending it last when it trusts an earlier hop), so the last entry is the
- * one Caddy saw. Without a proxy it falls back to the socket address.
+ * Client address. Caddy overwrites X-Real-IP with the visitor's address: the connecting one, or
+ * the one a trusted ArvanCloud CDN edge reported in X-Forwarded-For. Without that header the last
+ * X-Forwarded-For entry is the hop the proxy saw, and without a proxy the socket address.
  */
 export function clientIp(c: Context): string {
+  const real = c.req.header("x-real-ip")?.trim();
+  if (real) return real;
   const forwarded = c.req
     .header("x-forwarded-for")
     ?.split(",")
