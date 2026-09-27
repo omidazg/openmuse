@@ -64,9 +64,9 @@ test("recent files and near events are suggested, older or derived ones are not"
     result.map((item) => item.id),
     ["event", "file", "news", "today-plan"],
   );
-  assert.equal(result[0].label, "آمادگی برای «جلسهٔ تیم»");
+  assert.equal(result[0].label, "آمادگی برای «⁨جلسهٔ تیم⁩»");
   assert.match(result[0].prompt, /فردا/);
-  assert.equal(result[1].label, "خلاصهٔ «صورت‌حساب.docx»");
+  assert.equal(result[1].label, "خلاصهٔ «⁨صورت‌حساب.docx⁩»");
   assert.match(result[1].prompt, /شناسهٔ سند: f1/);
 });
 

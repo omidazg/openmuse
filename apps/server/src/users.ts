@@ -34,7 +34,7 @@ export type PublicUser = Omit<UserRecord, "keyHash">;
 
 export const ADMIN_OWNER = "local-user";
 const SYSTEM = "system";
-const USERS = "users";
+export const USERS = "users";
 const KEYS = "user-keys";
 const SESSIONS = "sessions";
 

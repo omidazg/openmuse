@@ -1,7 +1,7 @@
 import { Bell, Compass, Pencil } from "lucide-react-native";
-import { useCallback, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import { Pressable, Text, View } from "react-native";
-import { formatJalali } from "../../../packages/domain/src/iran-holidays";
+import { gregorianToJalali, JALALI_MONTHS } from "../../../packages/domain/src/iran-holidays";
 import {
   matchPathTopic,
   type PathShortcut,
@@ -13,7 +13,8 @@ import {
 } from "../../../packages/domain/src/paths";
 import { findPersona, type Persona } from "../../../packages/domain/src/personal";
 import { friendlyError } from "./api";
-import { faNumber, fw } from "./locale";
+import { useTrack } from "./insights";
+import { faDigits, faNumber, fw } from "./locale";
 import { personaIcon } from "./personal";
 import { pathIcon } from "./profile";
 import { useMuseThread } from "./threads";
@@ -172,7 +173,13 @@ export function PathTags({
 const tag = { gap: 5, paddingHorizontal: 11, paddingVertical: 5, borderRadius: 16 } as const;
 const tagText = { fontSize: 12, lineHeight: 18, ...fw("600") } as const;
 
-/** The nearest legal deadline of the person's paths. */
+/** «۱۵ آبان» for a Gregorian day; reminders are at most ten days ahead, so no year. */
+function dayMonth(date: string): string {
+  const { month, day } = gregorianToJalali(date);
+  return `${faDigits(day)} ${JALALI_MONTHS[month - 1]}`;
+}
+
+/** The nearest deadline of the person's paths, with an admin-recorded extension if any. */
 function DeadlineCard({
   deadline,
   onAction,
@@ -189,11 +196,22 @@ function DeadlineCard({
         <View style={{ flex: 1, gap: 2 }}>
           <Text style={[s.heading, { fontSize: 15, lineHeight: 24 }]}>{deadline.title}</Text>
           <Text style={[s.small, { color: colors.text }]}>
-            {formatJalali(deadline.date)} · {daysLeftLabel(deadline.daysLeft)}
+            {deadline.extended
+              ? `تمدید شد تا ${dayMonth(deadline.date)}`
+              : `مهلت: ${dayMonth(deadline.date)}`}
+            {` · ${daysLeftLabel(deadline.daysLeft)}`}
           </Text>
-          <Text style={[s.small, { fontSize: 11, lineHeight: 18 }]}>
-            مهلت قانونی؛ ممکن است تمدید شود.
-          </Text>
+          {deadline.extended ? (
+            deadline.extended.note ? (
+              <Text style={[s.small, { fontSize: 11, lineHeight: 18 }]}>
+                {deadline.extended.note}
+              </Text>
+            ) : null
+          ) : (
+            <Text style={[s.small, { fontSize: 11, lineHeight: 18 }]}>
+              مهلت قانونی؛ ممکن است تمدید شود.
+            </Text>
+          )}
         </View>
       </View>
       <View style={[s.row, { gap: 6, flexWrap: "wrap" }]}>
@@ -234,6 +252,37 @@ function InviteCard({ onChoose, onClose }: { onChoose: () => void; onClose: () =
 }
 
 const HIDDEN_DEADLINES = "dastyar.hiddenDeadlines";
+/** An extension shows the card again even if the legal-day reminder was put off. */
+const hiddenKey = (deadline: UpcomingDeadline) =>
+  deadline.extended ? `${deadline.id}:${deadline.date}` : deadline.id;
+
+/**
+ * Deadlines from GET /api/agent/deadlines (with admin-recorded extensions); computed on the device
+ * when the server cannot be reached. Empty while loading.
+ */
+function useDeadlines(profile: UserProfile | undefined): UpcomingDeadline[] {
+  const { api } = useWorkspace();
+  const [state, setState] = useState<{ list?: UpcomingDeadline[]; failed?: boolean }>({});
+  const wanted = Boolean(profile?.reminders && profile.paths.length);
+  useEffect(() => {
+    // `profile` is a dependency so a change of paths or answers reloads the list.
+    if (!wanted || !profile) return;
+    let active = true;
+    api
+      .request<UpcomingDeadline[]>("/api/agent/deadlines")
+      .then((list) => {
+        if (active) setState({ list: Array.isArray(list) ? list : [] });
+      })
+      .catch(() => {
+        if (active) setState({ failed: true });
+      });
+    return () => {
+      active = false;
+    };
+  }, [api, profile, wanted]);
+  if (!wanted || !profile) return [];
+  return state.list ?? (state.failed ? upcomingDeadlines(profile) : []);
+}
 
 /**
  * Under the greeting of the empty chat: the invitation for existing people and the nearest
@@ -254,17 +303,19 @@ export function PathWelcome({
   send: (prompt: string) => void;
 }) {
   const [hidden, hide] = useStoredIds(HIDDEN_DEADLINES);
-  const deadline = profile
-    ? upcomingDeadlines(profile).find((item) => !hidden.has(item.id))
-    : undefined;
+  const track = useTrack();
+  const deadline = useDeadlines(profile).find((item) => !hidden.has(hiddenKey(item)));
   return (
     <>
       {invite && <InviteCard onChoose={onSetup} onClose={onDismissInvite} />}
       {deadline && (
         <DeadlineCard
           deadline={deadline}
-          onAction={() => send(deadline.prompt)}
-          onLater={() => hide(deadline.id)}
+          onAction={() => {
+            track("deadline_action", deadline.id);
+            send(deadline.prompt);
+          }}
+          onLater={() => hide(hiddenKey(deadline))}
         />
       )}
     </>
@@ -276,6 +327,7 @@ export function PersonaChips({ profile }: { profile: UserProfile | undefined }) 
   const { enabled, start } = useMuseThread();
   const [busy, setBusy] = useState<string>();
   const [error, setError] = useState("");
+  const track = useTrack();
   const personas = (profile ? suggestedPersonaIds(profile) : [])
     .map(findPersona)
     .filter((persona): persona is Persona => Boolean(persona))
@@ -297,6 +349,7 @@ export function PersonaChips({ profile }: { profile: UserProfile | undefined }) 
               setBusy(persona.id);
               setError("");
               start(persona.id)
+                .then(() => track("persona_suggestion_used", persona.id))
                 .catch((e) => setError(friendlyError(e)))
                 .finally(() => setBusy(undefined));
             }}
@@ -335,6 +388,7 @@ export function PersonaSuggestion({
   onPrompt: (prompt: string) => void;
 }) {
   const { notify } = useWorkspace();
+  const track = useTrack();
   const [closed, close] = useStoredIds(CLOSED_PERSONA_HINTS);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -356,7 +410,10 @@ export function PersonaSuggestion({
               small
               icon={pathIcon(item.icon)}
               style={{ backgroundColor: colors.card, borderWidth: 1, borderColor: colors.line }}
-              onPress={() => onPrompt(item.prompt)}
+              onPress={() => {
+                track("shortcut_used", item.id);
+                onPrompt(item.prompt);
+              }}
             >
               {item.label}
             </Button>

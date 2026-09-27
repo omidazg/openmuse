@@ -164,7 +164,7 @@ export const PATHS: readonly PathDefinition[] = [
         label: "پیش‌فاکتور",
         icon: "receipt",
         prompt:
-          "یک پیش‌فاکتور رسمی به صورت PDF برایم بساز. اول نام فروشنده و خریدار، شرح کالا یا خدمت، تعداد، مبلغ واحد و نرخ ارزش افزوده را از من بپرس.",
+          "یک پیش‌فاکتور PDF برایم بساز. نام فروشنده و خریدار، شرح هر کالا یا خدمت با تعداد و مبلغ واحد به تومان، و اینکه ارزش افزوده حساب شود یا نه را در یک پیام از من بپرس و بعد پیش‌فاکتور را بساز.",
       },
       { id: "finance-accountant", label: "حسابدار", icon: "calculator", personaId: "accountant" },
     ],
@@ -249,7 +249,7 @@ export const PATHS: readonly PathDefinition[] = [
         label: "پیش‌فاکتور",
         icon: "receipt",
         prompt:
-          "یک پیش‌فاکتور رسمی به صورت PDF برایم بساز. اول نام فروشنده و خریدار، شرح کالا، تعداد و مبلغ واحد را از من بپرس.",
+          "یک پیش‌فاکتور PDF برایم بساز. نام فروشنده و خریدار، شرح هر کالا یا خدمت با تعداد و مبلغ واحد به تومان، و اینکه ارزش افزوده حساب شود یا نه را در یک پیام از من بپرس و بعد پیش‌فاکتور را بساز.",
       },
       { id: "business-marketer", label: "بازاریاب", icon: "megaphone", personaId: "marketer" },
     ],
@@ -364,6 +364,13 @@ export const PATHS: readonly PathDefinition[] = [
         icon: "handshake",
         prompt:
           "یک قرارداد را برایت می‌فرستم. بندهای مهم، ریسک‌ها و چیزهایی را که پیش از امضا باید بپرسم فهرست کن.",
+      },
+      {
+        id: "legal-draft",
+        label: "تنظیم قرارداد",
+        icon: "file-text",
+        prompt:
+          "یک قرارداد نمونه به صورت PDF برایم تنظیم کن: اجاره‌نامهٔ مسکونی یا قرارداد کار موقت. اول بپرس کدام را می‌خواهم، بعد نام طرفین، مشخصات ملک یا شغل، مبالغ به تومان، تاریخ شروع و مدت را در یک پیام از من بپرس و هر چه را نمی‌دانم خالی بگذار.",
       },
       { id: "legal-lawyer", label: "وکیل", icon: "scale", personaId: "lawyer" },
     ],
@@ -797,15 +804,33 @@ export const DEADLINE_RULES: readonly DeadlineRule[] = [
 ];
 
 export interface UpcomingDeadline {
+  /** `${rule.id}-${legalDate}`; stays the same when the deadline is extended. */
   id: string;
   pathId: PathId;
   title: string;
   prompt: string;
   action: string;
-  /** Gregorian YYYY-MM-DD (Asia/Tehran calendar day). */
+  /** Effective due day, Gregorian YYYY-MM-DD (Asia/Tehran calendar day); the extended day if any. */
   date: string;
+  /** The day the law sets, before any extension. */
+  legalDate: string;
+  /** Set when an admin recorded an extension for this occurrence. */
+  extended?: { note?: string };
   /** 0 = today. */
   daysLeft: number;
+}
+
+/**
+ * An announced extension (تمدید) of one deadline occurrence, recorded by an admin. `id` is the
+ * occurrence id (`${rule.id}-${legalDate}`, e.g. "vat-8-2026-11-06"); `date` is the new due day.
+ */
+export interface DeadlineOverride {
+  id: string;
+  /** New due day, Gregorian YYYY-MM-DD (Asia/Tehran calendar day). */
+  date: string;
+  /** Short Persian note, e.g. «طبق اطلاعیهٔ سازمان امور مالیاتی». */
+  note?: string;
+  updatedAt?: string;
 }
 
 const DAY_MS = 86_400_000;
@@ -818,8 +843,10 @@ export function upcomingDeadlines(
   profile: UserProfile,
   now: Date = new Date(),
   windowDays = 10,
+  overrides: readonly DeadlineOverride[] = [],
 ): UpcomingDeadline[] {
   if (!profile.reminders) return [];
+  const extensions = new Map(overrides.map((item) => [item.id, item]));
   const today = tehranDate(now);
   const { year } = gregorianToJalali(today);
   const found: UpcomingDeadline[] = [];
@@ -836,16 +863,21 @@ export function upcomingDeadlines(
     for (const jy of [year, year + 1])
       for (const jm of months) {
         const jd = rule.day === "end" ? jalaliMonthLength(jy, jm) : rule.day;
-        const date = jalaliToGregorian(jy, jm, jd);
+        const legalDate = jalaliToGregorian(jy, jm, jd);
+        const id = `${rule.id}-${legalDate}`;
+        const extension = extensions.get(id);
+        const date = extension?.date ?? legalDate;
         const daysLeft = Math.round((Date.parse(date) - Date.parse(today)) / DAY_MS);
         if (daysLeft < 0 || daysLeft >= windowDays) continue;
         found.push({
-          id: `${rule.id}-${date}`,
+          id,
           pathId: rule.pathId,
           title: rule.title,
           prompt: rule.prompt,
           action: rule.action,
           date,
+          legalDate,
+          ...(extension ? { extended: extension.note ? { note: extension.note } : {} } : {}),
           daysLeft,
         });
       }

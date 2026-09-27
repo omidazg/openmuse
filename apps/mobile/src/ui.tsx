@@ -1,5 +1,5 @@
 import { ArrowUpLeft, Check, ChevronLeft, type LucideIcon, X } from "lucide-react-native";
-import { type ReactNode, useEffect, useRef } from "react";
+import { createContext, type ReactNode, useCallback, useEffect, useRef } from "react";
 import {
   ActivityIndicator,
   Animated,
@@ -20,6 +20,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { BRAND } from "../../../packages/domain/src/brand";
 import { useDisplay } from "./display";
 import { motionDuration, touchTarget } from "./display-prefs";
+import { useKeyboardInset } from "./keyboard";
 import { FONT, faDate, faNumber, fw } from "./locale";
 import { colors } from "./theme";
 
@@ -248,6 +249,9 @@ export function ErrorNotice({ error }: { error?: string }) {
     </View>
   ) : null;
 }
+/** Scrolls the enclosing Sheet back to its top, e.g. when a multi-step sheet changes step. */
+export const SheetScrollTop = createContext<(() => void) | undefined>(undefined);
+
 export function Sheet({
   title,
   subtitle,
@@ -267,6 +271,9 @@ export function Sheet({
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const { reduceMotion } = useDisplay();
+  const keyboard = useKeyboardInset();
+  const scroll = useRef<ScrollView>(null);
+  const scrollTop = useCallback(() => scroll.current?.scrollTo({ y: 0, animated: false }), []);
   const compact = width < 600;
   if (drawer)
     return (
@@ -281,7 +288,14 @@ export function Sheet({
       visible
       onRequestClose={onClose}
     >
-      <View style={[s.modalShade, compact && { padding: 0, justifyContent: "flex-end" }]}>
+      <View
+        style={[
+          s.modalShade,
+          compact && { padding: 0, justifyContent: "flex-end" },
+          // Android: the edge-to-edge modal does not shrink for the keyboard; lift the sheet.
+          keyboard > 0 && { paddingBottom: keyboard },
+        ]}
+      >
         <View
           accessibilityViewIsModal
           style={[
@@ -320,10 +334,11 @@ export function Sheet({
             <IconButton icon={X} label="بستن" onPress={onClose} />
           </View>
           <ScrollView
+            ref={scroll}
             keyboardShouldPersistTaps="handled"
             contentContainerStyle={{ padding: compact ? 20 : 24 }}
           >
-            {children}
+            <SheetScrollTop.Provider value={scrollTop}>{children}</SheetScrollTop.Provider>
           </ScrollView>
         </View>
       </View>

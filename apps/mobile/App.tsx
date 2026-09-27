@@ -18,6 +18,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   AppState,
+  BackHandler,
   Pressable,
   ScrollView,
   Text,
@@ -50,6 +51,7 @@ import { ComputerEntry } from "./src/computer";
 import { ComputerDraftProvider } from "./src/computer-drafts";
 import { Details } from "./src/details";
 import { useDisplay } from "./src/display";
+import { useKeyboardInset } from "./src/keyboard";
 import { Landing } from "./src/landing";
 import { faNumber, fw, useAppFonts } from "./src/locale";
 import { PhoneLogin } from "./src/login";
@@ -58,6 +60,7 @@ import { PreferencesProvider, usePreferences } from "./src/preferences";
 import { ProfileProvider } from "./src/profile";
 import { BrowserScreen, CalendarScreen, FilesScreen, MailScreen } from "./src/screens";
 import { SessionProvider } from "./src/session";
+import { scheme } from "./src/theme";
 import { ThreadsProvider, ThreadsSheet, useMuseThread } from "./src/threads";
 import { Button, Card, colors, ErrorNotice, Field, IconButton, Mascot, s } from "./src/ui";
 import { type Detail, useWorkspace, WorkspaceContext } from "./src/workspace";
@@ -87,7 +90,7 @@ const titles: Partial<Record<Section, { title: string; subtitle: string }>> = {
   files: { title: "فایل‌ها", subtitle: "اسناد، فرم‌ها و نسخه‌های تکمیل‌شده." },
 };
 const TOKEN_KEY = "dastyar.session";
-/** Web keeps the 24-hour session token so a refresh does not ask for the key again. */
+/** Keeps the 24-hour session token (web localStorage, a private file on phones) across restarts. */
 function loadToken(): string {
   try {
     return globalThis.localStorage?.getItem(TOKEN_KEY) ?? "";
@@ -150,12 +153,14 @@ export default function App() {
     void (async () => {
       const saved = loadToken();
       if (saved) {
-        const ok = await fetch(`${API_URL}/api/workspace`, {
+        // Only a rejected token signs out; offline or a server hiccup keeps it, and the workspace
+        // screen offers «تلاش دوباره» (phones often start without a connection).
+        const status = await fetch(`${API_URL}/api/workspace`, {
           headers: { Authorization: `Bearer ${saved}` },
         })
-          .then((r) => r.ok)
-          .catch(() => false);
-        if (ok) {
+          .then((r) => r.status)
+          .catch(() => 0);
+        if (status !== 401 && status !== 403) {
           setToken(saved);
           setBusy(false);
           return;
@@ -168,7 +173,8 @@ export default function App() {
   if (!fontsReady) return null;
   return (
     <SafeAreaProvider>
-      <StatusBar style="auto" />
+      {/* Native colors follow the scheme at startup (theme.ts), so the bar icons must too. */}
+      <StatusBar style={scheme === "dark" ? "light" : "dark"} />
       {token ? (
         <CopilotKitProvider
           runtimeUrl={`${API_URL}/api/copilotkit`}
@@ -431,10 +437,24 @@ function WorkspaceShell({
   const { prefs, update } = useDisplay();
   // Focus mode: in chat, only the messages and the composer remain.
   const focused = prefs.focus && section === "chat";
+  const keyboard = useKeyboardInset();
+  // Android back: sheets close themselves (Modal onRequestClose); on the main screen it steps
+  // back towards the chat before leaving the app.
+  useEffect(() => {
+    const sub = BackHandler.addEventListener("hardwareBackPress", () => {
+      if (section === "chat") return false;
+      navigate(utility ? "apps" : "chat");
+      return true;
+    });
+    return () => sub.remove();
+  }, [section, utility, navigate]);
   return (
     <>
       <WorkspaceTools />
-      <SafeAreaView style={{ flex: 1, backgroundColor: colors.canvas }} edges={["top", "bottom"]}>
+      <SafeAreaView
+        style={{ flex: 1, backgroundColor: colors.canvas, paddingBottom: keyboard }}
+        edges={["top", "bottom"]}
+      >
         <View style={{ flex: 1, width: "100%", maxWidth: 760, alignSelf: "center" }}>
           {focused && (
             <View style={{ alignItems: "flex-end", marginHorizontal: 20, paddingVertical: 8 }}>
@@ -600,7 +620,8 @@ function WorkspaceShell({
           </View>
           <View
             style={{
-              display: focused ? "none" : "flex",
+              // The tab bar steps aside while the Android keyboard is open, like other apps.
+              display: focused || keyboard > 0 ? "none" : "flex",
               paddingHorizontal: 22,
               paddingTop: 10,
               paddingBottom: desktop ? 22 : 7,

@@ -1,6 +1,8 @@
 import { Copy, KeyRound, Plus, RefreshCw, UserPlus, Users } from "lucide-react-native";
 import { useCallback, useEffect, useState } from "react";
 import { ActivityIndicator, Platform, Share, Text, View } from "react-native";
+import { AdminDeadlines } from "./admin-deadlines";
+import { AdminInsights } from "./admin-insights";
 import type { MuseApi } from "./api";
 import { faDigits, faNumber, fw, toLatinDigits } from "./locale";
 import { Button, Card, Chip, colors, Empty, ErrorNotice, Field, Sheet, s } from "./ui";
@@ -499,6 +501,8 @@ export function AdminSheet({
             </Text>
           </Card>
         )}
+        <AdminInsights api={api} />
+        <AdminDeadlines api={api} />
         {!users && !error && <ActivityIndicator color={colors.blueDark} />}
         {users?.length === 0 && (
           <Empty

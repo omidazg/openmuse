@@ -85,26 +85,33 @@ export function startUpload(
     };
   }
   let cancelled = false;
-  const task = FileSystem.createUploadTask(
-    url,
-    source.uri,
-    {
-      httpMethod: "POST",
-      uploadType: FileSystem.FileSystemUploadType.MULTIPART,
-      fieldName: "file",
-      mimeType: uploadMimeType(source.name, source.mimeType),
-      headers: { Authorization: `Bearer ${api.token}` },
-    },
-    ({ totalBytesSent, totalBytesExpectedToSend }) =>
-      onProgress(uploadPercent(totalBytesSent, totalBytesExpectedToSend)),
-  );
+  let task: FileSystem.UploadTask | undefined;
+  const upload = (uri: string) =>
+    FileSystem.createUploadTask(
+      url,
+      uri,
+      {
+        httpMethod: "POST",
+        uploadType: FileSystem.FileSystemUploadType.MULTIPART,
+        fieldName: "file",
+        mimeType: uploadMimeType(source.name, source.mimeType),
+        headers: { Authorization: `Bearer ${api.token}` },
+      },
+      ({ totalBytesSent, totalBytesExpectedToSend }) =>
+        onProgress(uploadPercent(totalBytesSent, totalBytesExpectedToSend)),
+    );
   const promise = (async () => {
+    const named = await namedCopy(source.uri, source.name);
     let result: FileSystem.FileSystemUploadResult | null | undefined;
     try {
+      if (cancelled) throw new UploadCancelled();
+      task = upload(named.uri);
       result = await task.uploadAsync();
     } catch {
       if (cancelled) throw new UploadCancelled();
       throw new Error(uploadFailure(0, ""));
+    } finally {
+      named.cleanup();
     }
     if (cancelled || !result) throw new UploadCancelled();
     return settle(result.status, result.body);
@@ -114,7 +121,34 @@ export function startUpload(
     cancel: () => {
       if (cancelled) return;
       cancelled = true;
-      void task.cancelAsync().catch(() => {});
+      void task?.cancelAsync().catch(() => {});
     },
   };
+}
+
+/**
+ * The multipart filename is the local file's name, and the document picker's cache copy is a
+ * random id («3f9c….pdf»); the server keeps that name. Upload a copy named like the original
+ * («قرارداد.pdf») instead, falling back to the picked file if copying fails.
+ */
+export async function namedCopy(
+  uri: string,
+  name: string,
+): Promise<{ uri: string; cleanup: () => void }> {
+  // Path separators would split the name into folders; everything else is a valid file name.
+  const safe = name.replace(/[/\\]/g, "_").trim();
+  if (!safe || !FileSystem.cacheDirectory || uri.endsWith(`/${encodeURIComponent(safe)}`))
+    return { uri, cleanup: () => {} };
+  const folder = `${FileSystem.cacheDirectory}upload-${Date.now()}-${Math.random().toString(36).slice(2, 8)}/`;
+  try {
+    await FileSystem.makeDirectoryAsync(folder, { intermediates: true });
+    const target = `${folder}${encodeURIComponent(safe)}`;
+    await FileSystem.copyAsync({ from: uri, to: target });
+    return {
+      uri: target,
+      cleanup: () => void FileSystem.deleteAsync(folder, { idempotent: true }).catch(() => {}),
+    };
+  } catch {
+    return { uri, cleanup: () => {} };
+  }
 }

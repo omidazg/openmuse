@@ -1,5 +1,5 @@
 import { Check, Coins, LayoutList, Sparkles, UserRound } from "lucide-react-native";
-import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
+import { type ReactNode, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { Platform, Pressable, Text, View } from "react-native";
 import {
   PATH_MAX,
@@ -10,9 +10,11 @@ import {
   suggestedPersonaIds,
 } from "../../../packages/domain/src/paths";
 import { findPersona } from "../../../packages/domain/src/personal";
+import { trackPathChange } from "./insights";
 import { faDigits, fw } from "./locale";
 import { pathIcon, useProfile } from "./profile";
-import { Button, Card, colors, ErrorNotice, Sheet, s } from "./ui";
+import { Button, Card, colors, ErrorNotice, Sheet, SheetScrollTop, s } from "./ui";
+import { useWorkspace } from "./workspace";
 
 export const SAVE_FAILED = "ذخیره نشد. اتصال را بررسی کنید و دوباره تلاش کنید.";
 
@@ -385,6 +387,7 @@ export function StepDots({ index, count }: { index: number; count: number }) {
  */
 export function usePathDraft() {
   const { profile, save } = useProfile();
+  const { api } = useWorkspace();
   const seeded = useRef(Boolean(profile));
   const [paths, setPathsState] = useState<PathId[]>(profile?.paths ?? []);
   const [details, setDetailsState] = useState<Record<string, string[]>>(profile?.details ?? {});
@@ -410,6 +413,7 @@ export function usePathDraft() {
       setFailure(null);
       try {
         await save(patch);
+        if (patch.paths) trackPathChange(api, profile?.paths ?? [], patch.paths);
         setBusy(null);
         next();
       } catch {
@@ -417,7 +421,7 @@ export function usePathDraft() {
         setFailure({ proceed: next });
       }
     },
-    [save],
+    [save, api, profile],
   );
   const clearFailure = useCallback(() => setFailure(null), []);
   return { paths, setPaths, details, setDetails, busy, failure, clearFailure, commit };
@@ -450,17 +454,22 @@ export function SaveFailure({
 }
 
 /**
- * The Sheet keeps one ScrollView across steps; scroll back to the top when the step changes (web
- * only; a long path list may have been scrolled to its buttons). Put `<View ref={anchor} />` first.
+ * The Sheet keeps one ScrollView across steps; scroll back to the top when `value` (the step)
+ * changes, since a long path list may have been scrolled to its buttons. Render it first inside
+ * the Sheet: web scrolls this anchor into view, phones scroll the Sheet's ScrollView.
  */
-export function useScrollTopOnChange(value: unknown) {
+export function ScrollTopOnChange({ value }: { value: unknown }) {
   const anchor = useRef<View>(null);
+  const scrollTop = useContext(SheetScrollTop);
   useEffect(() => {
-    if (Platform.OS !== "web") return;
+    if (Platform.OS !== "web") {
+      scrollTop?.();
+      return;
+    }
     const node = anchor.current as unknown as { scrollIntoView?: (options: object) => void };
     node?.scrollIntoView?.({ block: "nearest" });
-  }, [value]);
-  return anchor;
+  }, [value, scrollTop]);
+  return <View ref={anchor} />;
 }
 
 // --- Setup sheet --------------------------------------------------------------------------------
@@ -475,7 +484,6 @@ export function PathSetupSheet(props: { onClose: () => void }) {
   const { onClose } = props;
   const draft = usePathDraft();
   const [step, setStep] = useState<SetupStep>("paths");
-  const anchor = useScrollTopOnChange(step);
   const questions = pathsWithQuestions(draft.paths).length > 0;
   const steps: SetupStep[] = questions ? ["paths", "questions", "ready"] : ["paths", "ready"];
   const afterPaths = () => {
@@ -496,7 +504,7 @@ export function PathSetupSheet(props: { onClose: () => void }) {
         : undefined;
   return (
     <Sheet title={title} subtitle={subtitle} onClose={onClose}>
-      <View ref={anchor} />
+      <ScrollTopOnChange value={step} />
       <View style={{ gap: 16 }}>
         {step === "paths" && <PathCards selected={draft.paths} onChange={draft.setPaths} />}
         {step === "questions" && (

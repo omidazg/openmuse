@@ -32,6 +32,7 @@ import { type PathShortcut, pathShortcuts } from "../../../packages/domain/src/p
 import type { MuseApi } from "./api";
 import { hasPhysicalKeyboard } from "./composer-shortcuts";
 import { DisplayMenuRows } from "./display-settings";
+import { track } from "./insights";
 import { faNumber } from "./locale";
 import { PathShortcutGrid } from "./path-settings";
 import { PersonaList } from "./personal";
@@ -362,6 +363,7 @@ export function ThreadsSheet({
   }
   /** A new conversation (with its assistant, if any) whose first message is the prompt. */
   function runShortcut(item: PathShortcut) {
+    track(api, "shortcut_used", item.id);
     void mutate(async () => {
       if (enabled) await start(item.personaId);
       if (item.prompt) ask(item.prompt);

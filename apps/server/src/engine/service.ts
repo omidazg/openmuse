@@ -30,11 +30,13 @@ import type { BrowserService } from "../browser.ts";
 import { ComputerService } from "../computer.ts";
 import type { Config } from "../config.ts";
 import type { Store } from "../db.ts";
+import { startDeadlineSweep } from "../deadlines.ts";
 import { AppError } from "../errors.ts";
 import type { Files } from "../files.ts";
 import { backgroundFailure } from "../log.ts";
 import type { Usage } from "../usage.ts";
 import type { WorkspaceService } from "../workspace.ts";
+import { readStatementFile } from "./bank-statement.ts";
 import { analyzeSpending, faDate, faNumber } from "./finance.ts";
 import { executeModelTask } from "./model.ts";
 import { readPersonal } from "./personal.ts";
@@ -65,6 +67,7 @@ export class AgentService {
   /** Daily usage metering and quotas; absent in isolated engine tests. */
   usage?: Usage;
   private maintenance?: ReturnType<typeof setInterval>;
+  private deadlineSweep?: () => Promise<void>;
   private refreshing = false;
   constructor(
     readonly db: Store,
@@ -86,10 +89,14 @@ export class AgentService {
     this.maintenance = setInterval(() => {
       void this.maintain().catch((error) => backgroundFailure("maintenance", error));
     }, 60000);
+    // «مسیرهای من» deadline reminders; notifications reach linked Bale/Telegram chats too.
+    this.deadlineSweep ??= startDeadlineSweep(this.db, (...args) => this.notify(...args));
   }
   async stop() {
     if (this.maintenance) clearInterval(this.maintenance);
     this.maintenance = undefined;
+    await this.deadlineSweep?.();
+    this.deadlineSweep = undefined;
     await this.worker.stop();
     await this.workspace.mailbox.stop();
     while (this.refreshing) await new Promise((resolve) => setTimeout(resolve, 10));
@@ -774,14 +781,29 @@ export class AgentService {
     }
     if (task.kind === "finance") {
       await context.event("step", "در حال تحلیل تراکنش‌های واردشده");
-      const csv = z.string().parse(task.input.csv);
-      const data = analyzeSpending(csv);
+      const fileId = z
+        .string()
+        .min(1)
+        .max(200)
+        .optional()
+        .catch(undefined)
+        .parse(task.input.fileId);
+      const statement = fileId ? await readStatementFile(this.files, owner, fileId) : undefined;
+      const csv = statement?.text ?? z.string().optional().catch(undefined).parse(task.input.csv);
+      if (!csv)
+        throw new AppError(
+          "فایل صورت‌حساب یا متن CSV تراکنش‌ها به این کار داده نشده است. فایل را بارگذاری کنید و دوباره درخواست دهید.",
+          422,
+        );
+      const data = analyzeSpending(csv, {
+        month: z.string().max(20).optional().catch(undefined).parse(task.input.month),
+      });
       const artifact = await this.artifact(
         owner,
         task,
         "finance",
         "ردیاب هزینه‌ها",
-        `${faNumber(data.count)} تراکنش · ${faNumber(data.spending)} هزینه`,
+        `${faNumber(data.count)} تراکنش · ${faNumber(data.spending)}${data.source === "bank-statement" ? " تومان" : ""} هزینه`,
         data,
       );
       task = await context.checkpoint({
@@ -790,7 +812,7 @@ export class AgentService {
           {
             id: task.id,
             kind: "user",
-            title: "فایل CSV تراکنش‌های شما",
+            title: statement ? `فایل «${statement.file.name}»` : "فایل CSV تراکنش‌های شما",
             excerpt: `${faNumber(data.count)} ردیف؛ از ${faDate(data.period.from)} تا ${faDate(data.period.to)}`,
           },
         ],

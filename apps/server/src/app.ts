@@ -226,7 +226,7 @@ export async function createApp(
       otpEnabled: otpEnabled(config),
     });
   });
-  app.route("/api/admin", adminRoutes(users, usage, config));
+  app.route("/api/admin", adminRoutes(users, usage, config, db));
   app.get("/api/workspace", async (c) => {
     const snapshot = await workspace.snapshot(c.get("owner"), c.req.query("q"));
     snapshot.browsers = snapshot.browsers.map((s) => browser.decorate(c.get("owner"), s));

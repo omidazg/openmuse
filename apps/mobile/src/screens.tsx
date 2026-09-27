@@ -47,6 +47,7 @@ import {
   isIranWeekend,
 } from "../../../packages/domain/src/iran-holidays";
 import { API_URL } from "./api";
+import { namedCopy } from "./composer-upload";
 import { localDateTime, zonedInstant } from "./date-time";
 import { DOCUMENT_PICKER_TYPES, fileExtent, fileKindLabel, uploadMimeType } from "./file-kind";
 import { prepareUpload } from "./image-upload";
@@ -1036,13 +1037,15 @@ export function FilesScreen() {
         form.append("file", prepared, prepared.name || file.name);
         artifact = await api.request<Artifact>("/api/files", form);
       } else {
-        const result = await FileSystem.uploadAsync(`${API_URL}/api/files`, file.uri, {
+        // Upload a copy named like the original; the picker's cache copy has a random name.
+        const named = await namedCopy(file.uri, file.name);
+        const result = await FileSystem.uploadAsync(`${API_URL}/api/files`, named.uri, {
           httpMethod: "POST",
           uploadType: FileSystem.FileSystemUploadType.MULTIPART,
           fieldName: "file",
           mimeType: uploadMimeType(file.name, file.mimeType),
           headers: { Authorization: `Bearer ${api.token}` },
-        });
+        }).finally(named.cleanup);
         const payload = JSON.parse(result.body);
         if (result.status < 200 || result.status >= 300)
           throw new Error(payload.error || "وارد کردن این سند ممکن نشد. دوباره تلاش کنید.");

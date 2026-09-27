@@ -22,6 +22,11 @@ export interface StarterContext {
 }
 
 const DAY = 86_400_000;
+
+/** Wraps a name in a Unicode first-strong isolate so «report.pdf» keeps its order in RTL text. */
+function isolate(text: string) {
+  return `⁨${text}⁩`;
+}
 const addDays = (date: string, days: number) =>
   new Date(Date.parse(`${date}T00:00:00Z`) + days * DAY).toISOString().slice(0, 10);
 
@@ -114,7 +119,7 @@ export function starterSuggestions(context: StarterContext = {}): StarterSuggest
     const day = event.allDay ? event.start.slice(0, 10) : tehranDate(new Date(event.start));
     picks.push({
       id: "event",
-      label: `آمادگی برای «${event.title}»`,
+      label: `آمادگی برای «${isolate(event.title)}»`,
       prompt: `رویداد «${event.title}» ${day === today ? "امروز" : "فردا"} در تقویم من است. جزئیاتش را از تقویم ببین و برای آمادگی، فهرست کوتاهی از کارهای لازم بنویس.`,
     });
   }
@@ -129,7 +134,7 @@ export function starterSuggestions(context: StarterContext = {}): StarterSuggest
   if (file)
     picks.push({
       id: "file",
-      label: `خلاصهٔ «${file.name}»`,
+      label: `خلاصهٔ «${isolate(file.name)}»`,
       prompt: `سند «${file.name}» (شناسهٔ سند: ${file.id}) را بخوان و نکته‌های اصلی‌اش را کوتاه خلاصه کن.`,
     });
 

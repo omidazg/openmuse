@@ -10,6 +10,7 @@ import {
   type PathShortcut,
   type UserProfile,
 } from "../../../packages/domain/src/paths";
+import { trackPathChange } from "./insights";
 import { faNumber, fw } from "./locale";
 import { PathQuestions } from "./path-picker";
 import { pathIcon, useProfile } from "./profile";
@@ -138,6 +139,7 @@ function detailSummary(path: PathDefinition, details: UserProfile["details"]) {
  */
 export function PathSettings() {
   const { profile, save } = useProfile();
+  const { api } = useWorkspace();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [limit, setLimit] = useState(false);
@@ -150,6 +152,7 @@ export function PathSettings() {
     setError("");
     try {
       await save(patch);
+      if (patch.paths && profile) trackPathChange(api, profile.paths, patch.paths);
     } catch {
       // save() already restored the previous profile.
       setError(SAVE_ERROR);

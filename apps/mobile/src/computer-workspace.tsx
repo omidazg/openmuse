@@ -27,7 +27,13 @@ import { useWorkspace } from "./workspace";
 const mono = Platform.OS === "ios" ? "Menlo" : "monospace";
 const message = (error: unknown) => (error instanceof Error ? error.message : String(error));
 /** Shell text, paths and output read left-to-right even inside the RTL app. */
-const ltr = { fontFamily: mono, writingDirection: "ltr", textAlign: "left" } as const;
+// `direction` too: Android aligns text by the layout direction, so "left" alone lands on the right.
+const ltr = {
+  fontFamily: mono,
+  writingDirection: "ltr",
+  textAlign: "left",
+  direction: "ltr",
+} as const;
 const runStatus: Record<ComputerCommand["status"], string> = {
   running: "در حال اجرا",
   succeeded: "موفق",

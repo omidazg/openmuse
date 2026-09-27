@@ -91,10 +91,15 @@ export function faMoney(amount: number, unit = "تومان"): string {
   return `${faNumber(amount)} ${unit}`;
 }
 
-/** Right-to-left layout and (on web) the light/dark color variables for the whole app. Called once from index.js. */
-export function applyRtl(): void {
+const RTL_RELOAD_KEY = "dastyar.rtlReload";
+
+/**
+ * Right-to-left layout and (on web) the light/dark color variables for the whole app. Called once
+ * from index.js. Returns true when native RTL was just switched on and needs one JS reload.
+ */
+export function applyRtl(): boolean {
   if (Platform.OS === "web") {
-    if (typeof document === "undefined") return;
+    if (typeof document === "undefined") return false;
     const root = document.documentElement;
     root.dir = "rtl";
     root.lang = "fa";
@@ -108,8 +113,19 @@ export function applyRtl(): void {
 ${themeCss()}`;
       document.head.appendChild(style);
     }
-    return;
+    return false;
   }
   I18nManager.allowRTL(true);
-  if (!I18nManager.isRTL) I18nManager.forceRTL(true);
+  if (I18nManager.isRTL) return false;
+  // forceRTL is saved natively but only takes effect when React Native starts again, so the very
+  // first launch (the phone's language is not RTL) would be left-to-right. index.js reloads the JS
+  // once; the flag in device storage prevents a reload loop if the device keeps refusing RTL.
+  I18nManager.forceRTL(true);
+  try {
+    if (globalThis.localStorage?.getItem(RTL_RELOAD_KEY)) return false;
+    globalThis.localStorage?.setItem(RTL_RELOAD_KEY, "1");
+  } catch {
+    return false;
+  }
+  return true;
 }

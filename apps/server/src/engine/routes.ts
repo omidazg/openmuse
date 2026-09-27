@@ -5,7 +5,9 @@ import type {
   AgentMemory,
   AgentNotification,
 } from "../../../../packages/domain/src/agent.ts";
+import { userDeadlines } from "../deadlines.ts";
 import { AppError } from "../errors.ts";
+import { insightRoutes } from "../insights.ts";
 import { profilePatchSchema, readProfile, saveProfile } from "../profile.ts";
 import {
   memoryText,
@@ -133,6 +135,10 @@ export function agentRoutes(service: AgentService): Hono<{ Variables: { owner: s
     const body = profilePatchSchema.parse(await c.req.json());
     return c.json(await saveProfile(service.db, c.get("owner"), body));
   });
+  // Deadlines of the chosen paths within 10 days, with admin-recorded extensions applied.
+  app.get("/deadlines", async (c) => c.json(await userDeadlines(service.db, c.get("owner"))));
+  // Anonymous daily counts of path choices and suggestion use (no user id is stored).
+  app.route("/events", insightRoutes(service.db));
   app.get("/threads/:threadId/persona", async (c) => {
     const threadId = threadIdSchema.parse(c.req.param("threadId"));
     const persona = await threadPersona(service.db, c.get("owner"), threadId);

@@ -12,6 +12,7 @@ import { ScrollView, Text, useWindowDimensions, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Svg, { Defs, LinearGradient, Path, Rect, Stop } from "react-native-svg";
 import { BRAND } from "../../../packages/domain/src/brand";
+import { useKeyboardInset } from "./keyboard";
 import { faDigits, fw } from "./locale";
 import { colors, Mascot, s } from "./ui";
 
@@ -117,8 +118,9 @@ export function Landing({ children }: { children: ReactNode }) {
   const { width } = useWindowDimensions();
   const wide = width >= 900;
   const gutter = width < 480 ? 16 : 24;
+  const keyboard = useKeyboardInset();
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: colors.canvas }}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: colors.canvas, paddingBottom: keyboard }}>
       <ScrollView
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={{

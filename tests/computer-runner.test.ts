@@ -5,7 +5,10 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { runDocker } from "../apps/server/src/computer.ts";
 
-test("Docker subprocess uses literal argv, strips provider credentials, caps output and bounds hangs", async () => {
+// The fake docker is a shebang script, which only POSIX systems can execute.
+test("Docker subprocess uses literal argv, strips provider credentials, caps output and bounds hangs", {
+  skip: process.platform === "win32" && "needs a POSIX shebang executable",
+}, async () => {
   const directory = await mkdtemp(join(tmpdir(), "openmuse-docker-runner-"));
   const previousPath = process.env.PATH;
   const previousKey = process.env.OPENMUSE_TEST_SECRET;

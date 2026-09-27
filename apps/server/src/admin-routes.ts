@@ -1,7 +1,10 @@
 import { Hono } from "hono";
 import { z } from "zod";
 import type { Config } from "./config.ts";
+import type { Store } from "./db.ts";
+import { adminDeadlines, putOverride, removeOverride } from "./deadlines.ts";
 import { AppError } from "./errors.ts";
+import { insightDaysSchema, insightsReport } from "./insights.ts";
 import type { Usage } from "./usage.ts";
 import { normalizePhone, publicUser, type Role, type Users } from "./users.ts";
 
@@ -46,7 +49,7 @@ const patchSchema = z.object({
 });
 
 /** /api/admin: user management and usage, for admin sessions only. */
-export function adminRoutes(users: Users, usage: Usage, config: Config) {
+export function adminRoutes(users: Users, usage: Usage, config: Config, db?: Store) {
   const app = new Hono<Env>();
   app.use("*", async (c, next) => {
     if (c.get("role") !== "admin")
@@ -115,5 +118,21 @@ export function adminRoutes(users: Users, usage: Usage, config: Config) {
     if (!(await users.get(id))) throw new AppError("این کاربر پیدا نشد.", 404);
     return c.json({ days: await usage.history(id, days), limits: await usage.limits(id) });
   });
+  if (db) {
+    // تمدید مهلت: deadline extensions announced after a release, applied without a deploy.
+    app.get("/deadlines", async (c) => c.json(await adminDeadlines(db)));
+    app.put("/deadlines/:id", async (c) => {
+      const body = await c.req.json();
+      return c.json(await putOverride(db, { ...body, id: c.req.param("id") }));
+    });
+    app.delete("/deadlines/:id", async (c) => {
+      await removeOverride(db, c.req.param("id"));
+      return c.json({ ok: true });
+    });
+    // Anonymous path and suggestion counts for the last `days` days (default 30).
+    app.get("/insights", async (c) =>
+      c.json(await insightsReport(db, insightDaysSchema.parse(c.req.query("days")))),
+    );
+  }
   return app;
 }

@@ -9,9 +9,9 @@ import {
   PathReadySummary,
   pathsWithQuestions,
   SaveFailure,
+  ScrollTopOnChange,
   StepDots,
   usePathDraft,
-  useScrollTopOnChange,
 } from "./path-picker";
 import { Button, colors, Sheet, s } from "./ui";
 
@@ -26,7 +26,7 @@ const WELCOME: { icon: LucideIcon; text: string }[] = [
   },
   {
     icon: ShieldCheck,
-    text: "گفت‌وگوها و فایل‌هایتان در فضای کار خودتان ذخیره می‌شود. رمز عبور، شمارهٔ کارت و کدهای یک‌بارمصرف را در گفت‌وگو ننویسید.",
+    text: "گفت‌وگوها و فایل‌هایتان در فضای کار خودتان ذخیره می‌شود. رمز عبور، شمارهٔ کارت و کدهای یک‌بارمصرف را در گفت‌وگو ننویسید. برای بهتر شدن مسیرها و پیشنهادها، فقط شمار کلی و بی‌نام استفاده از آن‌ها ثبت می‌شود.",
   },
 ];
 
@@ -41,7 +41,6 @@ type Step = (typeof STEPS)[number];
 export function Onboarding({ onDone }: { onDone: () => void }) {
   const [step, setStep] = useState<Step>("welcome");
   const draft = usePathDraft();
-  const anchor = useScrollTopOnChange(step);
   const hasQuestions = pathsWithQuestions(draft.paths).length > 0;
   const skipPaths = () => void draft.commit("skip", { paths: [] }, onDone);
   const title =
@@ -62,7 +61,7 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
           : undefined;
   return (
     <Sheet title={title} subtitle={subtitle} onClose={onDone}>
-      <View ref={anchor} />
+      <ScrollTopOnChange value={step} />
       <View style={{ gap: 16 }}>
         {step === "welcome" && (
           <>

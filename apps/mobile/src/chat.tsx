@@ -53,6 +53,7 @@ import { BrowserThreadCard } from "./computer";
 import { ConversationQueue, type QueuedMessage } from "./conversation-queue";
 import { runConversationTurn } from "./conversation-run";
 import { isMotionReduced } from "./display";
+import { INVITE_ID, track } from "./insights";
 import { fw } from "./locale";
 import { MailToolCard } from "./mail-tool-card";
 import { CopyButton, Markdown } from "./markdown-view";
@@ -599,10 +600,14 @@ export function ChatScreen({
                 <PathWelcome
                   profile={profile}
                   invite={invitePaths}
-                  onSetup={() => setPathSetup(true)}
-                  onDismissInvite={() =>
-                    void saveProfile({ inviteDismissed: true }).catch(() => {})
-                  }
+                  onSetup={() => {
+                    track(api, "invite_opened", INVITE_ID);
+                    setPathSetup(true);
+                  }}
+                  onDismissInvite={() => {
+                    track(api, "invite_dismissed", INVITE_ID);
+                    void saveProfile({ inviteDismissed: true }).catch(() => {});
+                  }}
                   send={enqueue}
                 />
               </>
@@ -625,7 +630,10 @@ export function ChatScreen({
                       id: item.id,
                       label: item.label,
                       icon: fromPath ? pathIcon(fromPath.icon) : undefined,
-                      action: () => enqueue(item.prompt),
+                      action: () => {
+                        if (fromPath) track(api, "starter_used", fromPath.id);
+                        enqueue(item.prompt);
+                      },
                     };
                   })
               ).map((item) => (
@@ -810,6 +818,7 @@ export function ChatScreen({
                       `/api/agent/threads/${encodeURIComponent(threadId)}/persona`,
                       { personaId },
                     );
+                    track(api, "persona_suggestion_used", personaId);
                     refreshPersona();
                   }}
                   onPrompt={(text) => {

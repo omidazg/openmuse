@@ -1,8 +1,8 @@
 name: android
 
 # Signed production build of the Android app (APK for direct install, AAB for stores).
-# Signing key: repository secrets ANDROID_KEYSTORE_BASE64 (PKCS12), ANDROID_KEYSTORE_PASSWORD and
-# ANDROID_KEY_ALIAS; see apps/mobile/plugins/with-release-signing.js.
+# Signing key: repository secrets ANDROID_KEYSTORE_BASE64 (PKCS12), ANDROID_KEYSTORE_PASSWORD
+# (key alias «dastyargpt»); see apps/mobile/plugins/with-release-signing.js.
 on:
   workflow_dispatch:
   push:
@@ -51,7 +51,7 @@ jobs:
         env:
           KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
           DASTYAR_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          DASTYAR_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          DASTYAR_KEY_ALIAS: dastyargpt
         run: |
           if [ -z "$KEYSTORE_BASE64" ]; then echo "::error::Signing secrets are missing"; exit 1; fi
           export DASTYAR_KEYSTORE_FILE="$RUNNER_TEMP/release.p12"
