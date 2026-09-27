@@ -55,6 +55,7 @@ import { faNumber, fw, useAppFonts } from "./src/locale";
 import { PhoneLogin } from "./src/login";
 import { OfflineBanner } from "./src/offline";
 import { PreferencesProvider, usePreferences } from "./src/preferences";
+import { ProfileProvider } from "./src/profile";
 import { BrowserScreen, CalendarScreen, FilesScreen, MailScreen } from "./src/screens";
 import { SessionProvider } from "./src/session";
 import { ThreadsProvider, ThreadsSheet, useMuseThread } from "./src/threads";
@@ -312,15 +313,17 @@ function WorkspaceApp({ token, logout }: { token: string; logout: () => void }) 
         <AgentWorkspaceProvider>
           <ComputerDraftProvider key={token}>
             <ThreadsProvider>
-              <PreferencesProvider api={api}>
-                <WorkspaceShell
-                  detail={detail}
-                  toast={toast}
-                  clearToast={() => setToast("")}
-                  error={error}
-                  prompt={prompt}
-                />
-              </PreferencesProvider>
+              <ProfileProvider api={api}>
+                <PreferencesProvider api={api}>
+                  <WorkspaceShell
+                    detail={detail}
+                    toast={toast}
+                    clearToast={() => setToast("")}
+                    error={error}
+                    prompt={prompt}
+                  />
+                </PreferencesProvider>
+              </ProfileProvider>
             </ThreadsProvider>
           </ComputerDraftProvider>
         </AgentWorkspaceProvider>
