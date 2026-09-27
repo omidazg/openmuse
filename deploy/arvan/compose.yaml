@@ -1,0 +1,314 @@
+# OpenMuse on a single ArvanCloud cloud server (ECC VM).
+#
+#   cd deploy/arvan
+#   cp env.example .env   # fill in secrets
+#   docker compose up -d --build
+#
+# Only Caddy publishes ports (80/443). Everything else stays on the private
+# compose network.
+name: openmuse
+
+x-app-env: &app-env
+  WORKSPACE_MODE: live
+  AGENT_BACKEND: ${AGENT_BACKEND:-model}
+  HOST: 0.0.0.0
+  PORT: "8787"
+  DATA_DIR: /data
+  PUBLIC_API_URL: https://${DOMAIN:?Set DOMAIN}
+  ALLOWED_ORIGINS: https://${DOMAIN}
+  DATABASE_URL: postgresql://openmuse:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}@postgres:5432/openmuse
+  OPENMUSE_ACCESS_KEY: ${OPENMUSE_ACCESS_KEY:?Set OPENMUSE_ACCESS_KEY (24+ characters)}
+  OPENMUSE_USER_KEYS: ${OPENMUSE_USER_KEYS:-}
+  TOKEN_ENCRYPTION_KEY: ${TOKEN_ENCRYPTION_KEY:?Set TOKEN_ENCRYPTION_KEY (32 random bytes, base64)}
+  # Optional: empty key => THREADS_BACKEND defaults to local (threads stored in Postgres).
+  THREADS_BACKEND: ${THREADS_BACKEND:-}
+  CPK_INTELLIGENCE_API_KEY: ${CPK_INTELLIGENCE_API_KEY:-}
+  MODEL: ${MODEL:-}
+  # Models people may pick in chat (id:Persian label, comma-separated); MODEL stays the default.
+  MODELS: "${MODELS:-anthropic/claude-sonnet-5:کلاد سونت ۵ (قوی),openai/gpt-4.1-mini:جی‌پی‌تی ۴٫۱ مینی (سریع و ارزان),google/gemini-2.5-flash:جمنای ۲٫۵ فلش}"
+  # Optional: an allowlisted fast model enables «خودکار», the default choice, which routes simple
+  # messages to MODEL_FAST and everything else to MODEL by a heuristic.
+  MODEL_FAST: ${MODEL_FAST:-}
+  # Cost tracking: JSON of USD per 1M tokens, merged over the built-in defaults.
+  MODEL_PRICES: ${MODEL_PRICES:-}
+  # Hard cap on output tokens per model call (empty = provider default).
+  MAX_OUTPUT_TOKENS: ${MAX_OUTPUT_TOKENS:-}
+  # In-memory cache for identical short first-turn prompts (per user and model).
+  RESPONSE_CACHE: ${RESPONSE_CACHE:-off}
+  RESPONSE_CACHE_TTL: ${RESPONSE_CACHE_TTL:-3600}
+  # Optional OpenAI-compatible fallback gateway, tried once when the main gateway fails.
+  FALLBACK_BASE_URL: ${FALLBACK_BASE_URL:-}
+  FALLBACK_API_KEY: ${FALLBACK_API_KEY:-}
+  FALLBACK_MODEL: ${FALLBACK_MODEL:-}
+  FALLBACK_TIMEOUT_MS: ${FALLBACK_TIMEOUT_MS:-45000}
+  # Voice input (POST /api/transcribe) via the OpenAI-compatible /audio/transcriptions.
+  TRANSCRIBE_MODEL: ${TRANSCRIBE_MODEL:-whisper-1}
+  TRANSCRIBE_ENABLED: ${TRANSCRIBE_ENABLED:-true}
+  # «خواندن با صدا» (POST /api/tts) via the OpenAI-compatible /audio/speech.
+  TTS_MODEL: ${TTS_MODEL:-gpt-4o-mini-tts}
+  TTS_VOICE: ${TTS_VOICE:-alloy}
+  TTS_MAX_CHARS: ${TTS_MAX_CHARS:-3000}
+  TTS_ENABLED: ${TTS_ENABLED:-true}
+  # Photo understanding and «استخراج متن از تصویر» via /chat/completions with image input.
+  VISION_MODEL: ${VISION_MODEL:-gpt-4.1}
+  VISION_ENABLED: ${VISION_ENABLED:-true}
+  # جست‌وجو در فایل‌ها: مدل embedding روی /embeddings سازگار با OpenAI (متیس)؛ off = فقط جست‌وجوی کلیدواژه‌ای.
+  EMBEDDING_MODEL: ${EMBEDDING_MODEL:-openai/text-embedding-3-small}
+  # ترجمهٔ سند (Word/PDF) با /chat/completions سازگار با OpenAI.
+  TRANSLATE_MODEL: ${TRANSLATE_MODEL:-openai/gpt-4.1-mini}
+  METIS_API_KEY: ${METIS_API_KEY:-}
+  METIS_BASE_URL: ${METIS_BASE_URL:-}
+  OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+  OPENAI_BASE_URL: ${OPENAI_BASE_URL:-}
+  ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+  GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
+  AGENT_URL: ${AGENT_URL:-}
+  AGENT_TOKEN: ${AGENT_TOKEN:-}
+  GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+  GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+  BROWSER_WORKER_URL: http://browser-worker:8790
+  WORKER_TOKEN: ${WORKER_TOKEN:?Set WORKER_TOKEN to a random secret of at least 32 characters}
+  COMPUTER_ENABLED: "false"
+  # Daily limits per non-admin user (0 = unlimited); admins can override per user.
+  DAILY_MESSAGE_LIMIT: ${DAILY_MESSAGE_LIMIT:-200}
+  DAILY_TASK_LIMIT: ${DAILY_TASK_LIMIT:-30}
+  # Optional SMS login (Kavenegar Verify Lookup); off unless both are set.
+  KAVENEGAR_API_KEY: ${KAVENEGAR_API_KEY:-}
+  KAVENEGAR_TEMPLATE: ${KAVENEGAR_TEMPLATE:-}
+  OTP_SIGNUP: ${OTP_SIGNUP:-false}
+
+  # Optional error tracking (Sentry-compatible, e.g. self-hosted GlitchTip). Empty = off.
+  SENTRY_DSN: ${SENTRY_DSN:-}
+  SENTRY_ENVIRONMENT: ${SENTRY_ENVIRONMENT:-production}
+  # deploy.sh exports GIT_SHA so events carry the deployed commit.
+  SENTRY_RELEASE: ${SENTRY_RELEASE:-${GIT_SHA:-}}
+
+services:
+  postgres:
+    image: ${REGISTRY_MIRROR:-}library/postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: openmuse
+      POSTGRES_DB: openmuse
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks: [backend]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U openmuse -d openmuse"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  app:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+      args:
+        REGISTRY_MIRROR: ${REGISTRY_MIRROR:-}
+        NPM_REGISTRY: ${NPM_REGISTRY:-}
+        EXPO_PUBLIC_API_URL: https://${DOMAIN}
+    image: openmuse-app:latest
+    restart: unless-stopped
+    environment:
+      <<: *app-env
+      # The dedicated `worker` service below runs background tasks.
+      TASK_WORKER_ENABLED: "false"
+    volumes:
+      - app-data:/data
+    networks: [backend, frontend]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    init: true
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 1g
+
+  worker:
+    image: openmuse-app:latest
+    pull_policy: never
+    command: ["node", "dist/apps/server/src/worker-entry.js"]
+    restart: unless-stopped
+    environment:
+      <<: *app-env
+      # ربات‌های بله/تلگرام فقط در همین سرویس long polling می‌کنند (هر توکن فقط یک مصرف‌کننده).
+      # خالی ماندن توکن یعنی آن ربات خاموش است. راهنما: docs/BOT.fa.md
+      BALE_BOT_TOKEN: ${BALE_BOT_TOKEN:-}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_API_BASE: ${TELEGRAM_API_BASE:-}
+    volumes:
+      - app-data:/data
+    networks: [backend]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      app:
+        condition: service_healthy
+    init: true
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      disable: true
+    mem_limit: 1g
+
+  browser-worker:
+    build:
+      context: ../../apps/worker
+    init: true
+    restart: unless-stopped
+    environment:
+      WORKER_HOST: 0.0.0.0
+      WORKER_TOKEN: ${WORKER_TOKEN}
+    volumes:
+      - browser-profiles:/data
+    networks: [backend]
+    tmpfs:
+      - /tmp:size=256m,mode=1777
+    shm_size: 256mb
+    mem_limit: 2g
+    pids_limit: 256
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8790/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+  caddy:
+    image: ${REGISTRY_MIRROR:-}library/caddy:2-alpine
+    restart: unless-stopped
+    environment:
+      DOMAIN: ${DOMAIN}
+      ACME_PROFILE: ${ACME_PROFILE:-classic}
+      # Optional bare server IP that redirects to DOMAIN (see Caddyfile).
+      SERVER_IP: ${SERVER_IP:-}
+      DEFAULT_SNI: ${SERVER_IP:-${DOMAIN}}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    networks: [frontend]
+    depends_on:
+      - app
+
+  # Daily pg_dump (00:00 UTC = 03:30 Asia/Tehran) + app-data archive; 7 daily and
+  # 4 weekly copies in the `backups` volume, optional upload to ArvanCloud Object Storage.
+  # Manual run: docker compose exec backup /bin/sh /opt/backup/backup.sh once
+  backup:
+    build:
+      context: ./backup
+      args:
+        REGISTRY_MIRROR: ${REGISTRY_MIRROR:-}
+    image: openmuse-backup:latest
+    restart: unless-stopped
+    environment:
+      PGHOST: postgres
+      PGUSER: openmuse
+      PGDATABASE: openmuse
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      HOME: /tmp
+      BACKUP_ENABLED: ${BACKUP_ENABLED:-1}
+      BACKUP_TIME_UTC: ${BACKUP_TIME_UTC:-00:00}
+      BACKUP_KEEP_DAILY: ${BACKUP_KEEP_DAILY:-7}
+      BACKUP_KEEP_WEEKLY: ${BACKUP_KEEP_WEEKLY:-4}
+      BACKUP_WEEKLY_DAY: ${BACKUP_WEEKLY_DAY:-5}
+      BACKUP_APP_DATA: ${BACKUP_APP_DATA:-1}
+      BACKUP_RUN_ON_START: ${BACKUP_RUN_ON_START:-0}
+      BACKUP_S3_ENDPOINT: ${BACKUP_S3_ENDPOINT:-}
+      BACKUP_S3_BUCKET: ${BACKUP_S3_BUCKET:-}
+      BACKUP_S3_ACCESS_KEY: ${BACKUP_S3_ACCESS_KEY:-}
+      BACKUP_S3_SECRET_KEY: ${BACKUP_S3_SECRET_KEY:-}
+      BACKUP_S3_PREFIX: ${BACKUP_S3_PREFIX:-openmuse}
+      BACKUP_S3_RETENTION_DAYS: ${BACKUP_S3_RETENTION_DAYS:-30}
+    volumes:
+      - ./backup/backup.sh:/opt/backup/backup.sh:ro
+      - backups:/backups
+      - app-data:/appdata:ro
+    networks: [backend]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    init: true
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m
+    cap_drop: [ALL]
+    # app-data files belong to the app user (mode 600); reading them needs this one cap.
+    cap_add: [DAC_READ_SEARCH]
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 256m
+
+  # Uptime checks every minute; alerts in Persian via Telegram / Bale / webhook on state
+  # change. Test: docker compose exec monitor sh /opt/monitor/monitor.sh test
+  monitor:
+    image: ${REGISTRY_MIRROR:-}curlimages/curl:${MONITOR_CURL_TAG:-latest}
+    restart: unless-stopped
+    entrypoint: ["/bin/sh", "/opt/monitor/monitor.sh"]
+    command: ["loop"]
+    # root only to read the Docker socket (read-only mount) for container health.
+    user: "0:0"
+    environment:
+      DOMAIN: ${DOMAIN}
+      ALERT_NAME: ${ALERT_NAME:-}
+      ALERT_TELEGRAM_BOT_TOKEN: ${ALERT_TELEGRAM_BOT_TOKEN:-}
+      ALERT_TELEGRAM_CHAT_ID: ${ALERT_TELEGRAM_CHAT_ID:-}
+      ALERT_TELEGRAM_API_URL: ${ALERT_TELEGRAM_API_URL:-}
+      ALERT_BALE_BOT_TOKEN: ${ALERT_BALE_BOT_TOKEN:-}
+      ALERT_BALE_CHAT_ID: ${ALERT_BALE_CHAT_ID:-}
+      ALERT_WEBHOOK_URL: ${ALERT_WEBHOOK_URL:-}
+      MONITOR_INTERVAL: ${MONITOR_INTERVAL:-60}
+      MONITOR_FAIL_THRESHOLD: ${MONITOR_FAIL_THRESHOLD:-2}
+      MONITOR_DISK_ALERT_PCT: ${MONITOR_DISK_ALERT_PCT:-90}
+      MONITOR_CERT_WARN_DAYS: ${MONITOR_CERT_WARN_DAYS:-2}
+      MONITOR_STARTUP_MESSAGE: ${MONITOR_STARTUP_MESSAGE:-1}
+    volumes:
+      - ./monitor/monitor.sh:/opt/monitor/monitor.sh:ro
+      - backups:/backups:ro
+      # Set MONITOR_DOCKER_SOCKET_HOST=/dev/null to skip the container-health check.
+      - ${MONITOR_DOCKER_SOCKET_HOST:-/var/run/docker.sock}:/var/run/docker.sock:ro
+    networks: [backend, frontend]
+    depends_on:
+      - caddy
+    init: true
+    read_only: true
+    tmpfs:
+      - /tmp:size=8m
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 64m
+
+networks:
+  frontend:
+    # Dual stack, so Caddy sees the real IPv6 address of a visitor or CDN edge instead of the
+    # docker-proxy gateway (Docker allocates a ULA subnet).
+    enable_ipv6: true
+  # Not `internal`: the API needs outbound access to model providers / Google,
+  # and the browser worker needs the public web.
+  backend:
+
+volumes:
+  pgdata:
+  app-data:
+  browser-profiles:
+  caddy-data:
+  caddy-config:
+  backups:

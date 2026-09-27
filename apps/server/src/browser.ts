@@ -50,7 +50,10 @@ export class BrowserService {
   private async request(path: string, body?: unknown, signal?: AbortSignal) {
     signal?.throwIfAborted();
     if (!this.config.workerUrl || !this.config.workerToken)
-      throw new AppError("Browser worker is not configured. Start it using the setup guide.", 503);
+      throw new AppError(
+        "سرویس مرورگر پیکربندی نشده است. آن را طبق راهنمای راه‌اندازی اجرا کنید.",
+        503,
+      );
     let response: Response;
     try {
       response = await fetch(`${this.config.workerUrl}${path}`, {
@@ -67,7 +70,7 @@ export class BrowserService {
     } catch {
       signal?.throwIfAborted();
       throw new AppError(
-        "Browser worker is unavailable. Check that its container is running.",
+        "سرویس مرورگر در دسترس نیست. بررسی کنید کانتینر آن در حال اجرا باشد.",
         503,
       );
     }
@@ -76,7 +79,7 @@ export class BrowserService {
       throw new AppError(
         typeof payload?.error?.message === "string"
           ? payload.error.message
-          : "Browser request failed",
+          : "درخواست مرورگر ناموفق بود",
         502,
       );
     }
@@ -84,7 +87,7 @@ export class BrowserService {
   }
   async get(owner: string, id: string) {
     const value = await this.db.get<BrowserSession>(owner, "browsers", id);
-    if (!value) throw new AppError("Browser session not found", 404);
+    if (!value) throw new AppError("نشست مرورگر پیدا نشد", 404);
     return value;
   }
   decorate(owner: string, session: BrowserSession) {
@@ -96,8 +99,7 @@ export class BrowserService {
   }
   private async save(owner: string, payload: unknown, expectedId: string) {
     const session = sessionSchema.parse(payload);
-    if (session.id !== expectedId)
-      throw new AppError("Browser worker returned a different session", 502);
+    if (session.id !== expectedId) throw new AppError("سرویس مرورگر نشست دیگری را برگرداند", 502);
     await this.db.put(owner, "browsers", session);
     return this.decorate(owner, session);
   }
@@ -107,7 +109,7 @@ export class BrowserService {
     await this.db.put(owner, "browsers", {
       id,
       url,
-      title: "New browser session",
+      title: "نشست تازهٔ مرورگر",
       status: "idle",
       updatedAt: new Date().toISOString(),
     });
@@ -173,12 +175,12 @@ export class BrowserService {
         sessionId: randomUUID(),
       })) ??
       (await this.db.get<ChatBrowser>(owner, "chat-browsers", threadId));
-    if (!association) throw new AppError("Could not reserve the chat browser session", 500);
+    if (!association) throw new AppError("رزرو نشست مرورگر گفت‌وگو ممکن نشد", 500);
     const id = association.sessionId;
     await this.db.insertIfAbsent(owner, "browsers", {
       id,
       url,
-      title: "New browser session",
+      title: "نشست تازهٔ مرورگر",
       status: "idle",
       updatedAt: new Date().toISOString(),
     });
@@ -244,7 +246,7 @@ export class BrowserService {
         owner,
         download.name,
         new Uint8Array(await response.arrayBuffer()),
-        `Browser · ${id}`,
+        `مرورگر · ${id}`,
       );
       await this.db.put(owner, "browser-downloads", { id: download.id, fileId: file.id });
       saved.push(file);

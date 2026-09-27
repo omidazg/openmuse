@@ -38,13 +38,13 @@ export function computerRoutes(computer: ComputerService, files: Files) {
       .extend({ fileId: z.string().min(1) })
       .parse(await c.req.json());
     return c.json(
-      await computer.writePdf(c.get("owner"), path, await files.bytes(c.get("owner"), fileId)),
+      await computer.writePdf(c.get("owner"), path, await files.pdfBytes(c.get("owner"), fileId)),
     );
   });
   app.post("/files/export", async (c) => {
     const { path } = computerPathSchema.parse(await c.req.json());
     const { name, bytes } = await computer.pdfBytes(c.get("owner"), path);
-    return c.json(await files.import(c.get("owner"), name, bytes, `Computer: ${path}`), 201);
+    return c.json(await files.import(c.get("owner"), name, bytes, `رایانه: ${path}`), 201);
   });
   return app;
 }

@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { parseAmount } from "./index.ts";
+import type { PersonalSettings } from "./personal.ts";
 
 export type TaskStatus =
   | "queued"
@@ -96,6 +98,7 @@ export interface AgentMemory {
   text: string;
   source: string;
   createdAt: string;
+  updatedAt?: string;
 }
 export interface AgentArtifact {
   id: string;
@@ -129,6 +132,8 @@ export interface AgentWorkspace {
   artifacts: AgentArtifact[];
   notifications: AgentNotification[];
   identity: AgentIdentity;
+  /** Memory toggle and custom instructions. */
+  personal: PersonalSettings;
   worker: { running: boolean; lastTickAt?: string };
 }
 export const createTaskSchema = z.object({
@@ -149,13 +154,19 @@ export const monitorInputSchema = z
   })
   .superRefine((v, c) => {
     if (v.condition !== "change" && !v.value.trim())
-      c.addIssue({ code: "custom", message: "Enter a condition value" });
+      c.addIssue({ code: "custom", message: "مقداری برای شرط وارد کنید" });
     if (
       v.condition === "price_below" &&
-      (!Number.isFinite(Number(v.value)) || Number(v.value) <= 0)
+      (!Number.isFinite(parseAmount(v.value)) || parseAmount(v.value) <= 0)
     )
-      c.addIssue({ code: "custom", message: "Enter a positive price" });
-  });
+      c.addIssue({ code: "custom", message: "قیمت را به‌صورت عددی بزرگ‌تر از صفر وارد کنید" });
+  })
+  // Store typed prices with ASCII digits so later comparisons can use Number().
+  .overwrite((v) =>
+    v.condition === "price_below" && Number.isFinite(parseAmount(v.value))
+      ? { ...v, value: String(parseAmount(v.value)) }
+      : v,
+  );
 export const goalInputSchema = z.object({
   title: z.string().trim().min(1).max(160),
   description: z.string().max(4000).default(""),

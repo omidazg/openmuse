@@ -33,7 +33,12 @@ export function computerTools(
           await options.before?.();
           return await action(parameters.parse(args));
         } catch (error) {
-          return { error: error instanceof Error ? error.message : "Computer operation failed" };
+          return {
+            error:
+              error instanceof Error
+                ? error.message
+                : "عملیات رایانه ناموفق بود. دوباره تلاش کنید.",
+          };
         }
       },
     });
@@ -94,7 +99,8 @@ export function computerTools(
       "import_computer_pdf",
       "Copy an owned app PDF into the computer without network access",
       computerPathSchema.extend({ fileId: z.string().min(1) }),
-      async ({ path, fileId }) => computer.writePdf(owner, path, await files.bytes(owner, fileId)),
+      async ({ path, fileId }) =>
+        computer.writePdf(owner, path, await files.pdfBytes(owner, fileId)),
     ),
     tool(
       "export_computer_pdf",
@@ -102,7 +108,7 @@ export function computerTools(
       computerPathSchema,
       async ({ path }) => {
         const { name, bytes } = await computer.pdfBytes(owner, path);
-        return files.import(owner, name, bytes, `Computer: ${path}`);
+        return files.import(owner, name, bytes, `رایانه: ${path}`);
       },
     ),
   ];

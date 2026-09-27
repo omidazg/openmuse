@@ -74,9 +74,12 @@ test("wrong owner and stale hash cannot approve", async () => {
   const proposal = await service.propose("private-user", email);
   await assert.rejects(
     service.decide("attacker", proposal.id, proposal.hash, "approve"),
-    /not found/i,
+    /پیدا نشد/,
   );
-  await assert.rejects(service.decide("private-user", proposal.id, "stale", "approve"), /changed/i);
+  await assert.rejects(
+    service.decide("private-user", proposal.id, "stale", "approve"),
+    /تغییر کرده/,
+  );
 });
 test("expired and disconnected proposals never reach the provider", async () => {
   let now = Date.now();
@@ -92,15 +95,12 @@ test("expired and disconnected proposals never reach the provider", async () => 
   });
   const expired = await service.propose("expired-user", email);
   now += 31 * 60 * 1000;
-  await assert.rejects(
-    service.decide("expired-user", expired.id, expired.hash, "approve"),
-    /expired/i,
-  );
+  await assert.rejects(service.decide("expired-user", expired.id, expired.hash, "approve"), /مهلت/);
   const revoked = await service.propose("revoked-user", email);
   connected = false;
   await assert.rejects(
     service.decide("revoked-user", revoked.id, revoked.hash, "approve"),
-    /disconnected/i,
+    /قطع است/,
   );
   assert.equal(calls, 0);
 });
@@ -152,12 +152,12 @@ test("account switching and reconnecting invalidate a prepared action", async ()
   connection = { id: "connection-b", account: "b@example.com" };
   await assert.rejects(
     service.decide("account-user", proposal.id, proposal.hash, "approve"),
-    /connection changed/i,
+    /اتصال گوگل تغییر کرده/,
   );
   connection = { id: "connection-new-a", account: "a@example.com" };
   await assert.rejects(
     service.decide("account-user", proposal.id, proposal.hash, "approve"),
-    /connection changed/i,
+    /اتصال گوگل تغییر کرده/,
   );
   assert.equal(calls, 0);
 });
@@ -201,7 +201,7 @@ test("review stores authoritative calendar details and binds execution to their 
     data: { eventId: target.id, calendarId: "primary", title: "Untrusted title" },
   };
   const proposal = await service.propose("review-owner", input);
-  assert.equal(proposal.title, "Delete Provider title");
+  assert.equal(proposal.title, "حذف «Provider title»");
   assert.deepEqual(proposal.target, target);
   assert.equal(proposal.targetVersion, version);
   version = '"revision-2"';
@@ -279,7 +279,7 @@ test("an expired stale review cannot overwrite a concurrently executing action",
   await executing.promise;
   now += 31 * 60 * 1000;
   resumeRead.resolve();
-  await stale.catch((error) => assert.match(error.message, /expired/i));
+  await stale.catch((error) => assert.match(error.message, /مهلت/));
   const saved = await db.get<ActionProposal>("expiry-race", "actions", proposal.id);
   finishExecution.resolve("sent");
   await approval;

@@ -3,6 +3,7 @@ import { createContext, useContext, useEffect, useState } from "react";
 import { ActivityIndicator, AppState, Image, Text, View } from "react-native";
 import { z } from "zod";
 import type { BrowserSession } from "../../../packages/domain/src";
+import { fw } from "./locale";
 import { Button, Card, colors, ErrorNotice, s } from "./ui";
 import { useWorkspace } from "./workspace";
 
@@ -24,11 +25,11 @@ function resultValue(result: unknown) {
 }
 
 function siteLabel(url: unknown) {
-  if (typeof url !== "string") return "Opening a page";
+  if (typeof url !== "string") return "در حال باز کردن صفحه";
   try {
     return new URL(url).hostname.replace(/^www\./, "");
   } catch {
-    return "Opening a page";
+    return "در حال باز کردن صفحه";
   }
 }
 
@@ -89,45 +90,64 @@ export function BrowserToolCard({
   const failure = toolError.success
     ? toolError.data.error
     : !loading && !visited
-      ? "The browser did not return a page. Try your request again."
+      ? "مرورگر صفحه‌ای برنگرداند. درخواستتان را دوباره بفرستید."
       : "";
   return (
     <Card
-      style={{ padding: 13, backgroundColor: "#EEEEF0", gap: 12, width: "100%", maxWidth: 440 }}
+      style={{ padding: 13, backgroundColor: colors.subtle, gap: 12, width: "100%", maxWidth: 440 }}
     >
       <View style={[s.row, { gap: 10 }]}>
         <View style={[s.iconBox, { width: 36, height: 36, borderRadius: 10 }]}>
           <Globe2 size={21} color={colors.blueDark} />
         </View>
         <View style={{ flex: 1, gap: 1 }}>
-          <Text style={[s.text, { fontWeight: "600" }]}>Browser</Text>
-          <Text numberOfLines={1} style={[s.small, { fontSize: 12 }]}>
+          <Text style={[s.text, { ...fw("600") }]}>مرورگر</Text>
+          <Text
+            numberOfLines={1}
+            style={[
+              s.small,
+              { fontSize: 12 },
+              // A bare hostname is an address: keep it LTR so dots and ports stay in order.
+              !working && !loading && !failure && visited && { writingDirection: "ltr" },
+            ]}
+          >
             {working
-              ? "Reading the page…"
+              ? "در حال خواندن صفحه…"
               : loading
-                ? "Browsing paused"
+                ? "مرور متوقف شد"
                 : failure
-                  ? "Couldn’t read the page"
+                  ? "صفحه خوانده نشد"
                   : siteLabel(visited?.url)}
           </Text>
         </View>
         {working ? (
           <ActivityIndicator size="small" color={colors.blueDark} />
         ) : visited ? (
-          <Check size={17} color="#47896C" accessibilityLabel="Page read" />
+          <Check size={17} color={colors.success} accessibilityLabel="صفحه خوانده شد" />
         ) : null}
       </View>
       {preview ? (
         <Image
-          accessibilityLabel={`Browser preview: ${visited?.title}`}
+          accessibilityLabel={`پیش‌نمایش مرورگر: ${visited?.title}`}
           source={{ uri: api.url(preview) }}
-          style={{ width: "100%", aspectRatio: 1.7, borderRadius: 12, backgroundColor: "#FFF" }}
+          style={{
+            width: "100%",
+            aspectRatio: 1.7,
+            borderRadius: 12,
+            backgroundColor: colors.card,
+          }}
           resizeMode="contain"
           onError={() => setPreviewFailed(true)}
         />
       ) : (
-        <View style={{ backgroundColor: "#FAFAFB", borderRadius: 12, padding: 21, gap: 12 }}>
-          <Text numberOfLines={2} style={[s.text, { fontSize: 14 }]}>
+        <View style={{ backgroundColor: colors.card, borderRadius: 12, padding: 21, gap: 12 }}>
+          <Text
+            numberOfLines={2}
+            style={[
+              s.text,
+              { fontSize: 14, lineHeight: 24, textAlign: "auto", writingDirection: "auto" },
+            ]}
+          >
             {visited?.title || siteLabel(url)}
           </Text>
           {working ? (
@@ -135,21 +155,21 @@ export function BrowserToolCard({
               {(["90%", "74%", "84%"] as const).map((width) => (
                 <View
                   key={width}
-                  style={{ height: 7, width, borderRadius: 4, backgroundColor: "#E3E9ED" }}
+                  style={{ height: 7, width, borderRadius: 4, backgroundColor: colors.line }}
                 />
               ))}
             </View>
           ) : visited ? (
             <Text style={s.small}>
               {browser && browser.url !== visited.url
-                ? "Page visited. The browser has moved on."
+                ? "صفحه بازدید شد. مرورگر به صفحهٔ دیگری رفته است."
                 : browser?.status === "closed"
-                  ? "Session saved. Take control to reopen it."
+                  ? "نشست ذخیره شد. برای باز کردن دوباره، «در دست گرفتن کنترل» را بزنید."
                   : browser?.status === "error"
-                    ? "Session needs attention. Take control to reconnect."
+                    ? "نشست نیاز به بررسی دارد. برای اتصال دوباره، «در دست گرفتن کنترل» را بزنید."
                     : previewFailed
-                      ? "Preview unavailable. You can still take control."
-                      : "Connecting to the saved session…"}
+                      ? "پیش‌نمایش در دسترس نیست. همچنان می‌توانید کنترل را به دست بگیرید."
+                      : "در حال اتصال به نشست ذخیره‌شده…"}
             </Text>
           ) : null}
         </View>
@@ -160,14 +180,14 @@ export function BrowserToolCard({
           icon={Hand}
           disabled={!browser || running}
           onPress={() => browser && open({ type: "browser", browser })}
-          style={{ backgroundColor: "#F9F9FA", minHeight: 38, paddingVertical: 8 }}
+          style={{ backgroundColor: colors.card, minHeight: 38, paddingVertical: 8 }}
         >
-          Take control
+          در دست گرفتن کنترل
         </Button>
       )}
       {!!error && (
         <Button small icon={RotateCw} onPress={() => setRetry((attempt) => attempt + 1)}>
-          Reconnect preview
+          تلاش دوباره
         </Button>
       )}
     </Card>

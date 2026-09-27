@@ -11,3 +11,7 @@ apps/mobile/android/
 .DS_Store
 *.tsbuildinfo
 artifacts/
+
+# Agent worktrees and local Claude settings
+.claude/worktrees/
+.claude/settings.local.json

@@ -1,10 +1,11 @@
-import { ChevronRight, FileText } from "lucide-react-native";
+import { ChevronLeft, FileText } from "lucide-react-native";
 import { useEffect, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import type { Artifact, BrowserSession } from "../../../packages/domain/src";
 import type { AgentArtifact, AgentTask } from "../../../packages/domain/src/agent";
 import { ArtifactCard, TaskCard } from "./agent-ui";
 import { BrowserThreadCard } from "./computer";
+import { faNumber } from "./locale";
 import { Button, Card, colors, ErrorNotice, s } from "./ui";
 import { useWorkspace } from "./workspace";
 
@@ -13,12 +14,12 @@ export function FileThreadCard({ file }: { file: Artifact }) {
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`Open PDF: ${file.name}`}
+      accessibilityLabel={`باز کردن PDF: ${file.name}`}
       onPress={() => open({ type: "file", file })}
       style={{ width: "100%", maxWidth: 440 }}
     >
-      <Card style={{ padding: 18, backgroundColor: "#F0F1F2", gap: 18 }}>
-        <View style={{ borderRadius: 12, padding: 22, backgroundColor: "#FFF", gap: 14 }}>
+      <Card style={{ padding: 18, backgroundColor: colors.subtle, gap: 18 }}>
+        <View style={{ borderRadius: 12, padding: 22, backgroundColor: colors.card, gap: 14 }}>
           <Text style={[s.heading, { fontSize: 18 }]}>{file.name.replace(/\.pdf$/i, "")}</Text>
           {file.fields?.length ? (
             file.fields.slice(0, 4).map((field) => (
@@ -31,15 +32,17 @@ export function FileThreadCard({ file }: { file: Artifact }) {
                   paddingBottom: 9,
                 }}
               >
-                <Text style={[s.small, { fontSize: 9 }]}>
-                  {field.name.replace(/_/g, " ").toUpperCase()}
+                <Text style={[s.small, { fontSize: 11, lineHeight: 17 }]}>
+                  {field.name.replace(/_/g, " ")}
                 </Text>
-                <Text style={[s.text, { fontSize: 12 }]}>{field.value || "—"}</Text>
+                <Text style={[s.text, { fontSize: 13, lineHeight: 22 }]}>
+                  {field.value || "خالی"}
+                </Text>
               </View>
             ))
           ) : (
             <Text style={s.muted}>
-              {file.pageCount} {file.pageCount === 1 ? "page" : "pages"} · Tap to read the document
+              {faNumber(file.pageCount)} صفحه · برای خواندن سند ضربه بزنید
             </Text>
           )}
         </View>
@@ -53,7 +56,7 @@ export function FileThreadCard({ file }: { file: Artifact }) {
             </Text>
             <Text style={s.muted}>PDF</Text>
           </View>
-          <ChevronRight size={18} color={colors.muted} />
+          <ChevronLeft size={18} color={colors.muted} />
         </View>
       </Card>
     </Pressable>
@@ -106,7 +109,7 @@ export function TaskThreadCard({ task }: { task: AgentTask }) {
       <ErrorNotice error={error} />
       {error && (
         <Button small onPress={() => setAttempt((value) => value + 1)}>
-          Reload task results
+          تلاش دوباره
         </Button>
       )}
     </View>

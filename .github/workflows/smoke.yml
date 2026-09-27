@@ -1,0 +1,43 @@
+# External smoke test of the live Arvan deployment (deploy/arvan/smoke.sh).
+# Secrets: SMOKE_URL (e.g. https://37.32.27.135 or https://dastyar-gpt.ir) and optional
+# SMOKE_ACCESS_KEY (a dedicated user key from OPENMUSE_USER_KEYS, e.g. smoke:<key>).
+# A push to fa-arvan does not deploy by itself; the push run checks the site as currently
+# deployed and waits a few minutes first in case deploy.sh is running.
+name: Smoke
+on:
+  workflow_dispatch:
+    inputs:
+      url:
+        description: "Base URL (default: SMOKE_URL secret)"
+        required: false
+  push:
+    branches: [fa-arvan]
+permissions:
+  contents: read
+concurrency:
+  group: smoke-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+          sparse-checkout: deploy/arvan/smoke.sh
+          sparse-checkout-cone-mode: false
+      - name: Wait for a deploy started after the push
+        if: github.event_name == 'push'
+        run: sleep 240
+      - name: Smoke test
+        env:
+          SMOKE_URL: ${{ inputs.url || secrets.SMOKE_URL }}
+          SMOKE_ACCESS_KEY: ${{ secrets.SMOKE_ACCESS_KEY }}
+          SMOKE_RETRIES: "6"
+        run: |
+          if [ -z "$SMOKE_URL" ]; then
+            echo "::notice::SMOKE_URL secret is not set; skipping."
+            exit 0
+          fi
+          bash deploy/arvan/smoke.sh

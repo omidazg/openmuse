@@ -19,10 +19,10 @@ const pageSchema = z.object({
 });
 
 function targetUrl(prompt: string): string | undefined {
-  if (/monterey|aquarium/i.test(prompt))
+  if (/monterey|aquarium|مونتری|آکواریوم/i.test(prompt))
     return "https://www.montereybayaquarium.org/visit/exhibits";
-  if (/copilotkit\.ai/i.test(prompt)) return "https://copilotkit.ai";
-  if (/hacker\s*news|news\.ycombinator\.com|cool stuff/i.test(prompt))
+  if (/copilotkit\.ai|کوپایلوت[\u200c ]?کیت/i.test(prompt)) return "https://copilotkit.ai";
+  if (/hacker\s*news|news\.ycombinator\.com|cool stuff|هکر[\u200c ]?نیوز|چیزهای جالب/i.test(prompt))
     return "https://news.ycombinator.com";
   return undefined;
 }
@@ -32,11 +32,16 @@ function summarizePage(message: ChatMessage): FixtureResponse {
   try {
     value = JSON.parse(getTextContent(message.content) ?? "");
   } catch {
-    return { content: "The browser did not return readable page data. Check the browser result." };
+    return {
+      content:
+        "مرورگر دادهٔ خوانایی از صفحه برنگرداند. نتیجهٔ مرورگر را بررسی کنید و دوباره تلاش کنید.",
+    };
   }
   const parsed = pageSchema.safeParse(value);
   if (!parsed.success)
-    return { content: "The browser could not read that page. Check the browser result and retry." };
+    return {
+      content: "مرورگر نتوانست آن صفحه را بخواند. نتیجهٔ مرورگر را بررسی کنید و دوباره تلاش کنید.",
+    };
   const page = parsed.data;
   const lines = page.text
     .split(/\n+/)
@@ -52,7 +57,7 @@ function summarizePage(message: ChatMessage): FixtureResponse {
       )
       .filter((line): line is string => Boolean(line))
       .slice(0, 3);
-    introduction = "From the current Hacker News front page:";
+    introduction = "از صفحهٔ اول فعلی Hacker News:";
   } else if (new URL(page.url).hostname.endsWith("montereybayaquarium.org")) {
     excerpts = lines
       .flatMap((line, index) => {
@@ -64,24 +69,26 @@ function summarizePage(message: ChatMessage): FixtureResponse {
         ];
       })
       .slice(0, 3);
-    introduction = "Exhibits from the aquarium’s own guide:";
+    introduction = "نمایشگاه‌ها از راهنمای خود آکواریوم:";
   } else {
     excerpts = lines
       .filter((line) => line.length >= 45 && /agent|copilotkit|ag.ui|framework/i.test(line))
       .slice(0, 3);
-    introduction = "From CopilotKit’s current page:";
+    introduction = "از صفحهٔ فعلی CopilotKit:";
   }
   if (!excerpts.length) {
     excerpts = lines.filter((line) => line.length >= 30).slice(0, 3);
-    introduction = "Here are excerpts from the page I just opened:";
+    introduction = "بخش‌هایی از صفحه‌ای که همین حالا باز کردم:";
   }
   if (!excerpts.length)
-    return { content: "The page opened, but it did not expose enough readable text to summarize." };
+    return {
+      content: "صفحه باز شد، اما متن خوانای کافی برای خلاصه کردن نداشت. صفحهٔ دیگری را امتحان کنید.",
+    };
   const bullets = excerpts.map(
     (line) => `• ${line.length > 110 ? `${line.slice(0, 110).replace(/\s+\S*$/, "")}…` : line}`,
   );
   return {
-    content: `${introduction}\n\n${bullets.join("\n")}\n\nSource: ${page.url}${page.truncated ? "\nThe browser returned a shortened page extract." : ""}`,
+    content: `${introduction}\n\n${bullets.join("\n")}\n\nمنبع: ${page.url}${page.truncated ? "\nمرورگر فقط بخشی از متن صفحه را برگرداند." : ""}`,
   };
 }
 
@@ -120,17 +127,21 @@ function demoMailResponse(request: ChatCompletionRequest, turn: ChatMessage[]): 
     const message = parsed.success ? parsed.data.messages.at(-1) : undefined;
     if (!message)
       return {
-        content: "I couldn’t read the school-trip email. Check the mail result and try again.",
+        content:
+          "نتوانستم ایمیل اردوی مدرسه را بخوانم. نتیجهٔ ایمیل را بررسی کنید و دوباره تلاش کنید.",
       };
     const paragraphs = message.body
       .split(/\n\s*\n/)
       .map((text) => text.trim())
-      .filter((text) => text.length > 40 && !/local workspace/i.test(text))
+      .filter((text) => text.length > 40 && !/local workspace|فضای کاری محلی/i.test(text))
       .slice(0, 2);
     if (!paragraphs.length)
-      return { content: "The email was found, but it did not include readable trip details." };
+      return {
+        content:
+          "ایمیل پیدا شد، اما جزئیات خوانایی دربارهٔ اردو نداشت. متن کامل را در «نامه‌ها» ببینید.",
+      };
     return {
-      content: `From ${message.sender}:\n“${message.subject}”\n\n${paragraphs.join("\n\n")}\n\nI can look up the aquarium next.`,
+      content: `از طرف ${message.sender}:\n«${message.subject}»\n\n${paragraphs.join("\n\n")}\n\nدر قدم بعد می‌توانم دربارهٔ آکواریوم جست‌وجو کنم.`,
     };
   }
   const search = turnResult(turn, "search_mail", "call_openmuse_demo_mail_search_");
@@ -139,15 +150,18 @@ function demoMailResponse(request: ChatCompletionRequest, turn: ChatMessage[]): 
       .object({ matches: z.array(z.object({ threadId: z.string(), subject: z.string() })) })
       .safeParse(parseResult(search));
     if (!parsed.success)
-      return { content: "I couldn’t check your inbox. Check the mail connection and try again." };
+      return {
+        content:
+          "نتوانستم صندوق ورودی‌تان را بررسی کنم. اتصال ایمیل را بررسی کنید و دوباره تلاش کنید.",
+      };
     const match = parsed.data.matches[0];
-    if (!match) return { content: "I didn’t find a school-trip email in the connected mailbox." };
+    if (!match) return { content: "در صندوق ایمیل متصل، ایمیلی دربارهٔ اردوی مدرسه پیدا نکردم." };
     if (!request.tools?.some((tool) => tool.function.name === "read_mail_thread"))
       return {
-        content: "The email reader is unavailable. Open Mail to read the matching message.",
+        content: "خواندن ایمیل در دسترس نیست. برای خواندن پیام پیداشده «نامه‌ها» را باز کنید.",
       };
     return {
-      content: "I found the school’s reminder. I’ll read the details.",
+      content: "یادآوری مدرسه را پیدا کردم. جزئیاتش را می‌خوانم.",
       toolCalls: [
         {
           id: `call_openmuse_demo_mail_read_${randomUUID()}`,
@@ -158,14 +172,16 @@ function demoMailResponse(request: ChatCompletionRequest, turn: ChatMessage[]): 
     };
   }
   if (!request.tools?.some((tool) => tool.function.name === "search_mail"))
-    return { content: "Mail search is unavailable. Connect the mailbox before checking email." };
+    return {
+      content: "جست‌وجوی ایمیل در دسترس نیست. پیش از بررسی ایمیل، صندوق ایمیل را متصل کنید.",
+    };
   return {
-    content: "I’ll check your inbox for the school trip.",
+    content: "صندوق ورودی‌تان را برای ایمیل اردوی مدرسه بررسی می‌کنم.",
     toolCalls: [
       {
         id: `call_openmuse_demo_mail_search_${randomUUID()}`,
         name: "search_mail",
-        arguments: JSON.stringify({ query: "aquarium" }),
+        arguments: JSON.stringify({ query: "آکواریوم" }),
       },
     ],
   };
@@ -177,12 +193,12 @@ export function demoResponse(request: ChatCompletionRequest): FixtureResponse {
   const user = request.messages[userIndex];
   const prompt = user ? (getTextContent(user.content) ?? "") : "";
   const turn = request.messages.slice(userIndex + 1);
-  if (/email|inbox/i.test(prompt)) return demoMailResponse(request, turn);
+  if (/email|inbox|ایمیل|صندوق|(^|\s)نامه/i.test(prompt)) return demoMailResponse(request, turn);
   const url = targetUrl(prompt);
   if (!url)
     return {
       content:
-        "Try “Find cool stuff on Hacker News”, “Summarize copilotkit.ai”, “Check my emails for the school trip”, or “Research Monterey Bay Aquarium”.",
+        "این‌ها را امتحان کنید: «در Hacker News بگرد و چیزهای جالب پیدا کن»، «سایت copilotkit.ai را خلاصه کن»، «ایمیل‌هایم را برای اردوی مدرسه بررسی کن» یا «دربارهٔ آکواریوم خلیج مونتری تحقیق کن».",
     };
 
   // Only the latest turn can satisfy this request; older browser reads cannot suppress a new visit.
@@ -202,13 +218,15 @@ export function demoResponse(request: ChatCompletionRequest): FixtureResponse {
   );
   if (result) return summarizePage(result);
   if (!request.tools?.some((tool) => tool.function.name === "browse_web"))
-    return { content: "The browse_web tool is not available. Start the API with browser support." };
+    return {
+      content: "ابزار browse_web در دسترس نیست. API را با پشتیبانی مرورگر اجرا کنید.",
+    };
   return {
     content: url.includes("ycombinator")
-      ? "I’ll open Hacker News and read the front page."
+      ? "Hacker News را باز می‌کنم و صفحهٔ اولش را می‌خوانم."
       : url.includes("montereybayaquarium")
-        ? "I’ll research the exhibits on the aquarium’s own website."
-        : "I’ll open CopilotKit and read the page.",
+        ? "نمایشگاه‌ها را در وب‌سایت خود آکواریوم بررسی می‌کنم."
+        : "CopilotKit را باز می‌کنم و صفحه را می‌خوانم.",
     toolCalls: [
       {
         id: `call_openmuse_demo_browse_${randomUUID()}`,

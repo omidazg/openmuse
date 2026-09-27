@@ -1,12 +1,14 @@
 import { CopilotKitProvider } from "@copilotkit/react-native/headless";
 import { StatusBar } from "expo-status-bar";
 import {
+  ArrowRight,
   Bell,
   Check,
   Lightbulb,
   type LucideIcon,
   Menu,
   MessageCircle,
+  Minimize2,
   PanelsTopLeft,
   Shapes,
   SquareCheck,
@@ -24,6 +26,7 @@ import {
 } from "react-native";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import type { Section, Workspace } from "../../packages/domain/src";
+import { BRAND } from "../../packages/domain/src/brand";
 import {
   AgentActivityScreen,
   AgentStatus,
@@ -32,116 +35,208 @@ import {
   IdeasScreen,
 } from "./src/agent-ui";
 import { AgentWorkspaceProvider, useAgentWorkspace } from "./src/agent-workspace";
-import { API_URL, createSession, MuseApi } from "./src/api";
+import {
+  API_URL,
+  createSession,
+  endSession,
+  fetchHealth,
+  MuseApi,
+  onUnauthorized,
+} from "./src/api";
 import { ChatScreen, WorkspaceTools } from "./src/chat";
+import { requestComposerFocus } from "./src/composer-keys";
+import { ShortcutsSheet, useWebShortcuts } from "./src/composer-shortcuts";
 import { ComputerEntry } from "./src/computer";
 import { ComputerDraftProvider } from "./src/computer-drafts";
 import { Details } from "./src/details";
+import { useDisplay } from "./src/display";
+import { Landing } from "./src/landing";
+import { faNumber, fw, useAppFonts } from "./src/locale";
+import { PhoneLogin } from "./src/login";
+import { OfflineBanner } from "./src/offline";
+import { PreferencesProvider, usePreferences } from "./src/preferences";
+import { ProfileProvider } from "./src/profile";
 import { BrowserScreen, CalendarScreen, FilesScreen, MailScreen } from "./src/screens";
+import { SessionProvider } from "./src/session";
 import { ThreadsProvider, ThreadsSheet, useMuseThread } from "./src/threads";
 import { Button, Card, colors, ErrorNotice, Field, IconButton, Mascot, s } from "./src/ui";
 import { type Detail, useWorkspace, WorkspaceContext } from "./src/workspace";
 
 const nav: { id: Section; label: string; icon: LucideIcon }[] = [
-  { id: "chat", label: "Chat", icon: MessageCircle },
-  { id: "activity", label: "Activity", icon: PanelsTopLeft },
-  { id: "ideas", label: "Ideas", icon: Lightbulb },
-  { id: "goals", label: "Goals", icon: SquareCheck },
-  { id: "apps", label: "Apps", icon: Shapes },
+  { id: "chat", label: "گفت‌وگو", icon: MessageCircle },
+  { id: "activity", label: "فعالیت", icon: PanelsTopLeft },
+  { id: "ideas", label: "ایده‌ها", icon: Lightbulb },
+  { id: "goals", label: "اهداف", icon: SquareCheck },
+  { id: "apps", label: "برنامه‌ها", icon: Shapes },
 ];
 const titles: Partial<Record<Section, { title: string; subtitle: string }>> = {
-  activity: { title: "Activity", subtitle: "Plans, progress, decisions and results." },
-  ideas: { title: "Ideas", subtitle: "Useful next steps, grounded in your world." },
+  activity: { title: "فعالیت", subtitle: "برنامه‌ها، پیشرفت، تصمیم‌ها و نتیجه‌ها." },
+  ideas: { title: "ایده‌ها", subtitle: "قدم‌های بعدی کاربردی، متناسب با دنیای شما." },
   goals: {
-    title: "Goals",
-    subtitle: "Longer-term goals and things to keep an eye on.",
+    title: "اهداف",
+    subtitle: "هدف‌های بلندمدت و چیزهایی که باید حواسمان به آن‌ها باشد.",
   },
   apps: {
-    title: "Apps",
-    subtitle: "Connections, capabilities and what your agent remembers.",
+    title: "برنامه‌ها",
+    subtitle: "اتصال‌ها، توانایی‌ها و آنچه دستیارتان به خاطر دارد.",
   },
-  connections: { title: "Apps", subtitle: "Connections and capabilities." },
-  mail: { title: "Mail", subtitle: "The conversations behind your work." },
-  calendar: { title: "Calendar", subtitle: "Time for what matters." },
-  browser: { title: "Browser", subtitle: "Your connected browsing sessions." },
-  files: { title: "Files", subtitle: "Documents, forms and filled copies." },
+  connections: { title: "برنامه‌ها", subtitle: "اتصال‌ها و توانایی‌ها." },
+  mail: { title: "ایمیل", subtitle: "گفت‌وگوهایی که پشت کارهای شماست." },
+  calendar: { title: "تقویم", subtitle: "زمان برای چیزهایی که مهم‌اند." },
+  browser: { title: "مرورگر", subtitle: "نشست‌های مرور متصل شما." },
+  files: { title: "فایل‌ها", subtitle: "اسناد، فرم‌ها و نسخه‌های تکمیل‌شده." },
 };
+const TOKEN_KEY = "dastyar.session";
+/** Web keeps the 24-hour session token so a refresh does not ask for the key again. */
+function loadToken(): string {
+  try {
+    return globalThis.localStorage?.getItem(TOKEN_KEY) ?? "";
+  } catch {
+    return "";
+  }
+}
+function saveToken(value: string) {
+  try {
+    if (value) globalThis.localStorage?.setItem(TOKEN_KEY, value);
+    else globalThis.localStorage?.removeItem(TOKEN_KEY);
+  } catch {}
+}
+
 export default function App() {
+  const fontsReady = useAppFonts();
   const [token, setToken] = useState("");
   const [accessKey, setAccessKey] = useState("");
   const [busy, setBusy] = useState(true);
   const [error, setError] = useState("");
-  const connect = useCallback(async (key?: string) => {
+  const [otpEnabled, setOtpEnabled] = useState(false);
+  const [method, setMethod] = useState<"key" | "phone">("key");
+  /** Back to the login screen, e.g. after logout or when the server ends the session. */
+  const signOut = useCallback((message = "") => {
+    saveToken("");
+    setToken("");
+    setError(message);
+    setBusy(false);
+  }, []);
+  const logout = useCallback(() => {
+    void endSession(token);
+    signOut();
+  }, [token, signOut]);
+  useEffect(() => {
+    if (!token) return;
+    onUnauthorized((message) => signOut(message));
+    return () => onUnauthorized(undefined);
+  }, [token, signOut]);
+  useEffect(() => {
+    void fetchHealth().then((health) => {
+      setOtpEnabled(Boolean(health?.otpEnabled));
+      if (health?.otpEnabled) setMethod("phone");
+    });
+  }, []);
+  const connect = useCallback(async (key?: string, silent = false) => {
     setBusy(true);
     setError("");
     try {
       const session = await createSession(key);
+      saveToken(session.token);
       setToken(session.token);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      // The first automatic attempt has no key; its failure is expected, not an error.
+      if (!silent) setError(e instanceof Error ? e.message : String(e));
     } finally {
       setBusy(false);
     }
   }, []);
   useEffect(() => {
-    void connect();
+    void (async () => {
+      const saved = loadToken();
+      if (saved) {
+        const ok = await fetch(`${API_URL}/api/workspace`, {
+          headers: { Authorization: `Bearer ${saved}` },
+        })
+          .then((r) => r.ok)
+          .catch(() => false);
+        if (ok) {
+          setToken(saved);
+          setBusy(false);
+          return;
+        }
+        saveToken("");
+      }
+      await connect(undefined, true);
+    })();
   }, [connect]);
+  if (!fontsReady) return null;
   return (
     <SafeAreaProvider>
-      <StatusBar style="dark" />
+      <StatusBar style="auto" />
       {token ? (
         <CopilotKitProvider
           runtimeUrl={`${API_URL}/api/copilotkit`}
           headers={{ Authorization: `Bearer ${token}` }}
         >
-          <WorkspaceApp token={token} />
+          <WorkspaceApp token={token} logout={logout} />
         </CopilotKitProvider>
       ) : (
-        <SafeAreaView
-          style={{
-            flex: 1,
-            backgroundColor: colors.canvas,
-            justifyContent: "center",
-            alignItems: "center",
-            padding: 24,
-          }}
-        >
+        <Landing>
           <View style={{ width: "100%", maxWidth: 420, gap: 22, alignItems: "center" }}>
-            <Mascot size={72} />
-            <Text
-              style={{ fontSize: 32, color: colors.text, letterSpacing: -1, fontWeight: "500" }}
-            >
-              Welcome to OpenMuse.
-            </Text>
-            <Text style={[s.muted, { textAlign: "center" }]}>A little room for your day.</Text>
+            <Text style={[s.heading, { fontSize: 20, lineHeight: 32 }]}>ورود به فضای کار</Text>
             {busy ? (
               <ActivityIndicator color={colors.blueDark} />
             ) : (
               <Card style={{ width: "100%" }}>
+                {otpEnabled && (
+                  <View style={{ flexDirection: "row", gap: 8, marginBottom: 16 }}>
+                    <Button small primary={method === "phone"} onPress={() => setMethod("phone")}>
+                      شمارهٔ موبایل
+                    </Button>
+                    <Button small primary={method === "key"} onPress={() => setMethod("key")}>
+                      کلید دسترسی
+                    </Button>
+                  </View>
+                )}
                 <ErrorNotice error={error} />
-                <Field
-                  label="Workspace access key"
-                  value={accessKey}
-                  onChangeText={setAccessKey}
-                  secureTextEntry
-                  placeholder="Required for a live workspace"
-                />
-                <Button primary onPress={() => void connect(accessKey || undefined)}>
-                  Open workspace
-                </Button>
-                <Text style={[s.small, { marginTop: 15 }]}>
-                  Local workspaces open without a key. Make sure your OpenMuse server is running at{" "}
-                  {API_URL}.
-                </Text>
+                {otpEnabled && method === "phone" ? (
+                  <PhoneLogin
+                    onSession={(value) => {
+                      saveToken(value);
+                      setError("");
+                      setToken(value);
+                    }}
+                  />
+                ) : (
+                  <>
+                    <Field
+                      label="کلید دسترسی فضای کار"
+                      value={accessKey}
+                      onChangeText={setAccessKey}
+                      secureTextEntry
+                      placeholder="کلید دسترسی خود را وارد کنید"
+                    />
+                    <Button primary onPress={() => void connect(accessKey || undefined)}>
+                      باز کردن فضای کار
+                    </Button>
+                  </>
+                )}
+                {__DEV__ ? (
+                  <Text style={[s.small, { marginTop: 15 }]}>
+                    فضاهای کار محلی بدون کلید باز می‌شوند. مطمئن شوید سرور {BRAND.nameFa} در این
+                    نشانی در حال اجراست: <Text style={{ writingDirection: "ltr" }}>{API_URL}</Text>
+                  </Text>
+                ) : (
+                  <Text style={[s.small, { marginTop: 15 }]}>
+                    کلید دسترسی را از مدیر سرویس دریافت کنید. پس از ورود، این دستگاه تا ۲۴ ساعت شما
+                    را به خاطر می‌سپارد.
+                  </Text>
+                )}
               </Card>
             )}
           </View>
-        </SafeAreaView>
+        </Landing>
       )}
     </SafeAreaProvider>
   );
 }
-function WorkspaceApp({ token }: { token: string }) {
+function WorkspaceApp({ token, logout }: { token: string; logout: () => void }) {
   const api = useMemo(() => new MuseApi(token), [token]);
   const [workspace, setWorkspace] = useState<Workspace>();
   const [section, setSection] = useState<Section>("chat");
@@ -149,20 +244,25 @@ function WorkspaceApp({ token }: { token: string }) {
   const [toast, setToast] = useState("");
   const [error, setError] = useState("");
   const [prompt, setPrompt] = useState<{ id: number; text: string }>();
+  const fail = useCallback(
+    (e: unknown) =>
+      setError(`فضای کار بارگذاری نشد. ${e instanceof Error ? e.message : String(e)}`),
+    [],
+  );
   const refresh = useCallback(async () => {
     const snapshot = await api.request<Workspace>("/api/workspace");
     setWorkspace(snapshot);
     setError("");
   }, [api]);
   useEffect(() => {
-    void refresh().catch((e) => setError(String(e)));
-  }, [refresh]);
+    void refresh().catch(fail);
+  }, [refresh, fail]);
   useEffect(() => {
     const listener = AppState.addEventListener("change", (state) => {
-      if (state === "active") void refresh().catch((e) => setError(String(e)));
+      if (state === "active") void refresh().catch(fail);
     });
     return () => listener.remove();
-  }, [refresh]);
+  }, [refresh, fail]);
   useEffect(() => {
     if (!toast) return;
     const timer = setTimeout(() => setToast(""), 5500);
@@ -195,14 +295,12 @@ function WorkspaceApp({ token }: { token: string }) {
         {error ? (
           <>
             <ErrorNotice error={error} />
-            <Button onPress={() => void refresh().catch((e) => setError(String(e)))}>
-              Try again
-            </Button>
+            <Button onPress={() => void refresh().catch(fail)}>تلاش دوباره</Button>
           </>
         ) : (
           <>
             <ActivityIndicator color={colors.blueDark} />
-            <Text style={s.muted}>Opening your workspace…</Text>
+            <Text style={s.muted}>در حال باز کردن فضای کار…</Text>
           </>
         )}
       </SafeAreaView>
@@ -211,19 +309,25 @@ function WorkspaceApp({ token }: { token: string }) {
     <WorkspaceContext.Provider
       value={{ workspace, api, section, navigate, refresh, open, close, notify: setToast, ask }}
     >
-      <AgentWorkspaceProvider>
-        <ComputerDraftProvider key={token}>
-          <ThreadsProvider>
-            <WorkspaceShell
-              detail={detail}
-              toast={toast}
-              clearToast={() => setToast("")}
-              error={error}
-              prompt={prompt}
-            />
-          </ThreadsProvider>
-        </ComputerDraftProvider>
-      </AgentWorkspaceProvider>
+      <SessionProvider api={api} logout={logout}>
+        <AgentWorkspaceProvider>
+          <ComputerDraftProvider key={token}>
+            <ThreadsProvider>
+              <ProfileProvider api={api}>
+                <PreferencesProvider api={api}>
+                  <WorkspaceShell
+                    detail={detail}
+                    toast={toast}
+                    clearToast={() => setToast("")}
+                    error={error}
+                    prompt={prompt}
+                  />
+                </PreferencesProvider>
+              </ProfileProvider>
+            </ThreadsProvider>
+          </ComputerDraftProvider>
+        </AgentWorkspaceProvider>
+      </SessionProvider>
     </WorkspaceContext.Provider>
   );
 }
@@ -250,8 +354,43 @@ function WorkspaceShell({
     error: threadsError,
     retry: retryThreads,
     enabled: richThreads,
+    start: startThread,
   } = useMuseThread();
   const [threadsOpen, setThreadsOpen] = useState(false);
+  const { unseenCount } = usePreferences();
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  // Desktop web: Ctrl/Cmd+K conversations, Ctrl/Cmd+Shift+O new conversation, «?» help.
+  useWebShortcuts(true, (action) => {
+    if (action === "threads") {
+      setShortcutsOpen(false);
+      setThreadsOpen(true);
+      return true;
+    }
+    if (action === "newChat") {
+      setThreadsOpen(false);
+      setShortcutsOpen(false);
+      if (richThreads) startThread();
+      else navigate("chat");
+      setTimeout(requestComposerFocus, 50);
+      return true;
+    }
+    if (action === "escape" && (threadsOpen || shortcutsOpen) && !detail) {
+      // Also closed by the web Modal on keyup; closing here keeps Esc working before it activates.
+      setThreadsOpen(false);
+      setShortcutsOpen(false);
+      return true;
+    }
+    if (action === "help" && !threadsOpen && !detail) {
+      setShortcutsOpen(true);
+      return true;
+    }
+    if (action === "focusInput" && section !== "chat" && !threadsOpen && !detail) {
+      navigate("chat");
+      setTimeout(requestComposerFocus, 50);
+      return true;
+    }
+    return false;
+  });
   const { width } = useWindowDimensions();
   const desktop = width >= 900;
   const pending =
@@ -261,16 +400,16 @@ function WorkspaceShell({
     data?.tasks.find(
       (task) => task.status === "waiting_approval" || task.status === "waiting_input",
     ) || data?.tasks.find((task) => task.status === "running");
-  const agentName = data?.identity.name || "OpenMuse";
+  const agentName = data?.identity.name || BRAND.nameFa;
   const status = activeTask
     ? activeTask.status === "waiting_approval"
-      ? `Ready to review · ${activeTask.title}`
+      ? `آمادهٔ بررسی · ${activeTask.title}`
       : activeTask.status === "waiting_input"
-        ? `Needs your input · ${activeTask.title}`
+        ? `منتظر پاسخ شما · ${activeTask.title}`
         : activeTask.plan.find((step) => step.status === "running")?.title || activeTask.title
     : data?.tasks.some((task) => task.status === "queued")
-      ? "Picking up your next task…"
-      : "Here when you need me";
+      ? "در حال شروع کار بعدی…"
+      : "هر وقت لازم باشد، همین‌جا هستم";
   const title = titles[section] || titles.apps;
   const Screen =
     section === "mail"
@@ -289,29 +428,58 @@ function WorkspaceShell({
                   ? GoalsScreen
                   : AppsScreen;
   const utility = ["mail", "calendar", "browser", "files"].includes(section);
+  const { prefs, update } = useDisplay();
+  // Focus mode: in chat, only the messages and the composer remain.
+  const focused = prefs.focus && section === "chat";
   return (
     <>
       <WorkspaceTools />
       <SafeAreaView style={{ flex: 1, backgroundColor: colors.canvas }} edges={["top", "bottom"]}>
         <View style={{ flex: 1, width: "100%", maxWidth: 760, alignSelf: "center" }}>
+          {focused && (
+            <View style={{ alignItems: "flex-end", marginHorizontal: 20, paddingVertical: 8 }}>
+              <Button small icon={Minimize2} onPress={() => update({ focus: false })}>
+                خروج از حالت تمرکز
+              </Button>
+            </View>
+          )}
           <View
             style={{
+              display: focused ? "none" : "flex",
               height: desktop ? 146 : 122,
               paddingTop: desktop ? 14 : 2,
               marginHorizontal: 20,
             }}
           >
-            <View style={{ position: "absolute", left: 0, top: 16 }}>
+            <View style={{ position: "absolute", start: 0, top: 16, zIndex: 1 }}>
               <IconButton
                 icon={Menu}
-                label="Open conversations and menu"
+                label={
+                  unseenCount
+                    ? "باز کردن گفت‌وگوها و منو، تازه‌های دیده‌نشده دارید"
+                    : "باز کردن گفت‌وگوها و منو"
+                }
                 onPress={() => setThreadsOpen(true)}
               />
+              {unseenCount > 0 && (
+                <View
+                  pointerEvents="none"
+                  style={{
+                    width: 6,
+                    height: 6,
+                    borderRadius: 4,
+                    position: "absolute",
+                    top: 7,
+                    end: 9,
+                    backgroundColor: colors.blueDark,
+                  }}
+                />
+              )}
             </View>
             <View style={{ alignItems: "center", gap: 1 }}>
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel={`Open ${agentName} activity and approvals`}
+                accessibilityLabel={`باز کردن فعالیت‌ها و تأییدهای ${agentName}`}
                 onPress={() => navigate("activity")}
                 style={({ pressed }) => ({
                   alignItems: "center",
@@ -323,26 +491,32 @@ function WorkspaceShell({
                 <Text
                   style={{
                     fontSize: 16,
-                    fontWeight: "600",
+                    lineHeight: 24,
+                    ...fw("600"),
                     color: colors.text,
-                    letterSpacing: -0.4,
                   }}
                 >
                   {agentName}
                 </Text>
                 <Text
                   numberOfLines={1}
-                  style={{ fontSize: 11, color: colors.muted, marginBottom: 6 }}
+                  style={{
+                    fontSize: 12,
+                    lineHeight: 18,
+                    color: colors.muted,
+                    marginBottom: 6,
+                    ...fw("400"),
+                  }}
                 >
                   {status}
                 </Text>
               </Pressable>
               {section === "chat" && <ComputerEntry />}
             </View>
-            <View style={{ position: "absolute", right: 0, top: 16 }}>
+            <View style={{ position: "absolute", end: 0, top: 16 }}>
               <IconButton
                 icon={Bell}
-                label={`Notifications, ${pending} unread or pending`}
+                label={`اعلان‌ها، ${faNumber(pending)} مورد خوانده‌نشده یا در انتظار`}
                 onPress={() => open({ type: "notifications" })}
               />
               {pending > 0 && (
@@ -354,13 +528,14 @@ function WorkspaceShell({
                     borderRadius: 4,
                     position: "absolute",
                     top: 7,
-                    right: 9,
+                    end: 9,
                     backgroundColor: colors.blueDark,
                   }}
                 />
               )}
             </View>
           </View>
+          <OfflineBanner />
           <View style={{ flex: 1, minHeight: 0 }}>
             {section !== "chat" && (
               <ScrollView
@@ -372,10 +547,11 @@ function WorkspaceShell({
                 {utility && (
                   <Button
                     small
+                    icon={ArrowRight}
                     style={{ alignSelf: "flex-start", marginBottom: 18 }}
                     onPress={() => navigate("apps")}
                   >
-                    Back to Apps
+                    بازگشت به برنامه‌ها
                   </Button>
                 )}
                 <Text style={[s.title, { fontSize: 25, marginBottom: 22 }]}>{title?.title}</Text>
@@ -390,18 +566,18 @@ function WorkspaceShell({
                 paddingHorizontal: desktop ? 42 : 17,
               }}
             >
-              <AgentStatus />
+              {!focused && <AgentStatus />}
               {richThreads ? (
                 <>
                   <ErrorNotice error={threadsError} />
                   {threadsError ? (
-                    <Button onPress={retryThreads}>Retry main chat</Button>
+                    <Button onPress={retryThreads}>تلاش دوباره</Button>
                   ) : threadsLoading ? (
                     <ActivityIndicator color={colors.blueDark} />
                   ) : null}
                   {!threadsLoading && selection.id !== mainId && (
                     <Text style={[s.small, { textAlign: "center", marginBottom: 8 }]}>
-                      Side chat
+                      گفت‌وگوی جانبی
                     </Text>
                   )}
                   {visited.map((thread) => (
@@ -424,6 +600,7 @@ function WorkspaceShell({
           </View>
           <View
             style={{
+              display: focused ? "none" : "flex",
               paddingHorizontal: 22,
               paddingTop: 10,
               paddingBottom: desktop ? 22 : 7,
@@ -436,7 +613,7 @@ function WorkspaceShell({
                 width: "100%",
                 maxWidth: 370,
                 padding: 5,
-                backgroundColor: "#FFF",
+                backgroundColor: colors.card,
                 borderRadius: 40,
                 shadowColor: "#132631",
                 shadowOffset: { width: 0, height: 2 },
@@ -444,7 +621,7 @@ function WorkspaceShell({
                 shadowRadius: 18,
                 elevation: 3,
                 borderWidth: 1,
-                borderColor: "#F8F8F8",
+                borderColor: colors.line,
               }}
             >
               {nav.map((item) => {
@@ -461,7 +638,7 @@ function WorkspaceShell({
                       height: 47,
                       alignItems: "center",
                       justifyContent: "center",
-                      backgroundColor: active ? "#F0F1F2" : "transparent",
+                      backgroundColor: active ? colors.subtle : "transparent",
                       borderRadius: 28,
                     }}
                   >
@@ -475,7 +652,7 @@ function WorkspaceShell({
         {!!toast && (
           <View
             pointerEvents="box-none"
-            style={{ position: "absolute", bottom: 94, left: 20, right: 20, alignItems: "center" }}
+            style={{ position: "absolute", bottom: 94, start: 20, end: 20, alignItems: "center" }}
           >
             <View
               style={[
@@ -490,18 +667,37 @@ function WorkspaceShell({
               ]}
             >
               <Check size={16} color={colors.blue} />
-              <Text style={{ color: "#FFF", fontSize: 13, flexShrink: 1 }}>{toast}</Text>
+              <Text
+                style={{
+                  color: colors.canvas,
+                  fontSize: 14,
+                  lineHeight: 22,
+                  flexShrink: 1,
+                  ...fw("400"),
+                }}
+              >
+                {toast}
+              </Text>
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel="Dismiss notification"
+                accessibilityLabel="بستن اعلان"
                 onPress={clearToast}
               >
-                <X size={16} color="#FFF" />
+                <X size={16} color={colors.canvas} />
               </Pressable>
             </View>
           </View>
         )}
-        {threadsOpen && <ThreadsSheet onClose={() => setThreadsOpen(false)} />}
+        {threadsOpen && (
+          <ThreadsSheet
+            onClose={() => setThreadsOpen(false)}
+            onShortcuts={() => {
+              setThreadsOpen(false);
+              setShortcutsOpen(true);
+            }}
+          />
+        )}
+        {shortcutsOpen && <ShortcutsSheet onClose={() => setShortcutsOpen(false)} />}
         {detail && (
           <Details
             key={

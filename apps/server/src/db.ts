@@ -43,6 +43,14 @@ export class Store {
       id,
     ]);
   }
+  /** Deletes every record of one kind for one owner; returns how many were removed. */
+  async removeAll(owner: string, kind: string): Promise<number> {
+    const result = await this.db.query(
+      "DELETE FROM records WHERE owner=$1 AND kind=$2 RETURNING id",
+      [owner, kind],
+    );
+    return result.rows.length;
+  }
   async compareAndSwap<T>(
     owner: string,
     kind: string,
@@ -67,6 +75,32 @@ export class Store {
     );
     return (result.rows[0]?.data as T | undefined) ?? null;
   }
+  /** Atomically adds numeric deltas to fields of one record, creating it from `base` if absent. */
+  async increment<T>(
+    owner: string,
+    kind: string,
+    id: string,
+    deltas: Record<string, number>,
+    base: object = {},
+  ): Promise<T> {
+    const keys = Object.keys(deltas);
+    if (!keys.length || keys.some((key) => !/^[A-Za-z]+$/.test(key)))
+      throw new Error("increment keys must be plain identifiers");
+    const sets = keys
+      .map((key, i) => `'${key}',COALESCE((records.data->>'${key}')::bigint,0)+$${i + 5}::bigint`)
+      .join(",");
+    const result = await this.db.query(
+      `INSERT INTO records(owner,kind,id,data) VALUES($1,$2,$3,$4::jsonb) ON CONFLICT(owner,kind,id) DO UPDATE SET data=records.data || jsonb_build_object(${sets}),updated_at=now() RETURNING data`,
+      [
+        owner,
+        kind,
+        id,
+        JSON.stringify({ ...base, id, ...deltas }),
+        ...keys.map((key) => Math.trunc(deltas[key])),
+      ],
+    );
+    return result.rows[0]?.data as T;
+  }
   async scan<T>(kind: string): Promise<{ owner: string; value: T }[]> {
     const result = await this.db.query(
       "SELECT jsonb_build_object('owner',owner,'value',data) AS data FROM records WHERE kind=$1 ORDER BY updated_at ASC",
@@ -89,7 +123,7 @@ export class Store {
   }
   async recoverInterruptedActions(): Promise<void> {
     await this.db.query(
-      `UPDATE records SET data=data || '{"status":"outcome_unknown","error":"Server restarted during execution. Check the provider before creating another action."}'::jsonb WHERE kind='actions' AND data->>'status'='executing'`,
+      `UPDATE records SET data=data || '{"status":"outcome_unknown","error":"سرور هنگام اجرای این اقدام دوباره راه‌اندازی شد. پیش از ساختن اقدام دیگر، نتیجه را در سرویس مقصد بررسی کنید."}'::jsonb WHERE kind='actions' AND data->>'status'='executing'`,
     );
   }
   async take<T>(owner: string, kind: string, id: string): Promise<T | null> {

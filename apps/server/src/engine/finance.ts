@@ -1,8 +1,30 @@
 import { z } from "zod";
 
+const persianDigits = "۰۱۲۳۴۵۶۷۸۹";
+/** Replaces Latin digits in user-visible prose with Persian digits. */
+export function faDigits(value: string | number) {
+  return String(value).replace(/\d/g, (digit) => persianDigits[Number(digit)]);
+}
+/** Formats a number for Persian prose: Persian digits, «٬» thousands and «٫» decimals. */
+export function faNumber(value: number, maximumFractionDigits = 2) {
+  return new Intl.NumberFormat("fa-IR", { maximumFractionDigits }).format(value);
+}
+/** Formats an ISO date as a Jalali date in Tehran time for user-visible text. */
+export function faDate(iso: string | undefined) {
+  const value = iso ? new Date(iso) : undefined;
+  if (!value || Number.isNaN(value.getTime())) return iso ?? "";
+  return new Intl.DateTimeFormat("fa-IR-u-ca-persian", {
+    timeZone: "Asia/Tehran",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  }).format(value);
+}
+
 /** CSV amounts use positive expenses and negative income. No currency conversion is inferred. */
 export function analyzeSpending(csv: string) {
-  if (csv.length > 500000) throw new Error("Import at most 500 KB of transaction CSV");
+  if (csv.length > 500000)
+    throw new Error("فایل CSV تراکنش‌ها بیش از ۵۰۰ کیلوبایت است. فایل کوچک‌تری وارد کنید.");
   const rows: string[][] = [];
   let row: string[] = [],
     cell = "",
@@ -13,7 +35,8 @@ export function analyzeSpending(csv: string) {
       if (quoted && csv[i + 1] === '"') {
         cell += '"';
         i++;
-      } else if (!quoted && cell.length) throw new Error("Invalid quoted CSV field");
+      } else if (!quoted && cell.length)
+        throw new Error("یک فیلد داخل گیومه در CSV نامعتبر است. قالب فایل را بررسی کنید.");
       else quoted = !quoted;
     } else if (!quoted && (c === "," || c === "\n" || c === undefined)) {
       row.push(cell.replace(/\r$/, ""));
@@ -24,31 +47,35 @@ export function analyzeSpending(csv: string) {
       }
     } else if (c !== undefined) cell += c;
   }
-  if (quoted) throw new Error("CSV has an unclosed quoted field");
+  if (quoted) throw new Error("یک گیومه در CSV بسته نشده است. قالب فایل را بررسی کنید.");
   const header = rows.shift()?.map((v) => v.trim().toLowerCase());
   if (!header || !["date", "description", "amount", "category"].every((v) => header.includes(v)))
-    throw new Error("CSV needs date,description,amount,category columns");
+    throw new Error(
+      "ستون‌های لازم در CSV پیدا نشد. ستون‌های date، description، amount و category را اضافه کنید.",
+    );
   if (!rows.length || rows.length > 5000)
-    throw new Error("Import between 1 and 5,000 transactions");
+    throw new Error("تعداد تراکنش‌ها مجاز نیست. بین ۱ تا ۵٬۰۰۰ تراکنش وارد کنید.");
   const transactions = rows.map((r, index) => {
     const get = (name: string) => r[header.indexOf(name)]?.trim() ?? "";
     if (r.length !== header.length)
-      throw new Error(`Row ${index + 2} has the wrong number of columns`);
+      throw new Error(
+        `تعداد ستون‌های ردیف ${faNumber(index + 2)} نادرست است. آن ردیف را اصلاح کنید.`,
+      );
     const date = get("date"),
       amount = get("amount");
     if (!z.iso.date().safeParse(date).success || !/^[-+]?\d+(?:\.\d{1,2})?$/.test(amount))
       throw new Error(
-        `Row ${index + 2} needs an ISO date and a plain amount with at most two decimal places`,
+        `ردیف ${faNumber(index + 2)} نامعتبر است. تاریخ را به شکل ISO و مبلغ را ساده و با حداکثر دو رقم اعشار بنویسید.`,
       );
     const cents = Math.round(Number(amount) * 100);
     if (!Number.isSafeInteger(cents) || Math.abs(cents) > 1e12)
-      throw new Error("Transaction amount is out of range");
+      throw new Error("مبلغ یک تراکنش خارج از محدوده است. مبلغ‌ها را بررسی کنید.");
     return {
       id: `row-${index + 2}`,
       date,
       description: get("description"),
       amount: cents / 100,
-      category: get("category") || "Uncategorized",
+      category: get("category") || "بدون دسته‌بندی",
       cents,
     };
   });
@@ -75,6 +102,6 @@ export function analyzeSpending(csv: string) {
         .at(-1),
     },
     amountConvention:
-      "Positive expenses; negative income. Values use the source currency; no currency conversion.",
+      "هزینه‌ها مثبت و درآمدها منفی هستند. مقادیر به واحد پول فایل اصلی‌اند و تبدیل ارزی انجام نمی‌شود.",
   };
 }

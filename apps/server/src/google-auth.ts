@@ -50,12 +50,12 @@ export class GoogleAuth {
   private decodeTokens(stored: Credential | null): Tokens | null {
     if (!stored?.secret) return null;
     if (!this.config.encryptionKey)
-      throw new AppError("TOKEN_ENCRYPTION_KEY is not configured", 503);
+      throw new AppError("TOKEN_ENCRYPTION_KEY پیکربندی نشده است", 503);
     return JSON.parse(decryptSecret(stored.secret, this.config.encryptionKey));
   }
   private async save(owner: string, tokens: Tokens, generation: string) {
     if (!this.config.encryptionKey)
-      throw new AppError("TOKEN_ENCRYPTION_KEY is not configured", 503);
+      throw new AppError("TOKEN_ENCRYPTION_KEY پیکربندی نشده است", 503);
     const saved = await this.db.compareAndSwap<Credential>(
       owner,
       "credentials",
@@ -68,7 +68,7 @@ export class GoogleAuth {
       },
     );
     if (!saved)
-      throw new AppError("Google sign-in changed or was disconnected. Connect again.", 409);
+      throw new AppError("ورود به گوگل تغییر کرده یا قطع شده است. دوباره متصل شوید.", 409);
   }
   private async rotateGeneration(owner: string, disconnect = false) {
     const generation = randomUUID();
@@ -100,7 +100,7 @@ export class GoogleAuth {
   async connect(owner: string, write: boolean) {
     if (!this.configured())
       throw new AppError(
-        "Configure GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET and TOKEN_ENCRYPTION_KEY to connect Google",
+        "برای اتصال گوگل، GOOGLE_CLIENT_ID و GOOGLE_CLIENT_SECRET و TOKEN_ENCRYPTION_KEY را پیکربندی کنید",
         503,
       );
     const state = randomBytes(32).toString("base64url"),
@@ -147,10 +147,10 @@ export class GoogleAuth {
   async callback(stateId: string, code: string) {
     const state = await this.db.take<OAuthState>("system", "oauth", stateId);
     if (!state || state.expiresAt < Date.now())
-      throw new AppError("Google sign-in expired. Connect again.", 400);
+      throw new AppError("مهلت ورود به گوگل تمام شده است. دوباره متصل شوید.", 400);
     const credential = await this.db.get<Credential>(state.owner, "credentials", "google");
     if (!state.generation || credential?.generation !== state.generation)
-      throw new AppError("Google sign-in changed or was disconnected. Connect again.", 409);
+      throw new AppError("ورود به گوگل تغییر کرده یا قطع شده است. دوباره متصل شوید.", 409);
     const response = await fetch("https://oauth2.googleapis.com/token", {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -164,14 +164,13 @@ export class GoogleAuth {
       }),
       signal: AbortSignal.timeout(15000),
     });
-    if (!response.ok) throw new AppError("Google could not complete sign-in. Connect again.", 502);
+    if (!response.ok) throw new AppError("گوگل نتوانست ورود را کامل کند. دوباره متصل شوید.", 502);
     const token = tokenSchema.parse(await response.json());
     const profile = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/profile", {
       headers: { Authorization: `Bearer ${token.access_token}` },
       signal: AbortSignal.timeout(15000),
     });
-    if (!profile.ok)
-      throw new AppError("Google did not grant Gmail read access. Connect again.", 403);
+    if (!profile.ok) throw new AppError("گوگل دسترسی خواندن Gmail را نداد. دوباره متصل شوید.", 403);
     const { emailAddress } = z.object({ emailAddress: z.email() }).parse(await profile.json());
     const previous = await this.tokens(state.owner);
     await this.save(
@@ -191,9 +190,9 @@ export class GoogleAuth {
   }
   async accessToken(owner: string, expectedConnectionId?: string): Promise<string> {
     const tokens = await this.tokens(owner);
-    if (!tokens) throw new AppError("Google is disconnected", 409);
+    if (!tokens) throw new AppError("اتصال گوگل قطع است", 409);
     if (expectedConnectionId && tokens.connectionId !== expectedConnectionId)
-      throw new AppError("Google account or connection changed. Prepare a new action.", 409);
+      throw new AppError("حساب یا اتصال گوگل تغییر کرده است. اقدام تازه‌ای آماده کنید.", 409);
     if (tokens.expiresAt > Date.now() + 60000) return tokens.accessToken;
     const refreshKey = `${owner}:${tokens.connectionId}`;
     const pending = this.refreshing.get(refreshKey);
@@ -203,7 +202,7 @@ export class GoogleAuth {
     return task;
   }
   private async refresh(owner: string, tokens: Tokens) {
-    if (!tokens.refreshToken) throw new AppError("Google session expired. Connect again.", 401);
+    if (!tokens.refreshToken) throw new AppError("نشست گوگل منقضی شده است. دوباره متصل شوید.", 401);
     const response = await fetch("https://oauth2.googleapis.com/token", {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -215,21 +214,20 @@ export class GoogleAuth {
       }),
       signal: AbortSignal.timeout(15000),
     });
-    if (!response.ok) throw new AppError("Google session expired. Connect again.", 401);
+    if (!response.ok) throw new AppError("نشست گوگل منقضی شده است. دوباره متصل شوید.", 401);
     const token = tokenSchema.parse(await response.json());
     const refreshed = {
       ...tokens,
       accessToken: token.access_token,
       expiresAt: Date.now() + token.expires_in * 1000,
     };
-    if (!this.config.encryptionKey) throw new AppError("Token encryption is not configured", 503);
+    if (!this.config.encryptionKey) throw new AppError("رمزنگاری توکن پیکربندی نشده است", 503);
     const updated = await this.db.updateCredential(
       owner,
       tokens.connectionId,
       encryptSecret(JSON.stringify(refreshed), this.config.encryptionKey),
     );
-    if (!updated)
-      throw new AppError("Google account changed or was disconnected during refresh", 409);
+    if (!updated) throw new AppError("حساب گوگل هنگام تازه‌سازی تغییر کرد یا قطع شد", 409);
     return token.access_token;
   }
   async disconnect(owner: string) {
@@ -244,7 +242,7 @@ export class GoogleAuth {
       });
       if (!response.ok && response.status !== 400)
         throw new AppError(
-          "Disconnected locally. Google revocation failed; remove access in your Google account settings.",
+          "اتصال به‌صورت محلی قطع شد، اما لغو دسترسی در گوگل ناموفق بود؛ دسترسی را از تنظیمات حساب گوگل خود بردارید.",
           502,
         );
     }

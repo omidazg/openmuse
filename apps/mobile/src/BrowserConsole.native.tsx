@@ -9,7 +9,9 @@ export default function BrowserConsole({ url }: { url: string }) {
       <ErrorNotice error={error} />
       <WebView
         source={{ uri: url }}
-        onError={(event) => setError(event.nativeEvent.description)}
+        onError={() =>
+          setError("کنسول مرورگر باز نشد. اتصال اینترنت را بررسی کنید و دوباره تلاش کنید.")
+        }
         style={{ height: 520, borderRadius: 12 }}
       />
     </View>

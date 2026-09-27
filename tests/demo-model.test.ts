@@ -103,9 +103,30 @@ test("the email demo handles no matches and disconnected mail without inventing 
       ]),
     );
     assert.ok("content" in response);
-    assert.match(response.content ?? "", /didn’t find|couldn’t check/);
+    assert.match(response.content ?? "", /پیدا نکردم|نتوانستم صندوق ورودی/);
     assert.ok(!("toolCalls" in response));
   }
+});
+
+test("demo routes Persian prompts to the same browser and mail tools", () => {
+  for (const [prompt, url] of [
+    ["در Hacker News بگرد و چیزهای جالب پیدا کن", "https://news.ycombinator.com"],
+    ["در هکر نیوز چه خبر است؟", "https://news.ycombinator.com"],
+    ["سایت copilotkit.ai را خلاصه کن", "https://copilotkit.ai"],
+    ["دربارهٔ آکواریوم خلیج مونتری تحقیق کن", "https://www.montereybayaquarium.org/visit/exhibits"],
+  ]) {
+    const reply = demoResponse(request([{ role: "user", content: prompt }]));
+    assert.ok("toolCalls" in reply && reply.toolCalls, prompt);
+    assert.deepEqual(JSON.parse(reply.toolCalls[0].arguments), { url });
+  }
+  const mail = demoResponse(
+    mailRequest([{ role: "user", content: "ایمیل‌هایم را برای اردوی مدرسه بررسی کن" }]),
+  );
+  assert.ok("toolCalls" in mail && mail.toolCalls);
+  assert.equal(mail.toolCalls[0].name, "search_mail");
+  const hint = demoResponse(request([{ role: "user", content: "سلام" }]));
+  assert.ok("content" in hint);
+  assert.match(hint.content ?? "", /امتحان کنید/);
 });
 
 test("demo only summarizes browser evidence belonging to the current user turn", () => {
@@ -149,7 +170,7 @@ test("demo reports missing or failed browser evidence without inventing a summar
     ]),
   );
   assert.ok("content" in reply);
-  assert.match(reply.content ?? "", /could not read/);
+  assert.match(reply.content ?? "", /نتوانست آن صفحه را بخواند/);
   assert.ok(!("toolCalls" in reply));
 });
 
@@ -213,7 +234,8 @@ test("AI Mock drives the real BuiltInAgent SDK through two browser tool rounds",
       firstSummary && "content" in firstSummary && typeof firstSummary.content === "string",
     );
     assert.equal(firstSummary.content.match(/• /g)?.length, 3);
-    assert.ok(!firstSummary.content.includes("Source: ["));
+    assert.ok(!firstSummary.content.includes("منبع: ["));
+    assert.match(firstSummary.content, /منبع: https:\/\/news\.ycombinator\.com/);
     agent.addMessage({
       id: randomUUID(),
       role: "user",

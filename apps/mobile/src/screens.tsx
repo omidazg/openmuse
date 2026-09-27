@@ -2,7 +2,8 @@ import * as DocumentPicker from "expo-document-picker";
 import * as FileSystem from "expo-file-system/legacy";
 import {
   ArrowDownToLine,
-  ArrowUpRight,
+  ArrowUpLeft,
+  AtSign,
   CalendarDays,
   Check,
   CheckCheck,
@@ -14,6 +15,7 @@ import {
   Inbox,
   Link2,
   Mail,
+  MessageCircle,
   Plus,
   Search,
   ShieldCheck,
@@ -38,8 +40,19 @@ import type {
   CalendarEvent,
   EmailDraft,
 } from "../../../packages/domain/src";
+import { BRAND } from "../../../packages/domain/src/brand";
+import {
+  holidaysByDate,
+  type IranOccasion,
+  isIranWeekend,
+} from "../../../packages/domain/src/iran-holidays";
 import { API_URL } from "./api";
 import { localDateTime, zonedInstant } from "./date-time";
+import { DOCUMENT_PICKER_TYPES, fileExtent, fileKindLabel, uploadMimeType } from "./file-kind";
+import { prepareUpload } from "./image-upload";
+import { faDate, faDigits, faNumber, fw } from "./locale";
+import { MailboxSheet } from "./mailbox-sheet";
+import { MessengerLinkPanel } from "./messenger-link";
 import {
   Button,
   Card,
@@ -64,6 +77,23 @@ function todayDate() {
   return localDateTime(new Date().toISOString(), Intl.DateTimeFormat().resolvedOptions().timeZone)
     .date;
 }
+const statusNames: Record<string, string> = {
+  awaiting_review: "در انتظار بررسی",
+  executing: "در حال اجرا",
+  succeeded: "انجام شد",
+  failed: "ناموفق",
+  outcome_unknown: "نتیجه نامشخص",
+  denied: "رد شد",
+  cancelled: "لغو شد",
+  expired: "منقضی شد",
+  idle: "آماده",
+  active: "فعال",
+  closed: "بسته",
+  error: "خطا",
+};
+function statusName(value: string) {
+  return statusNames[value] || value.replace(/_/g, " ");
+}
 function eventDate(event: CalendarEvent) {
   return event.allDay ? event.start : localDateTime(event.start, event.timeZone).date;
 }
@@ -81,7 +111,7 @@ export function TodayScreen() {
       <View
         style={[
           {
-            backgroundColor: "#E8F2F8",
+            backgroundColor: colors.sky,
             borderRadius: 24,
             padding: 32,
             minHeight: 228,
@@ -93,31 +123,32 @@ export function TodayScreen() {
         <View style={{ flex: 1, gap: 15, zIndex: 1 }}>
           <View style={[s.row, { gap: 7 }]}>
             <Sparkles size={13} color={colors.blueDark} />
-            <Text style={[s.label, { color: colors.blueDark }]}>A little clarity, every day</Text>
+            <Text style={[s.label, { color: colors.blueDark }]}>هر روز، کمی روشن‌تر</Text>
           </View>
           <Text
             style={{
               fontSize: wide ? 39 : 29,
-              lineHeight: wide ? 45 : 36,
-              letterSpacing: -1.7,
-              fontWeight: "500",
+              lineHeight: wide ? 50 : 38,
+              ...fw("500"),
               color: colors.text,
             }}
           >
-            Your day, with a little{"\n"}more room to breathe.
+            روز شما، با کمی{"\n"}فضای بیشتر برای نفس‌کشیدن.
           </Text>
-          <Text style={[s.muted, { maxWidth: 420, color: "#617680" }]}>
-            {events.length ? `${events.length} things on your calendar` : "Your calendar has room"}
-            {unread.length ? `, ${unread.length} unread emails` : ""}.{"\n"}Let’s make space for
-            what matters.
+          <Text style={[s.muted, { maxWidth: 420, color: colors.muted }]}>
+            {events.length
+              ? `${faNumber(events.length)} مورد در تقویم شما`
+              : "تقویم‌تان جای خالی دارد"}
+            {unread.length ? `، ${faNumber(unread.length)} ایمیل خوانده‌نشده` : ""}.{"\n"}بیایید برای
+            آنچه مهم است جا باز کنیم.
           </Text>
           <Button
-            onPress={() => ask("Help me plan my day")}
+            onPress={() => ask("در برنامه‌ریزی امروز کمکم کنید")}
             icon={Sparkles}
             primary
             style={{ alignSelf: "flex-start", marginTop: 5 }}
           >
-            Plan my day
+            برنامه‌ریزی روزم
           </Button>
         </View>
         {wide && (
@@ -128,7 +159,7 @@ export function TodayScreen() {
                 width: 190,
                 height: 190,
                 borderRadius: 100,
-                backgroundColor: "#DAEAF2",
+                backgroundColor: colors.sky,
               }}
             />
             <View
@@ -138,7 +169,7 @@ export function TodayScreen() {
                 height: 145,
                 borderRadius: 80,
                 borderWidth: 1,
-                borderColor: "#C8DBE6",
+                borderColor: colors.line,
               }}
             />
             <Mascot size={94} />
@@ -148,17 +179,17 @@ export function TodayScreen() {
                 {
                   position: "absolute",
                   top: 17,
-                  left: -19,
+                  start: -19,
                   padding: 11,
                   gap: 7,
-                  backgroundColor: "#FFF",
+                  backgroundColor: colors.card,
                   borderRadius: 13,
                   transform: [{ rotate: "-7deg" }],
                 },
               ]}
             >
-              <Check size={14} color="#739174" />
-              <Text style={s.small}>A lighter day</Text>
+              <Check size={14} color={colors.success} />
+              <Text style={s.small}>روزی سبک‌تر</Text>
             </View>
             <View
               style={[
@@ -166,17 +197,17 @@ export function TodayScreen() {
                 {
                   position: "absolute",
                   bottom: 18,
-                  right: -8,
+                  end: -8,
                   padding: 12,
                   gap: 8,
-                  backgroundColor: "#FFF",
+                  backgroundColor: colors.card,
                   borderRadius: 13,
                   transform: [{ rotate: "5deg" }],
                 },
               ]}
             >
               <CalendarDays size={17} color={colors.blueDark} />
-              <Text style={s.small}>Everything, together</Text>
+              <Text style={s.small}>همه‌چیز، یک‌جا</Text>
             </View>
           </View>
         )}
@@ -184,25 +215,25 @@ export function TodayScreen() {
       <View style={{ flexDirection: "row", gap: 13, flexWrap: "wrap" }}>
         {[
           {
-            label: "UNREAD EMAILS",
+            label: "ایمیل‌های خوانده‌نشده",
             value: unread.length,
-            note: "A fresh look at your inbox",
+            note: "نگاهی تازه به صندوق ورودی",
             icon: Mail,
             section: "mail" as const,
             tint: colors.sky,
           },
           {
-            label: "ON THE CALENDAR",
+            label: "در تقویم",
             value: events.length,
-            note: "Make room for your priorities",
+            note: "برای اولویت‌هایتان جا باز کنید",
             icon: CalendarDays,
             section: "calendar" as const,
             tint: colors.green,
           },
           {
-            label: "WAITING FOR YOU",
+            label: "در انتظار شما",
             value: pending.length,
-            note: "Your review keeps things moving",
+            note: "بررسی شما کارها را پیش می‌برد",
             icon: ShieldCheck,
             section: "activity" as const,
             tint: colors.lavender,
@@ -216,7 +247,7 @@ export function TodayScreen() {
           >
             <Card style={{ padding: 21, height: 126 }}>
               <View style={s.between}>
-                <Text style={[s.label, { fontSize: 9, letterSpacing: 1 }]}>{item.label}</Text>
+                <Text style={[s.label, { fontSize: 9 }]}>{item.label}</Text>
                 <View
                   style={[
                     s.iconBox,
@@ -226,8 +257,8 @@ export function TodayScreen() {
                   <item.icon size={15} color={colors.text} />
                 </View>
               </View>
-              <Text style={{ fontSize: 29, color: colors.text, letterSpacing: -1, marginTop: -2 }}>
-                {String(item.value).padStart(2, "0")}
+              <Text style={{ fontSize: 29, color: colors.text, marginTop: -2 }}>
+                {faDigits(String(item.value).padStart(2, "0"))}
               </Text>
               <Text style={[s.small, { fontSize: 10, marginTop: 3 }]}>{item.note}</Text>
             </Card>
@@ -237,8 +268,8 @@ export function TodayScreen() {
       <View style={{ flexDirection: wide ? "row" : "column", gap: 22 }}>
         <Card style={{ flex: 1 }}>
           <SectionHeading
-            title="On your calendar"
-            action="Full calendar"
+            title="در تقویم شما"
+            action="تقویم کامل"
             onPress={() => navigate("calendar")}
           />
           {events.length ? (
@@ -246,8 +277,8 @@ export function TodayScreen() {
           ) : (
             <Empty
               icon={CalendarDays}
-              title="Some breathing room"
-              detail="No events scheduled today."
+              title="کمی فرصت برای نفس‌کشیدن"
+              detail="امروز رویدادی ندارید. از پایین همین کارت می‌توانید رویدادی اضافه کنید."
             />
           )}
           <Pressable
@@ -264,13 +295,13 @@ export function TodayScreen() {
             ]}
           >
             <Plus size={15} color={colors.muted} />
-            <Text style={s.small}>Make time for something</Text>
+            <Text style={s.small}>برای کاری وقت بگذارید</Text>
           </Pressable>
         </Card>
         <Card style={{ flex: 1 }}>
           <SectionHeading
-            title="From your inbox"
-            action="Open mail"
+            title="از صندوق ورودی شما"
+            action="باز کردن ایمیل"
             onPress={() => navigate("mail")}
           />
           {w.mail.length ? (
@@ -291,10 +322,10 @@ export function TodayScreen() {
                 <Avatar name={m.sender} index={i} />
                 <View style={{ flex: 1, gap: 3 }}>
                   <View style={s.between}>
-                    <Text style={[s.text, { fontSize: 12, fontWeight: "600" }]}>{m.sender}</Text>
+                    <Text style={[s.text, { fontSize: 12, ...fw("600") }]}>{m.sender}</Text>
                     <Text style={[s.small, { fontSize: 10 }]}>{timeLabel(m.date)}</Text>
                   </View>
-                  <Text numberOfLines={1} style={[s.text, { fontSize: 12, lineHeight: 18 }]}>
+                  <Text numberOfLines={1} style={[s.text, { fontSize: 12, lineHeight: 20 }]}>
                     {m.subject}
                   </Text>
                   <Text numberOfLines={1} style={[s.small, { fontSize: 11 }]}>
@@ -311,40 +342,38 @@ export function TodayScreen() {
           ) : (
             <Empty
               icon={Inbox}
-              title="Inbox is quiet"
-              detail="Connect Google to bring your messages here."
+              title="صندوق ورودی آرام است"
+              detail="برای دیدن پیام‌هایتان در اینجا، Google را متصل کنید."
             />
           )}
         </Card>
       </View>
       <View style={{ flexDirection: wide ? "row" : "column", gap: 22 }}>
-        <Card style={{ flex: 1, backgroundColor: "#F0F0E7" }}>
-          <SectionHeading title="A hand with the little things" />
-          <Text style={[s.muted, { marginBottom: 15 }]}>
-            Start with a thought. We’ll take it from there.
-          </Text>
+        <Card style={{ flex: 1, backgroundColor: colors.beige }}>
+          <SectionHeading title="کمکی در کارهای کوچک" />
+          <Text style={[s.muted, { marginBottom: 15 }]}>با یک فکر شروع کنید؛ بقیه‌اش با ما.</Text>
           {[
-            "What needs my attention today?",
-            "Help me catch up on my inbox",
-            "Show my recent documents",
+            "امروز چه چیزهایی به توجه من نیاز دارد؟",
+            "در رسیدگی به صندوق ورودی کمکم کنید",
+            "اسناد اخیرم را نشان دهید",
           ].map((prompt) => (
             <Pressable
               key={prompt}
               onPress={() => ask(prompt)}
               style={[
                 s.between,
-                { borderTopWidth: 1, borderTopColor: "#E1E2D9", paddingVertical: 13 },
+                { borderTopWidth: 1, borderTopColor: colors.line, paddingVertical: 13 },
               ]}
             >
               <Text style={[s.text, { fontSize: 12 }]}>{prompt}</Text>
-              <ArrowUpRight size={15} color={colors.muted} />
+              <ArrowUpLeft size={15} color={colors.muted} />
             </Pressable>
           ))}
         </Card>
         <Card style={{ flex: 1 }}>
           <SectionHeading
-            title={pending.length ? "Ready for your review" : "Recent activity"}
-            action="View all"
+            title={pending.length ? "آماده برای بررسی شما" : "فعالیت‌های اخیر"}
+            action="مشاهدهٔ همه"
             onPress={() => navigate("activity")}
           />
           {pending.length
@@ -354,7 +383,7 @@ export function TodayScreen() {
                   <LinkRow
                     key={a.id}
                     title={a.title}
-                    detail="Prepared · waiting for your approval"
+                    detail="آماده شده · در انتظار تأیید شما"
                     onPress={() => open({ type: "review", action: a })}
                     icon={ShieldCheck}
                     tint={colors.lavender}
@@ -375,7 +404,8 @@ export function TodayScreen() {
               ))}
           {!pending.length && !w.activity.length && (
             <Text style={s.muted}>
-              Your workspace is ready. Things you do here will appear in your activity.
+              فضای کار شما آماده است. کارهایی که اینجا انجام می‌دهید در فعالیت‌هایتان نمایش داده
+              می‌شود.
             </Text>
           )}
         </Card>
@@ -395,12 +425,12 @@ function Avatar({ name, index = 0 }: { name: string; index?: number }) {
         alignItems: "center",
       }}
     >
-      <Text style={{ color: colors.text, fontSize: 11, fontWeight: "500" }}>
+      <Text style={{ color: colors.text, fontSize: 11, ...fw("500") }}>
         {name
           .split(" ")
           .map((p) => p[0])
           .slice(0, 2)
-          .join("")}
+          .join("‌")}
       </Text>
     </View>
   );
@@ -422,7 +452,7 @@ export function AgendaRow({
     >
       <View style={{ width: 65 }}>
         <Text style={[s.text, { fontSize: 11 }]}>
-          {e.allDay ? "All day" : timeLabel(e.start, e.timeZone)}
+          {e.allDay ? "تمام روز" : timeLabel(e.start, e.timeZone)}
         </Text>
         {!e.allDay && (
           <Text style={[s.small, { fontSize: 10 }]}>{timeLabel(e.end, e.timeZone)}</Text>
@@ -437,12 +467,13 @@ export function AgendaRow({
         }}
       />
       <View style={{ flex: 1, gap: 3 }}>
-        <Text style={[s.text, { fontSize: 13, fontWeight: "500" }]}>{e.title}</Text>
+        <Text style={[s.text, { fontSize: 13, ...fw("500") }]}>{e.title}</Text>
         <Text numberOfLines={1} style={[s.small, { fontSize: 11 }]}>
-          {e.location || (e.attendees.length ? `${e.attendees.length} attendees` : "Time for you")}
+          {e.location ||
+            (e.attendees.length ? `${faNumber(e.attendees.length)} شرکت‌کننده` : "وقتی برای خودتان")}
         </Text>
       </View>
-      <ChevronRight size={14} color={colors.muted} />
+      <ChevronLeft size={14} color={colors.muted} />
     </Pressable>
   );
 }
@@ -476,7 +507,7 @@ export function MailScreen() {
               gap: 9,
               flex: 1,
               minWidth: 200,
-              backgroundColor: "#FFF",
+              backgroundColor: colors.card,
               borderWidth: 1,
               borderColor: colors.line,
               borderRadius: 12,
@@ -486,8 +517,8 @@ export function MailScreen() {
         >
           <Search size={16} color={colors.muted} />
           <TextInput
-            accessibilityLabel="Search mail"
-            placeholder="Search your inbox"
+            accessibilityLabel="جست‌وجوی ایمیل"
+            placeholder="جست‌وجو در صندوق ورودی"
             placeholderTextColor={colors.muted}
             value={query}
             onChangeText={setQuery}
@@ -495,20 +526,20 @@ export function MailScreen() {
           />
         </View>
         <Button onPress={() => open({ type: "email" })} primary icon={Plus}>
-          Compose
+          نوشتن
         </Button>
       </View>
       <ErrorNotice error={error} />
       <Card>
         <View style={[s.row, { gap: 10, marginBottom: 15, flexWrap: "wrap" }]}>
           <Button small primary={tab === "all"} onPress={() => setTab("all")}>
-            All messages
+            همهٔ پیام‌ها
           </Button>
           <Button small primary={tab === "unread"} onPress={() => setTab("unread")}>
-            Unread · {w.mail.filter((m) => m.unread).length}
+            {`خوانده‌نشده · ${faNumber(w.mail.filter((m) => m.unread).length)}`}
           </Button>
           <Button small primary={tab === "drafts"} onPress={() => setTab("drafts")}>
-            Drafts · {drafts.length}
+            {`پیش‌نویس‌ها · ${faNumber(drafts.length)}`}
           </Button>
         </View>
         {tab === "drafts" ? (
@@ -518,15 +549,15 @@ export function MailScreen() {
                 key={d.id}
                 icon={Mail}
                 title={d.subject}
-                detail={`To: ${d.to.join(", ")} · saved ${dateLabel(d.createdAt)}`}
+                detail={`گیرنده: ${d.to.join("، ")} · ذخیره‌شده در ${dateLabel(d.createdAt)}`}
                 onPress={() => open({ type: "email", draft: d })}
               />
             ))
           ) : (
             <Empty
               icon={Mail}
-              title="A fresh page"
-              detail="Messages you save as drafts will be here when you’re ready."
+              title="صفحه‌ای تازه"
+              detail="پیام‌هایی که به‌صورت پیش‌نویس ذخیره می‌کنید اینجا می‌مانند. برای شروع، «نوشتن» را بزنید."
             />
           )
         ) : items.length ? (
@@ -542,19 +573,17 @@ export function MailScreen() {
               <Avatar name={m.sender} index={i} />
               <View style={{ flex: 1, gap: 5 }}>
                 <View style={s.between}>
-                  <Text style={[s.text, { fontWeight: m.unread ? "600" : "400" }]}>{m.sender}</Text>
+                  <Text style={[s.text, fw(m.unread ? "600" : "400")]}>{m.sender}</Text>
                   <Text style={s.small}>{dateLabel(m.date)}</Text>
                 </View>
-                <Text style={[s.text, { fontWeight: "500", fontSize: 13 }]}>{m.subject}</Text>
+                <Text style={[s.text, { ...fw("500"), fontSize: 13 }]}>{m.subject}</Text>
                 <Text style={s.muted} numberOfLines={1}>
                   {m.body.replace(/\n/g, " ")}
                 </Text>
                 {!!m.attachments.length && (
                   <View style={[s.row, { gap: 4, marginTop: 2 }]}>
                     <FileText size={12} color={colors.muted} />
-                    <Text style={s.small}>
-                      {m.attachments.length} attachment{m.attachments.length > 1 ? "s" : ""}
-                    </Text>
+                    <Text style={s.small}>{`${faNumber(m.attachments.length)} پیوست`}</Text>
                   </View>
                 )}
               </View>
@@ -568,11 +597,11 @@ export function MailScreen() {
         ) : (
           <Empty
             icon={Inbox}
-            title={query ? "No matching messages" : "Nothing in your inbox"}
+            title={query ? "پیامی مطابق جست‌وجو پیدا نشد" : "صندوق ورودی شما خالی است"}
             detail={
               query
-                ? "Try a different name or subject."
-                : "Connect Google in Connections to read your mail here."
+                ? "نام یا موضوع دیگری را امتحان کنید."
+                : "برای خواندن ایمیل‌هایتان در اینجا، Google را از بخش «اتصال‌ها» متصل کنید."
             }
           />
         )}
@@ -607,9 +636,15 @@ export function CalendarScreen() {
   const anchor = new Date(`${date}T12:00:00`);
   const dates = Array.from({ length: 7 }, (_, i) => {
     const day = new Date(anchor);
-    day.setDate(anchor.getDate() - anchor.getDay() + i);
+    // Persian weeks start on Saturday.
+    day.setDate(anchor.getDate() - ((anchor.getDay() + 1) % 7) + i);
     return day;
   });
+  // Official Iranian holidays and occasions for the week strip and the next 30 days.
+  const occasions = holidaysByDate(plusDays(date, -7), plusDays(date, 37));
+  const shownOccasions: IranOccasion[] = all
+    ? [...occasions.values()].flat().filter((o) => o.date >= date && o.date < plusDays(date, 30))
+    : (occasions.get(date) ?? []);
   useEffect(() => {
     let active = true;
     void api
@@ -678,27 +713,25 @@ export function CalendarScreen() {
     <View style={{ gap: 20 }}>
       <View style={[s.between, { gap: 12, flexWrap: "wrap" }]}>
         <View style={[s.row, { gap: 8 }]}>
-          <Text style={s.title}>
-            {anchor.toLocaleDateString("en-US", { month: "long", year: "numeric" })}
-          </Text>
+          <Text style={s.title}>{faDate(anchor, { month: "long", year: "numeric" })}</Text>
           <IconButton
-            icon={ChevronLeft}
-            label="Previous week"
+            icon={ChevronRight}
+            label="هفته قبل"
             onPress={() => setDate(plusDays(date, -7))}
           />
           <IconButton
-            icon={ChevronRight}
-            label="Next week"
+            icon={ChevronLeft}
+            label="هفته بعد"
             onPress={() => setDate(plusDays(date, 7))}
           />
         </View>
         <Button primary icon={Plus} disabled={!writable} onPress={newEvent}>
-          New event
+          رویداد جدید
         </Button>
       </View>
       {calendars.length > 0 && (
         <View style={{ gap: 9 }}>
-          <Text style={s.label}>Your calendars</Text>
+          <Text style={s.label}>تقویم‌های شما</Text>
           <View style={[s.row, { gap: 8, flexWrap: "wrap" }]}>
             {calendars.map((c) => (
               <Button
@@ -708,7 +741,7 @@ export function CalendarScreen() {
                 onPress={() => setCalendarId(c.id)}
               >
                 {c.name}
-                {["owner", "writer"].includes(c.accessRole) ? "" : " · read only"}
+                {["owner", "writer"].includes(c.accessRole) ? "" : " · فقط‌خواندنی"}
               </Button>
             ))}
           </View>
@@ -721,9 +754,16 @@ export function CalendarScreen() {
               day.toISOString(),
               Intl.DateTimeFormat().resolvedOptions().timeZone,
             ).date;
+            const dayOccasions = occasions.get(key) ?? [];
+            const holiday = dayOccasions.find((o) => o.holiday);
+            const off = !!holiday || isIranWeekend(key);
+            const note = holiday ?? dayOccasions[0];
             return (
               <Pressable
                 key={key}
+                accessibilityLabel={`${faDate(day, { weekday: "long", day: "numeric", month: "long" })}${
+                  note ? `، ${note.title}` : ""
+                }${off ? "، تعطیل" : ""}`}
                 onPress={() => {
                   setDate(key);
                   setAll(false);
@@ -732,20 +772,42 @@ export function CalendarScreen() {
                   flex: 1,
                   alignItems: "center",
                   paddingVertical: 17,
+                  paddingHorizontal: 2,
                   gap: 9,
                   borderRadius: 14,
                   backgroundColor: key === date ? colors.sky : "transparent",
                 }}
               >
-                <Text style={s.small}>{day.toLocaleDateString("en-US", { weekday: "short" })}</Text>
+                <Text style={[s.small, off && { color: colors.danger }]}>
+                  {faDate(day, { weekday: "short" })}
+                </Text>
                 <Text
                   style={[
                     s.title,
-                    { fontSize: 22, color: key === date ? colors.blueDark : colors.text },
+                    {
+                      fontSize: 22,
+                      color: off ? colors.danger : key === date ? colors.blueDark : colors.text,
+                    },
                   ]}
                 >
-                  {day.getDate()}
+                  {faDate(day, { day: "numeric" })}
                 </Text>
+                {note && (
+                  <Text
+                    numberOfLines={2}
+                    style={[
+                      s.small,
+                      {
+                        fontSize: 10,
+                        lineHeight: 15,
+                        textAlign: "center",
+                        color: note.holiday ? colors.danger : colors.muted,
+                      },
+                    ]}
+                  >
+                    {note.title}
+                  </Text>
+                )}
                 <View
                   style={{
                     height: 4,
@@ -767,49 +829,75 @@ export function CalendarScreen() {
         <View style={[s.between, { gap: 10, flexWrap: "wrap" }]}>
           <Text style={s.heading}>
             {all
-              ? "The next 30 days"
-              : dateLabel(`${date}T12:00:00`, { weekday: "long", month: "long", day: "numeric" })}
+              ? "۳۰ روز آینده"
+              : faDate(`${date}T12:00:00`, { weekday: "long", month: "long", day: "numeric" })}
           </Text>
           <Button small onPress={() => setAll(!all)}>
-            {all ? "Selected day" : "Next 30 days"}
+            {all ? "روز انتخاب‌شده" : "۳۰ روز آینده"}
           </Button>
         </View>
         <Text style={[s.small, { marginTop: 7, marginBottom: 13 }]}>
-          {selected?.name || "Your calendar"} · {zone}. Events show their own time zone.
+          {selected?.name || "تقویم شما"} · {zone}. هر رویداد با منطقهٔ زمانی خودش نمایش داده می‌شود.
         </Text>
+        {(shownOccasions.length > 0 || (!all && isIranWeekend(date))) && (
+          <View
+            style={{
+              gap: 6,
+              marginBottom: 13,
+              padding: 12,
+              borderRadius: 14,
+              backgroundColor: colors.orange,
+            }}
+          >
+            {!all && isIranWeekend(date) && !shownOccasions.some((o) => o.holiday) && (
+              <Text style={[s.small, { color: colors.danger }]}>جمعه، تعطیل آخر هفته</Text>
+            )}
+            {shownOccasions.map((o) => (
+              <Text
+                key={`${o.date}-${o.title}`}
+                style={[s.small, { color: o.holiday ? colors.danger : colors.text }]}
+              >
+                {all ? `${faDate(`${o.date}T12:00:00`, { day: "numeric", month: "long" })}: ` : ""}
+                {o.title}
+                {o.holiday ? " · تعطیل رسمی" : ""}
+                {o.estimated ? " · تاریخ تقریبی" : ""}
+              </Text>
+            ))}
+          </View>
+        )}
         <ErrorNotice error={error} />
         {error && (
           <Button small onPress={() => setRetry(retry + 1)}>
-            Try again
+            تلاش دوباره
           </Button>
         )}
         {loading ? (
           <View style={[s.row, { gap: 10, paddingVertical: 35, justifyContent: "center" }]}>
             <ActivityIndicator size="small" color={colors.blueDark} />
-            <Text style={s.muted}>Checking your calendar…</Text>
+            <Text style={s.muted}>در حال بررسی تقویم شما…</Text>
           </View>
         ) : events.length ? (
           events.map((e, i) => (
             <View key={e.id}>
               {all && <Text style={[s.label, { marginTop: 16 }]}>{dateLabel(e.start)}</Text>}
               <AgendaRow event={e} index={i} neighbors={events} />
-              <Text style={[s.small, { marginLeft: 84, marginBottom: 8 }]}>{e.timeZone}</Text>
+              <Text style={[s.small, { marginStart: 84, marginBottom: 8 }]}>{e.timeZone}</Text>
             </View>
           ))
         ) : (
           !error && (
             <Empty
               icon={CalendarDays}
-              title="A little open space"
+              title="کمی فضای آزاد"
               detail={
                 all
-                  ? "There’s nothing scheduled for the next 30 days."
-                  : "There’s nothing on the calendar for this day."
+                  ? "برای ۳۰ روز آینده رویدادی در این تقویم ثبت نشده است. رویدادهای تازه اینجا نمایش داده می‌شوند."
+                  : "برای این روز رویدادی در تقویم نیست. روز دیگری را انتخاب کنید یا رویدادی اضافه کنید."
               }
             >
               {writable && (
                 <Button icon={Plus} onPress={newEvent}>
-                  Add an event
+                  افزودن رویداد
                 </Button>
               )}
             </Empty>
@@ -844,20 +932,21 @@ export function BrowserScreen() {
         <View style={[s.row, { gap: 12, marginBottom: 15 }]}>
           <Globe2 size={22} color={colors.blueDark} />
           <View>
-            <Text style={s.heading}>A place for your open tabs</Text>
-            <Text style={s.muted}>Browse in a private, persistent workspace session.</Text>
+            <Text style={s.heading}>جایی برای زبانه‌های باز شما</Text>
+            <Text style={s.muted}>در یک نشست خصوصی و ماندگار در فضای کارتان مرور کنید.</Text>
           </View>
         </View>
         <View style={[s.row, { gap: 10 }]}>
           <TextInput
-            accessibilityLabel="Website address"
+            accessibilityLabel="نشانی وب‌سایت"
             value={url}
             onChangeText={setUrl}
             onSubmitEditing={() => void create()}
             autoCapitalize="none"
             placeholder="https://example.com"
             placeholderTextColor={colors.muted}
-            style={[s.input, { flex: 1 }]}
+            keyboardType="url"
+            style={[s.input, { flex: 1, writingDirection: "ltr" }]}
           />
           <Button
             primary
@@ -866,13 +955,13 @@ export function BrowserScreen() {
             disabled={!url.trim()}
             onPress={() => void create()}
           >
-            Open session
+            باز کردن نشست
           </Button>
         </View>
         <ErrorNotice error={error} />
       </Card>
       <Card>
-        <SectionHeading title="Browser sessions" />
+        <SectionHeading title="نشست‌های مرورگر" />
         {w.browsers.length ? (
           w.browsers.map((b) => (
             <Pressable
@@ -890,13 +979,15 @@ export function BrowserScreen() {
                   <Globe2 size={20} color={colors.blueDark} />
                 </View>
                 <View style={{ flex: 1, gap: 4 }}>
-                  <Text style={s.heading}>{b.title || "Browser session"}</Text>
-                  <Text style={s.muted} numberOfLines={1}>
+                  <Text style={s.heading}>{b.title || "نشست مرورگر"}</Text>
+                  <Text style={[s.muted, { writingDirection: "ltr" }]} numberOfLines={1}>
                     {b.url}
                   </Text>
                 </View>
-                <Chip tint={b.status === "active" ? colors.green : colors.canvas}>{b.status}</Chip>
-                <ArrowUpRight size={17} color={colors.muted} />
+                <Chip tint={b.status === "active" ? colors.green : colors.canvas}>
+                  {statusName(b.status)}
+                </Chip>
+                <ArrowUpLeft size={17} color={colors.muted} />
               </View>
               {b.previewUrl && (
                 <Image
@@ -915,8 +1006,8 @@ export function BrowserScreen() {
         ) : (
           <Empty
             icon={Globe2}
-            title="Start with a website"
-            detail="Open a session above to keep your browsing together. Live previews appear when the browser worker is configured."
+            title="با یک وب‌سایت شروع کنید"
+            detail="برای اینکه مرورتان یک‌جا بماند، از بالا یک نشست باز کنید. پیش‌نمایش زنده وقتی نمایش داده می‌شود که کارگزار مرورگر پیکربندی شده باشد."
           />
         )}
       </Card>
@@ -932,7 +1023,7 @@ export function FilesScreen() {
     setBusy(true);
     try {
       const result = await DocumentPicker.getDocumentAsync({
-        type: "application/pdf",
+        type: DOCUMENT_PICKER_TYPES,
         copyToCacheDirectory: true,
       });
       if (result.canceled) return;
@@ -940,21 +1031,21 @@ export function FilesScreen() {
       let artifact: Artifact;
       if (Platform.OS === "web") {
         const form = new FormData();
-        if (!file.file)
-          throw new Error("The selected file could not be read. Please choose it again.");
-        form.append("file", file.file, file.name);
+        if (!file.file) throw new Error("فایل انتخاب‌شده خوانده نشد. آن را دوباره انتخاب کنید.");
+        const prepared = await prepareUpload(file.file);
+        form.append("file", prepared, prepared.name || file.name);
         artifact = await api.request<Artifact>("/api/files", form);
       } else {
         const result = await FileSystem.uploadAsync(`${API_URL}/api/files`, file.uri, {
           httpMethod: "POST",
           uploadType: FileSystem.FileSystemUploadType.MULTIPART,
           fieldName: "file",
-          mimeType: "application/pdf",
+          mimeType: uploadMimeType(file.name, file.mimeType),
           headers: { Authorization: `Bearer ${api.token}` },
         });
         const payload = JSON.parse(result.body);
         if (result.status < 200 || result.status >= 300)
-          throw new Error(payload.error || "Could not import this PDF.");
+          throw new Error(payload.error || "وارد کردن این سند ممکن نشد. دوباره تلاش کنید.");
         artifact = payload;
       }
       await refresh();
@@ -968,11 +1059,9 @@ export function FilesScreen() {
   return (
     <View style={{ gap: 20 }}>
       <View style={s.between}>
-        <Text style={[s.muted, { flex: 1, marginRight: 15 }]}>
-          Documents, with a little room to work.
-        </Text>
+        <Text style={[s.muted, { flex: 1, marginEnd: 15 }]}>اسناد شما، با کمی فضا برای کار.</Text>
         <Button primary icon={Upload} busy={busy} onPress={() => void upload()}>
-          Import PDF
+          وارد کردن سند
         </Button>
       </View>
       <ErrorNotice error={error} />
@@ -987,7 +1076,7 @@ export function FilesScreen() {
               <View
                 style={{
                   height: 175,
-                  backgroundColor: "#EDEFEA",
+                  backgroundColor: colors.subtle,
                   justifyContent: "center",
                   alignItems: "center",
                 }}
@@ -997,23 +1086,23 @@ export function FilesScreen() {
                     width: 93,
                     height: 121,
                     borderRadius: 5,
-                    backgroundColor: "#FFF",
+                    backgroundColor: colors.card,
                     padding: 14,
                     transform: [{ rotate: "-4deg" }],
                     borderWidth: 1,
-                    borderColor: "#DDE3DD",
+                    borderColor: colors.line,
                   }}
                 >
                   <View style={[s.row, { gap: 5, marginBottom: 15 }]}>
                     <FileText size={13} color={colors.blueDark} />
-                    <Text style={{ fontSize: 7, color: colors.blueDark }}>DOCUMENT</Text>
+                    <Text style={{ fontSize: 7, color: colors.blueDark }}>سند</Text>
                   </View>
                   {[100, 75, 90, 95, 60].map((width, i) => (
                     <View
                       key={width}
                       style={{
                         height: 3,
-                        backgroundColor: i === 0 ? "#A4BED0" : "#E3E7E3",
+                        backgroundColor: i === 0 ? "#A4BED0" : colors.line,
                         width: `${width}%`,
                         marginBottom: 7,
                         borderRadius: 3,
@@ -1021,8 +1110,8 @@ export function FilesScreen() {
                     />
                   ))}
                 </View>
-                <View style={{ position: "absolute", bottom: 12, right: 14 }}>
-                  <Chip>PDF</Chip>
+                <View style={{ position: "absolute", bottom: 12, end: 14 }}>
+                  <Chip>{fileKindLabel(f)}</Chip>
                 </View>
               </View>
               <View style={{ padding: 21, gap: 6 }}>
@@ -1030,8 +1119,7 @@ export function FilesScreen() {
                   {f.name}
                 </Text>
                 <Text style={s.small}>
-                  {f.pageCount} {f.pageCount === 1 ? "page" : "pages"} ·{" "}
-                  {Math.max(1, Math.round(f.size / 1024))} KB
+                  {`${fileExtent(f)} · ${faNumber(Math.max(1, Math.round(f.size / 1024)))} کیلوبایت`}
                 </Text>
                 <View style={[s.between, { marginTop: 9 }]}>
                   <Chip>{f.source}</Chip>
@@ -1046,8 +1134,8 @@ export function FilesScreen() {
         <Card>
           <Empty
             icon={FileText}
-            title="Your documents live here"
-            detail="Import a PDF or open a mail attachment to read, fill supported form fields, and share a copy."
+            title="اسناد شما اینجا هستند"
+            detail="یک PDF، سند Word، فایل Excel، CSV یا عکس (مثل فاکتور یا کارت ویزیت) وارد کنید یا پیوست یک ایمیل را باز کنید. دستیار متن اسناد و تصاویر را می‌خواند و فیلدهای فرم‌های PDF را پر می‌کند."
           />
         </Card>
       )}
@@ -1063,15 +1151,15 @@ export function ActivityScreen() {
     <View style={{ gap: 20 }}>
       <View style={[s.row, { gap: 10 }]}>
         <Button small primary={filter === "all"} onPress={() => setFilter("all")}>
-          All activity
+          همهٔ فعالیت‌ها
         </Button>
         <Button small primary={filter === "review"} onPress={() => setFilter("review")}>
-          Needs review · {pending.length}
+          {`نیازمند بررسی · ${faNumber(pending.length)}`}
         </Button>
       </View>
       {actions.length > 0 && (
         <Card>
-          <SectionHeading title="Your actions" />
+          <SectionHeading title="اقدامات شما" />
           {actions.map((a) => (
             <Pressable
               key={a.id}
@@ -1103,22 +1191,22 @@ export function ActivityScreen() {
               <Chip
                 tint={
                   a.status === "failed"
-                    ? "#FBEFED"
+                    ? colors.dangerSoft
                     : a.status === "awaiting_review"
                       ? colors.lavender
                       : colors.canvas
                 }
               >
-                {a.status.replace(/_/g, " ")}
+                {statusName(a.status)}
               </Chip>
-              <ChevronRight size={16} color={colors.muted} />
+              <ChevronLeft size={16} color={colors.muted} />
             </Pressable>
           ))}
         </Card>
       )}
       {filter === "all" && (
         <Card>
-          <SectionHeading title="Workspace timeline" />
+          <SectionHeading title="گاه‌شمار فضای کار" />
           {w.activity.length ? (
             w.activity.map((a, i) => (
               <View
@@ -1146,14 +1234,14 @@ export function ActivityScreen() {
                     {dateLabel(a.date)} · {timeLabel(a.date)}
                   </Text>
                 </View>
-                <Chip>{a.status}</Chip>
+                <Chip>{statusName(a.status)}</Chip>
               </View>
             ))
           ) : (
             <Empty
               icon={Clock3}
-              title="The beginning of something lighter"
-              detail="Your actions and their results will be recorded here."
+              title="آغاز چیزی سبک‌تر"
+              detail="اقدامات شما و نتایجشان اینجا ثبت می‌شود. برای شروع، کاری را از دستیار بخواهید."
             />
           )}
         </Card>
@@ -1162,8 +1250,8 @@ export function ActivityScreen() {
         <Card>
           <Empty
             icon={ShieldCheck}
-            title="You’re all caught up"
-            detail="When an email or calendar change needs your approval, it will appear here."
+            title="همه‌چیز به‌روز است"
+            detail="وقتی ایمیل یا تغییری در تقویم به تأیید شما نیاز داشته باشد، اینجا نمایش داده می‌شود."
           />
         </Card>
       )}
@@ -1185,10 +1273,10 @@ export function ConnectionsScreen({ query = "" }: { query?: string }) {
       );
       if (result.url) {
         await Linking.openURL(result.url);
-        notify("Finish connecting in your browser, then refresh your workspace.");
+        notify("اتصال را در مرورگرتان کامل کنید، سپس فضای کارتان را تازه‌سازی کنید.");
       } else {
         await refresh();
-        notify("Local Google data is ready.");
+        notify("داده‌های محلی Google آماده است.");
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -1202,7 +1290,7 @@ export function ConnectionsScreen({ query = "" }: { query?: string }) {
     try {
       await api.request("/api/google/disconnect", {});
       await refresh();
-      notify("Google disconnected.");
+      notify("اتصال Google قطع شد.");
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -1211,11 +1299,21 @@ export function ConnectionsScreen({ query = "" }: { query?: string }) {
   }
   const google = w.connections.find((c) => c.id === "google");
   const connected = google?.status === "connected" || google?.status === "sample";
+  const googleUnconfigured = google?.status === "unconfigured";
+  const imap = w.connections.find((c) => c.id === "imap");
   const rows = [
+    {
+      id: "imap",
+      name: "ایمیل (IMAP/SMTP)",
+      icon: AtSign,
+      color: "#1473C8",
+      connected: imap?.status === "connected",
+      group: "imap",
+    },
     { id: "gmail", name: "Gmail", icon: Mail, color: "#EA5B4D", connected, group: "google" },
     {
       id: "calendar",
-      name: "Google Calendar",
+      name: "تقویم گوگل",
       icon: CalendarDays,
       color: "#4285F4",
       connected,
@@ -1223,11 +1321,19 @@ export function ConnectionsScreen({ query = "" }: { query?: string }) {
     },
     {
       id: "browser",
-      name: "Agent computer",
+      name: "رایانهٔ دستیار",
       icon: Globe2,
       color: "#1987CF",
       connected: w.connections.some((c) => c.id === "browser" && c.status === "connected"),
       group: "browser",
+    },
+    {
+      id: "messenger",
+      name: "بله و تلگرام",
+      icon: MessageCircle,
+      color: "#2AABEE",
+      connected: false,
+      group: "messenger",
     },
     {
       id: "openbot",
@@ -1245,19 +1351,21 @@ export function ConnectionsScreen({ query = "" }: { query?: string }) {
         if (!group.length) return null;
         return (
           <View key={String(isConnected)} style={{ gap: 8 }}>
-            <Text style={[s.small, { marginLeft: 12 }]}>
+            <Text style={[s.small, { marginStart: 12 }]}>
               {isConnected
                 ? w.mode === "sample"
-                  ? "Your connections"
-                  : "Connected"
-                : "Available integrations"}
+                  ? "اتصال‌های شما"
+                  : "متصل"
+                : "یکپارچه‌سازی‌های در دسترس"}
             </Text>
-            <View style={{ paddingHorizontal: 16, borderRadius: 23, backgroundColor: "#F3F4F5" }}>
+            <View
+              style={{ paddingHorizontal: 16, borderRadius: 23, backgroundColor: colors.subtle }}
+            >
               {group.map((row, index) => (
                 <Pressable
                   key={row.id}
                   accessibilityRole="button"
-                  accessibilityLabel={`Manage ${row.name}`}
+                  accessibilityLabel={`مدیریت ${row.name}`}
                   onPress={() =>
                     row.group === "browser" ? open({ type: "computer" }) : setSelected(row.group)
                   }
@@ -1267,7 +1375,7 @@ export function ConnectionsScreen({ query = "" }: { query?: string }) {
                       gap: 14,
                       minHeight: 61,
                       borderBottomWidth: index < group.length - 1 ? 1 : 0,
-                      borderBottomColor: "#E5E7E9",
+                      borderBottomColor: colors.line,
                     },
                   ]}
                 >
@@ -1276,7 +1384,7 @@ export function ConnectionsScreen({ query = "" }: { query?: string }) {
                       width: 29,
                       height: 29,
                       borderRadius: 7,
-                      backgroundColor: "#FFF",
+                      backgroundColor: colors.card,
                       alignItems: "center",
                       justifyContent: "center",
                     }}
@@ -1285,18 +1393,32 @@ export function ConnectionsScreen({ query = "" }: { query?: string }) {
                   </View>
                   <Text style={[s.text, { flex: 1 }]}>{row.name}</Text>
                   {row.connected && row.group === "google" && w.mode === "sample" && (
-                    <Text style={s.small}>Local data</Text>
+                    <Text style={s.small}>داده‌های محلی</Text>
+                  )}
+                  {row.connected && row.group === "imap" && imap?.account && (
+                    <Text style={[s.small, { writingDirection: "ltr", flexShrink: 1 }]}>
+                      {imap.account}
+                    </Text>
                   )}
                   {row.connected ? (
-                    <ChevronRight size={18} color="#A4A7AA" />
+                    <ChevronLeft size={18} color={colors.faint} />
                   ) : (
                     <Text
                       style={{
                         fontSize: 13,
-                        color: row.group === "google" ? colors.blueDark : colors.muted,
+                        color:
+                          row.group === "google" || row.group === "imap"
+                            ? colors.blueDark
+                            : colors.muted,
                       }}
                     >
-                      {row.group === "google" ? "Connect" : "Setup"}
+                      {row.group === "google"
+                        ? googleUnconfigured
+                          ? "پیکربندی نشده"
+                          : "اتصال"
+                        : row.group === "imap"
+                          ? "اتصال"
+                          : "راه‌اندازی"}
                     </Text>
                   )}
                 </Pressable>
@@ -1305,71 +1427,112 @@ export function ConnectionsScreen({ query = "" }: { query?: string }) {
           </View>
         );
       })}
-      {!rows.length && <Text style={s.muted}>No matching connectors.</Text>}
-      {selected && (
+      {!rows.length && (
+        <Text style={s.muted}>اتصالی مطابق جست‌وجو پیدا نشد. عبارت دیگری را امتحان کنید.</Text>
+      )}
+      {selected === "imap" && (
+        <MailboxSheet connection={imap} onClose={() => setSelected(undefined)} />
+      )}
+      {selected && selected !== "imap" && (
         <Sheet
-          title={selected === "google" ? "Google connections" : "OpenBot"}
-          subtitle={selected === "google" ? google?.account : "A computer for your agent"}
+          title={
+            selected === "google"
+              ? "اتصال‌های Google"
+              : selected === "messenger"
+                ? "اتصال به بله/تلگرام"
+                : "OpenBot"
+          }
+          subtitle={
+            selected === "google"
+              ? google?.account
+              : selected === "messenger"
+                ? "گفت‌وگو با دستیار در پیام‌رسان"
+                : "رایانه‌ای برای دستیار شما"
+          }
           onClose={() => setSelected(undefined)}
         >
           {selected === "google" ? (
             <View style={{ gap: 18 }}>
               <Text style={s.muted}>
-                Bring Gmail and Google Calendar into your conversations. Choose read access, then
-                enable sending and editing when you need it.
+                Gmail و تقویم گوگل را به گفت‌وگوهایتان بیاورید. ابتدا دسترسی خواندن را انتخاب کنید و
+                هر وقت لازم شد، ارسال و ویرایش را فعال کنید.
               </Text>
               <View style={[s.row, { gap: 7, flexWrap: "wrap" }]}>
                 {google?.capabilities.map((cap) => (
                   <Chip key={cap}>{capabilityLabel(cap)}</Chip>
                 ))}
               </View>
+              {googleUnconfigured && (
+                <Text style={s.muted}>
+                  Google روی این سرور پیکربندی نشده است. برای فعال‌سازی Gmail و تقویم، مدیر سرور باید
+                  GOOGLE_CLIENT_ID و GOOGLE_CLIENT_SECRET را تنظیم کند.
+                </Text>
+              )}
               <ErrorNotice error={error} />
-              <Button busy={busy} primary icon={Link2} onPress={() => void connect("read")}>
-                Connect Google
+              <Button
+                busy={busy}
+                primary
+                icon={Link2}
+                disabled={googleUnconfigured}
+                onPress={() => void connect("read")}
+              >
+                اتصال Google
               </Button>
-              <Button busy={busy} onPress={() => void connect("write")}>
-                Enable sending & editing
+              <Button
+                busy={busy}
+                disabled={googleUnconfigured}
+                onPress={() => void connect("write")}
+              >
+                فعال‌سازی ارسال و ویرایش
               </Button>
               {connected && (
                 <Button busy={busy} danger onPress={() => void disconnect()}>
-                  Disconnect Google
+                  قطع اتصال Google
                 </Button>
               )}
               <SettingsLine
-                label="Environment"
-                value={w.mode === "sample" ? "Local · example data" : "Live workspace"}
+                label="محیط"
+                value={w.mode === "sample" ? "محلی · داده‌های نمونه" : "فضای کار زنده"}
               />
               <SettingsLine
-                label="Assistant"
+                label="دستیار"
                 value={
                   w.runtime.provider === "sample"
-                    ? "Guided workflows"
+                    ? "گردش‌کارهای راهنما"
                     : w.runtime.configured
-                      ? "Model connected"
-                      : "Model not configured"
+                      ? "مدل متصل است"
+                      : "مدل پیکربندی نشده است"
                 }
               />
               <SettingsLine
-                label="Rich Threads"
-                value={w.runtime.richThreads ? "CopilotKit Intelligence" : "Not connected"}
+                label="رشته‌گفت‌وگوهای غنی"
+                value={
+                  w.runtime.richThreads
+                    ? "CopilotKit Intelligence"
+                    : w.runtime.localThreads
+                      ? "پایگاه‌دادهٔ همین سرور"
+                      : "متصل نیست"
+                }
               />
               <Button
                 small
                 icon={ArrowDownToLine}
                 onPress={() => void refresh().catch((e) => setError(String(e)))}
               >
-                Refresh connections
+                تازه‌سازی اتصال‌ها
               </Button>
             </View>
+          ) : selected === "messenger" ? (
+            <MessengerLinkPanel />
           ) : (
             <View style={{ gap: 14 }}>
               <Text style={s.text}>
-                The OpenBot adapter is available in this open-source project. A live OpenBot backend
-                has not been configured.
+                آداپتور OpenBot در این پروژهٔ متن‌باز در دسترس است، اما هنوز هیچ بک‌اند زنده‌ای برای
+                OpenBot پیکربندی نشده است.
               </Text>
               <Text style={s.muted}>
-                Your current computer uses OpenMuse’s persistent Chromium worker. OpenBot
-                integration will expand the execution backend while keeping this interface.
+                رایانهٔ فعلی شما از کارگزار ماندگار Chromium در {BRAND.nameFa} استفاده می‌کند.
+                یکپارچه‌سازی OpenBot بک‌اند اجرا را گسترش می‌دهد و همین رابط را حفظ می‌کند.
               </Text>
             </View>
           )}
@@ -1387,7 +1550,7 @@ function SettingsLine({ label, value }: { label: string; value: string }) {
       ]}
     >
       <Text style={s.muted}>{label}</Text>
-      <Text style={[s.text, { fontSize: 12, flexShrink: 1, textAlign: "right" }]}>{value}</Text>
+      <Text style={[s.text, { fontSize: 12, flexShrink: 1, textAlign: "auto" }]}>{value}</Text>
     </View>
   );
 }
@@ -1395,12 +1558,12 @@ function SettingsLine({ label, value }: { label: string; value: string }) {
 function capabilityLabel(value: string) {
   const scope = value.split("/").at(-1) || value;
   const names: Record<string, string> = {
-    "gmail.readonly": "Read Gmail",
-    "gmail.send": "Send Gmail",
-    "calendar.events.readonly": "Read calendar events",
-    "calendar.calendarlist.readonly": "Read calendar list",
-    "calendar.events": "Manage calendar events",
-    "calendar.readonly": "Read calendars",
+    "gmail.readonly": "خواندن Gmail",
+    "gmail.send": "ارسال با Gmail",
+    "calendar.events.readonly": "خواندن رویدادهای تقویم",
+    "calendar.calendarlist.readonly": "خواندن فهرست تقویم‌ها",
+    "calendar.events": "مدیریت رویدادهای تقویم",
+    "calendar.readonly": "خواندن تقویم‌ها",
   };
   return names[scope] || scope;
 }

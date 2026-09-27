@@ -61,13 +61,18 @@ export async function modelFixture(
   assert.ok(address && typeof address !== "string");
   const previousBase = process.env.OPENAI_BASE_URL;
   const previousKey = process.env.OPENAI_API_KEY;
+  const previousEmbedding = process.env.EMBEDDING_MODEL;
   process.env.OPENAI_BASE_URL = `http://127.0.0.1:${address.port}/v1`;
   process.env.OPENAI_API_KEY = "local-test-fixture";
+  // File indexing would otherwise send /embeddings requests to this chat-only fixture.
+  process.env.EMBEDDING_MODEL = "off";
   t.after(async () => {
     if (previousBase === undefined) delete process.env.OPENAI_BASE_URL;
     else process.env.OPENAI_BASE_URL = previousBase;
     if (previousKey === undefined) delete process.env.OPENAI_API_KEY;
     else process.env.OPENAI_API_KEY = previousKey;
+    if (previousEmbedding === undefined) delete process.env.EMBEDDING_MODEL;
+    else process.env.EMBEDDING_MODEL = previousEmbedding;
     server.closeAllConnections();
     await new Promise<void>((resolve) => server.close(() => resolve()));
   });

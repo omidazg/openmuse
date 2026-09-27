@@ -12,20 +12,20 @@ export default function DateFields({ label, date, time, allDay, onChange }: Date
     <View style={{ flexDirection: "row", gap: 12 }}>
       <View style={{ flex: 1.2 }}>
         <Field
-          label={`${label} date`}
+          label={`تاریخ ${label}`}
           value={date}
           onChangeText={(value) => onChange(value, time)}
-          placeholder="YYYY-MM-DD"
+          placeholder="مثلاً ۲۰۲۶-۰۹-۱۵ (میلادی)"
           keyboardType="numbers-and-punctuation"
         />
       </View>
       {!allDay && (
         <View style={{ flex: 1 }}>
           <Field
-            label={`${label} time`}
+            label={`ساعت ${label}`}
             value={time}
             onChangeText={(value) => onChange(date, value)}
-            placeholder="HH:MM (24-hour)"
+            placeholder="مثلاً ۱۴:۳۰ (۲۴ ساعته)"
             keyboardType="numbers-and-punctuation"
           />
         </View>

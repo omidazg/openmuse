@@ -1,6 +1,7 @@
 import { ChevronLeft, ChevronRight, Minus, Plus } from "lucide-react-native";
 import { useState } from "react";
 import { Text, View } from "react-native";
+import { faDigits } from "./locale";
 import { Button, s } from "./ui";
 
 interface PdfReaderProps {
@@ -15,38 +16,40 @@ export default function PdfReader({ url, pageCount }: PdfReaderProps) {
     <View style={{ gap: 12 }}>
       <View style={[s.between, { gap: 8, flexWrap: "wrap" }]}>
         <View style={[s.row, { gap: 8 }]}>
-          <Button small icon={ChevronLeft} disabled={page <= 1} onPress={() => setPage(page - 1)}>
-            Previous
+          <Button small icon={ChevronRight} disabled={page <= 1} onPress={() => setPage(page - 1)}>
+            قبلی
           </Button>
           <Text style={s.small}>
-            {page} / {pageCount}
+            {faDigits(page)} از {faDigits(pageCount)}
           </Text>
           <Button
             small
-            icon={ChevronRight}
+            icon={ChevronLeft}
             disabled={page >= pageCount}
             onPress={() => setPage(page + 1)}
           >
-            Next
+            بعدی
           </Button>
         </View>
         <View style={[s.row, { gap: 8 }]}>
           <Button small icon={Minus} disabled={zoom <= 50} onPress={() => setZoom(zoom - 25)}>
-            Zoom out
+            کوچک‌نمایی
           </Button>
-          <Text style={s.small}>{zoom}%</Text>
+          <Text style={s.small}>{faDigits(`${zoom}٪`)}</Text>
           <Button small icon={Plus} disabled={zoom >= 200} onPress={() => setZoom(zoom + 25)}>
-            Zoom in
+            بزرگ‌نمایی
           </Button>
         </View>
       </View>
       <iframe
         key={`${page}:${zoom}`}
-        title="PDF document reader"
+        title="نمایشگر سند PDF"
         src={`${url}#page=${page}&zoom=${zoom}`}
         style={{ height: 570, width: "100%", border: 0, borderRadius: 12, background: "#e7e9e3" }}
       />
-      <Text style={s.small}>Use the reader toolbar to download or print a copy.</Text>
+      <Text style={s.small}>
+        برای دانلود یا چاپ نسخه‌ای از سند، از نوار ابزار نمایشگر استفاده کنید.
+      </Text>
     </View>
   );
 }

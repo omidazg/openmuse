@@ -17,7 +17,7 @@ test("disabled computer reports setup without invoking Docker", async () => {
   const f = fixture();
   const service = new ComputerService(db, { ...config, computerEnabled: false }, f.runner);
   assert.equal((await service.snapshot("owner")).status, "unconfigured");
-  await assert.rejects(service.execute("owner", { command: "pwd" }), /not configured/);
+  await assert.rejects(service.execute("owner", { command: "pwd" }), /پیکربندی نشده/);
   assert.equal(f.calls.length, 0);
 });
 
@@ -59,7 +59,7 @@ test("a running command holds an atomic lease across service instances", async (
   const second = new ComputerService(db, config, f.runner);
   const run = first.execute("owner", { command: "sleep 1" });
   await started;
-  await assert.rejects(second.execute("owner", { command: "pwd" }), /busy/);
+  await assert.rejects(second.execute("owner", { command: "pwd" }), /مشغول/);
   finish?.(ok());
   await run;
 });
@@ -116,7 +116,7 @@ test("attaching an existing container fails closed on unsafe isolation or owner 
     modify(inspect);
     const f = fixture({ inspect });
     const service = new ComputerService(db, config, f.runner);
-    await assert.rejects(service.execute("owner", { command: "pwd" }), /isolation|ownership/);
+    await assert.rejects(service.execute("owner", { command: "pwd" }), /ایزوله|مالکیت/);
     assert.ok(!f.calls.some((c) => c.args[0] === "exec"));
   }
 });
@@ -196,7 +196,7 @@ test("restart waits until a delayed pre-stop Docker execution acknowledges compl
   try {
     await ready;
     await service.stop("owner");
-    await assert.rejects(service.start("owner"), /busy/);
+    await assert.rejects(service.start("owner"), /مشغول/);
   } finally {
     release?.();
     await command;
@@ -235,7 +235,7 @@ test("failed Stop keeps commands quarantined and can be retried before the lease
   try {
     await ready;
     await assert.rejects(service.stop("owner"), /Docker/);
-    await assert.rejects(service.start("owner"), /busy/);
+    await assert.rejects(service.start("owner"), /مشغول/);
     assert.equal((await service.stop("owner")).status, "stopped");
   } finally {
     release?.();
@@ -260,7 +260,7 @@ test("a timeout with unconfirmed Docker cleanup stays quarantined until Stop suc
     return f.runner(args, options);
   });
   assert.equal((await service.execute("owner", { command: "sleep 99" })).status, "timed_out");
-  await assert.rejects(service.start("owner"), /busy/);
+  await assert.rejects(service.start("owner"), /مشغول/);
   failStop = false;
   assert.equal((await service.stop("owner")).status, "stopped");
   assert.equal((await service.start("owner")).status, "running");

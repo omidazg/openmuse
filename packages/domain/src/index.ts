@@ -1,5 +1,21 @@
 import { z } from "zod";
 
+/** Normalize Persian (۰–۹) and Arabic-Indic (٠–٩) digits to ASCII before parsing. */
+export function toLatinDigits(text: string): string {
+  return text
+    .replace(/[۰-۹]/g, (d) => String(d.charCodeAt(0) - 0x06f0))
+    .replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - 0x0660));
+}
+/** Parse a typed amount such as «۱۲٬۵۰۰» or "12,500.5"; returns NaN when it is not a number. */
+export function parseAmount(text: string): number {
+  const normalized = toLatinDigits(text)
+    .trim()
+    .replace(/[٬,\s]/g, "")
+    .replace("٫", ".")
+    .replace(/(?:تومان|ریال|دلار)$/u, "");
+  return normalized ? Number(normalized) : Number.NaN;
+}
+
 export type WorkspaceMode = "sample" | "live";
 export type Section =
   | "today"
@@ -49,6 +65,9 @@ export interface Artifact {
   source: string;
   parentId?: string;
   fields?: { name: string; value: string; type: "text" | "checkbox" | "unsupported" }[];
+  /** Word, Excel and CSV files: characters of extracted plain text available to the agent. */
+  textLength?: number;
+  textTruncated?: boolean;
 }
 export interface BrowserSession {
   id: string;
@@ -68,7 +87,7 @@ export const emailDraftSchema = z.object({
     .trim()
     .min(1)
     .max(998)
-    .refine((s) => !/[\r\n]/.test(s), "Subject must be a single line"),
+    .refine((s) => !/[\r\n]/.test(s), "موضوع باید در یک خط باشد"),
   body: z.string().min(1).max(100000),
   attachmentIds: z.array(z.string()).max(10).default([]),
   threadId: z.string().optional(),
@@ -78,10 +97,10 @@ export const eventDraftSchema = z
   .object({
     calendarId: z.string().default("primary"),
     title: z.string().trim().min(1).max(500),
-    start: z.string().min(1),
-    end: z.string().min(1),
+    start: z.string().overwrite(toLatinDigits).min(1),
+    end: z.string().overwrite(toLatinDigits).min(1),
     allDay: z.boolean().default(false),
-    timeZone: z.string().default("America/Los_Angeles"),
+    timeZone: z.string().default("Asia/Tehran"),
     location: z.string().max(2000).default(""),
     description: z.string().max(10000).default(""),
     attendees: z.array(z.email()).max(50).default([]),
@@ -92,7 +111,11 @@ export const eventDraftSchema = z
       !Number.isFinite(Date.parse(value.end)) ||
       Date.parse(value.end) <= Date.parse(value.start)
     ) {
-      ctx.addIssue({ code: "custom", message: "End must be after a valid start", path: ["end"] });
+      ctx.addIssue({
+        code: "custom",
+        message: "زمان پایان باید بعد از یک زمان شروع معتبر باشد",
+        path: ["end"],
+      });
     }
     const dateOnly = /^\d{4}-\d{2}-\d{2}$/;
     const timed = /^\d{4}-\d{2}-\d{2}T.*(?:Z|[+-]\d{2}:\d{2})$/;
@@ -103,15 +126,15 @@ export const eventDraftSchema = z
       ctx.addIssue({
         code: "custom",
         message: value.allDay
-          ? "All-day events need date-only values"
-          : "Timed events need an explicit offset",
+          ? "رویدادهای تمام‌روز فقط به تاریخ (بدون ساعت) نیاز دارند"
+          : "رویدادهای ساعت‌دار باید اختلاف ساعت مشخص داشته باشند",
         path: ["start"],
       });
     }
     try {
       new Intl.DateTimeFormat("en", { timeZone: value.timeZone });
     } catch {
-      ctx.addIssue({ code: "custom", message: "Invalid time zone", path: ["timeZone"] });
+      ctx.addIssue({ code: "custom", message: "منطقهٔ زمانی نامعتبر است", path: ["timeZone"] });
     }
   });
 export const proposalSchema = z.discriminatedUnion("kind", [
@@ -168,6 +191,10 @@ export interface Connection {
   status: "connected" | "disconnected" | "sample" | "unconfigured";
   account?: string;
   capabilities: string[];
+  /** Last successful sync (UTC ISO), for connectors that mirror a mailbox. */
+  syncedAt?: string;
+  /** Persian description of the last background failure, if any. */
+  error?: string;
 }
 export interface Workspace {
   mode: WorkspaceMode;
@@ -184,6 +211,8 @@ export interface Workspace {
     configured: boolean;
     openbotConfigured: boolean;
     richThreads?: boolean;
+    /** Multi-thread history stored in OpenMuse's own database (THREADS_BACKEND=local). */
+    localThreads?: boolean;
   };
 }
 
@@ -194,4 +223,5 @@ export interface ExecutionBackend {
   health(): Promise<{ available: boolean; detail: string }>;
 }
 
+export { BRAND, type Brand } from "./brand.ts";
 export type { ComputerCommand, ComputerDirectory, ComputerSnapshot } from "./computer.ts";
