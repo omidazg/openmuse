@@ -9,7 +9,7 @@ const config: ExpoConfig = {
   // deep links and store listings. Keep them stable unless deliberately migrating.
   slug: brand.technical.slug,
   scheme: brand.technical.scheme,
-  version: "0.1.0",
+  version: "1.0.0",
   orientation: "default",
   // Follows the system light/dark setting (see src/theme.ts).
   userInterfaceStyle: "automatic",
@@ -21,6 +21,8 @@ const config: ExpoConfig = {
   },
   android: {
     package: brand.technical.androidPackage,
+    // Must grow with every build handed to users or stores; CI passes the run number.
+    versionCode: Number(process.env.ANDROID_VERSION_CODE ?? "1"),
     adaptiveIcon: {
       foregroundImage: "./assets/adaptive-icon.png",
       backgroundColor: "#1B74CC",
@@ -50,6 +52,7 @@ const config: ExpoConfig = {
     "@config-plugins/react-native-blob-util",
     "@config-plugins/react-native-pdf",
     "expo-font",
+    "./plugins/with-release-signing",
   ],
 };
 
