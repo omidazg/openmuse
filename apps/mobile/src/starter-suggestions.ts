@@ -17,6 +17,8 @@ export interface StarterContext {
   now?: Date;
   files?: readonly { id: string; name: string; createdAt: string; parentId?: string }[];
   events?: readonly { title: string; start: string; allDay: boolean }[];
+  /** Starters of the person's «مسیرهای من» (e.g. `pathStarters(profile, 2)`); at most two lead. */
+  pathStarters?: readonly StarterSuggestion[];
 }
 
 const DAY = 86_400_000;
@@ -63,8 +65,9 @@ const GENERAL: StarterSuggestion[] = [
 
 /**
  * Four starters for the empty chat, picked from Tehran time of day, the Iranian weekday,
- * holidays and occasions of the coming week, and the person's recent files and events.
- * Pure: the same input always gives the same output.
+ * holidays and occasions of the coming week, and the person's recent files and events. Starters
+ * from the person's paths, when given, come first (at most two). Pure: the same input always
+ * gives the same output.
  */
 export function starterSuggestions(context: StarterContext = {}): StarterSuggestion[] {
   const now = context.now ?? new Date();
@@ -72,7 +75,9 @@ export function starterSuggestions(context: StarterContext = {}): StarterSuggest
   const tomorrow = addDays(today, 1);
   const weekday = new Date(`${today}T00:00:00Z`).getUTCDay();
   const part = tehranPartOfDay(now);
-  const picks: StarterSuggestion[] = [];
+  const picks: StarterSuggestion[] = (context.pathStarters ?? [])
+    .slice(0, 2)
+    .map(({ id, label, prompt }) => ({ id, label, prompt }));
 
   // 1. The nearest holiday or occasion of the coming week (holidays win on the same day).
   const occasion = getHolidays(today, addDays(today, 7))[0];
@@ -170,5 +175,11 @@ export function starterSuggestions(context: StarterContext = {}): StarterSuggest
   // 5. Everyday fallbacks.
   picks.push(...GENERAL);
   const seen = new Set<string>();
-  return picks.filter((item) => !seen.has(item.id) && seen.add(item.id)).slice(0, 4);
+  return picks
+    .filter((item) => {
+      if (seen.has(item.id) || seen.has(`label:${item.label}`)) return false;
+      seen.add(item.id).add(`label:${item.label}`);
+      return true;
+    })
+    .slice(0, 4);
 }

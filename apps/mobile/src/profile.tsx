@@ -82,7 +82,10 @@ export type ProfilePatch = Partial<
 type ProfileValue = {
   /** Undefined while loading. */
   profile?: UserProfile;
-  /** Optimistic save to PUT /api/agent/profile; resolves with the server's copy. */
+  /**
+   * Optimistic save to PUT /api/agent/profile; resolves with the server's copy. On failure the
+   * previous profile is restored and the error rethrown.
+   */
   save: (patch: ProfilePatch) => Promise<UserProfile>;
 };
 const ProfileContext = createContext<ProfileValue | null>(null);
@@ -132,7 +135,9 @@ export function ProfileProvider({ api, children }: { api: MuseApi; children: Rea
   }, [api]);
   const save = useCallback(
     async (patch: ProfilePatch) => {
+      let previous: UserProfile | undefined;
       setProfile((current) => {
+        previous = current;
         const next = sanitizeProfile({
           ...(current ?? EMPTY_PROFILE),
           ...patch,
@@ -141,9 +146,17 @@ export function ProfileProvider({ api, children }: { api: MuseApi; children: Rea
         writeCache(next);
         return next;
       });
-      const saved = sanitizeProfile(
-        await api.request<UserProfile>("/api/agent/profile", patch, "PUT"),
-      );
+      let saved: UserProfile;
+      try {
+        saved = sanitizeProfile(await api.request<UserProfile>("/api/agent/profile", patch, "PUT"));
+      } catch (error) {
+        // Undo the optimistic change so the screen matches what the server kept.
+        if (previous) {
+          writeCache(previous);
+          setProfile(previous);
+        }
+        throw error;
+      }
       writeCache(saved);
       setProfile(saved);
       return saved;

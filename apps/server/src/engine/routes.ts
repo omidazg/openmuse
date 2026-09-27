@@ -6,6 +6,7 @@ import type {
   AgentNotification,
 } from "../../../../packages/domain/src/agent.ts";
 import { AppError } from "../errors.ts";
+import { profilePatchSchema, readProfile, saveProfile } from "../profile.ts";
 import {
   memoryText,
   personalSettingsSchema,
@@ -125,6 +126,12 @@ export function agentRoutes(service: AgentService): Hono<{ Variables: { owner: s
   app.post("/personal", async (c) => {
     const body = personalSettingsSchema.parse(await c.req.json());
     return c.json(await savePersonal(service.db, c.get("owner"), body));
+  });
+  // «مسیرهای من»: sending `paths` (even []) records the choice time.
+  app.get("/profile", async (c) => c.json(await readProfile(service.db, c.get("owner"))));
+  app.put("/profile", async (c) => {
+    const body = profilePatchSchema.parse(await c.req.json());
+    return c.json(await saveProfile(service.db, c.get("owner"), body));
   });
   app.get("/threads/:threadId/persona", async (c) => {
     const threadId = threadIdSchema.parse(c.req.param("threadId"));

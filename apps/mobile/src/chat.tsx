@@ -32,6 +32,7 @@ import {
 } from "react-native";
 import { z } from "zod";
 import { BRAND } from "../../../packages/domain/src/brand";
+import { pathStarters } from "../../../packages/domain/src/paths";
 import { findPersona, type Persona } from "../../../packages/domain/src/personal";
 import { ArtifactCard } from "./agent-ui";
 import { useAgentWorkspace } from "./agent-workspace";
@@ -57,7 +58,11 @@ import { MailToolCard } from "./mail-tool-card";
 import { CopyButton, Markdown } from "./markdown-view";
 import { ModelPicker } from "./model-picker";
 import { useRetryOnReconnect } from "./offline";
+import { PathTags, PathWelcome, PersonaChips, PersonaSuggestion } from "./path-chat";
+import { PathSetupSheet } from "./path-picker";
 import { PersonaBanner } from "./personal";
+import { usePreferences } from "./preferences";
+import { pathIcon, useProfile } from "./profile";
 import { AnswerActions } from "./share-sheet";
 import { SpeakButton } from "./speech";
 import { starterSuggestions } from "./starter-suggestions";
@@ -267,7 +272,7 @@ export function ChatScreen({
   thread?: Selection;
   active?: boolean;
 }) {
-  const { api, workspace: w, refresh, navigate } = useWorkspace();
+  const { api, workspace: w, refresh } = useWorkspace();
   const { data: agentWorkspace, refresh: refreshAgent } = useAgentWorkspace();
   const { enabled: multiThread, backend, mainId, claimPrompt } = useMuseThread();
   // Intelligence replays and persists through CopilotKit; "local" and "off" save the message
@@ -320,7 +325,21 @@ export function ChatScreen({
   const [historyError, setHistoryError] = useState("");
   const [historyAttempt, setHistoryAttempt] = useState(0);
   const [editing, setEditing] = useState<{ id: string; text: string } | null>(null);
-  const persona = useThreadPersona(multiThread ? threadId : undefined);
+  const {
+    persona,
+    known: personaKnown,
+    refresh: refreshPersona,
+  } = useThreadPersona(multiThread ? threadId : undefined);
+  const { profile, save: saveProfile } = useProfile();
+  const { preferences } = usePreferences();
+  const [pathSetup, setPathSetup] = useState(false);
+  // Existing people (onboarding already done) who never chose or skipped paths.
+  const invitePaths =
+    !!preferences?.onboardingDone &&
+    !!profile &&
+    profile.chosenAt === null &&
+    !profile.inviteDismissed;
+  const fromPaths = profile ? pathStarters(profile, 2) : [];
   useEffect(() => {
     if (!isReady) return;
     let active = true;
@@ -560,6 +579,7 @@ export function ChatScreen({
               </View>
             ) : (
               <>
+                <PathTags profile={profile} onChange={() => setPathSetup(true)} />
                 <Text
                   style={{
                     fontSize: 28,
@@ -576,6 +596,15 @@ export function ChatScreen({
                   بگویید به چه فکر می‌کنید. می‌توانم برنامه بریزم، با برنامه‌هایتان کار کنم و برای کمک
                   از رایانهٔ خودم استفاده کنم.
                 </Text>
+                <PathWelcome
+                  profile={profile}
+                  invite={invitePaths}
+                  onSetup={() => setPathSetup(true)}
+                  onDismissInvite={() =>
+                    void saveProfile({ inviteDismissed: true }).catch(() => {})
+                  }
+                  send={enqueue}
+                />
               </>
             )}
             <View style={{ width: "100%", maxWidth: 360, marginTop: 14, gap: 8 }}>
@@ -583,19 +612,29 @@ export function ChatScreen({
                 ? persona.starters.map((text) => ({
                     id: text,
                     label: text,
+                    icon: undefined,
                     action: () => setDraft(text),
                   }))
-                : starterSuggestions({ files: w.files, events: w.events }).map((item) => ({
-                    id: item.id,
-                    label: item.label,
-                    action: () => enqueue(item.prompt),
-                  }))
+                : starterSuggestions({
+                    files: w.files,
+                    events: w.events,
+                    pathStarters: fromPaths,
+                  }).map((item) => {
+                    const fromPath = fromPaths.find((starter) => starter.id === item.id);
+                    return {
+                      id: item.id,
+                      label: item.label,
+                      icon: fromPath ? pathIcon(fromPath.icon) : undefined,
+                      action: () => enqueue(item.prompt),
+                    };
+                  })
               ).map((item) => (
-                <Button key={item.id} onPress={item.action}>
+                <Button key={item.id} icon={item.icon} onPress={item.action}>
                   {item.label}
                 </Button>
               ))}
             </View>
+            {!persona && <PersonaChips profile={profile} />}
           </View>
         ) : (
           <>
@@ -752,6 +791,36 @@ export function ChatScreen({
                 </View>
               );
             })}
+            {multiThread &&
+              personaKnown &&
+              !persona &&
+              !replying &&
+              !outbox.pending.length &&
+              !!lastAssistantId && (
+                <PersonaSuggestion
+                  threadId={threadId}
+                  profile={profile}
+                  text={visible
+                    .filter((message) => message.role === "user")
+                    .slice(-3)
+                    .map((message) => (typeof message.content === "string" ? message.content : ""))
+                    .join("\n")}
+                  pin={async (personaId) => {
+                    await api.request(
+                      `/api/agent/threads/${encodeURIComponent(threadId)}/persona`,
+                      { personaId },
+                    );
+                    refreshPersona();
+                  }}
+                  onPrompt={(text) => {
+                    // A prompt ending in «:» waits for pasted text, so it goes to the composer.
+                    if (text.trimEnd().endsWith(":")) {
+                      setDraft(`${text} `);
+                      input.current?.focus();
+                    } else enqueue(text);
+                  }}
+                />
+              )}
           </>
         )}
         {!multiThread && (
@@ -1112,6 +1181,7 @@ export function ChatScreen({
         </View>
       </KeyboardAvoidingView>
       {dragging && <DropOverlay />}
+      {pathSetup && <PathSetupSheet onClose={() => setPathSetup(false)} />}
     </View>
   );
 }
@@ -1147,12 +1217,26 @@ function MessageAction({
     </Pressable>
   );
 }
-/** The ready-made assistant pinned to a conversation, if any (server is the source of truth). */
-function useThreadPersona(threadId: string | undefined): Persona | undefined {
+/**
+ * The ready-made assistant pinned to a conversation, if any (server is the source of truth).
+ * `known` is true once the server answered; `refresh` reads it again (e.g. after pinning one).
+ */
+function useThreadPersona(threadId: string | undefined): {
+  persona?: Persona;
+  known: boolean;
+  refresh: () => void;
+} {
   const { api } = useWorkspace();
   const [persona, setPersona] = useState<Persona>();
+  const [known, setKnown] = useState(false);
+  const [refreshed, setRefreshed] = useState({ threadId, count: 0 });
+  const attempt = refreshed.threadId === threadId ? refreshed.count : 0;
   useEffect(() => {
-    setPersona(undefined);
+    // A refresh keeps the current banner until the new answer arrives.
+    if (attempt === 0) {
+      setPersona(undefined);
+      setKnown(false);
+    }
     if (!threadId) return;
     let active = true;
     void api
@@ -1160,12 +1244,18 @@ function useThreadPersona(threadId: string | undefined): Persona | undefined {
         `/api/agent/threads/${encodeURIComponent(threadId)}/persona`,
       )
       .then((result) => {
-        if (active) setPersona(findPersona(result.personaId));
+        if (!active) return;
+        setPersona(findPersona(result.personaId));
+        setKnown(true);
       })
       .catch(() => {});
     return () => {
       active = false;
     };
-  }, [api, threadId]);
-  return persona;
+  }, [api, threadId, attempt]);
+  const refresh = useCallback(
+    () => setRefreshed((current) => ({ threadId, count: current.count + 1 })),
+    [threadId],
+  );
+  return { persona, known, refresh };
 }

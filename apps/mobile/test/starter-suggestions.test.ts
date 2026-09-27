@@ -78,6 +78,41 @@ test("always four unique starters", () => {
   }
 });
 
+test("path starters lead (at most two), then the usual ones fill to four", () => {
+  const now = "2026-10-07T04:30:00Z";
+  const path = [
+    { id: "finance-spending", label: "خرج‌ها", prompt: "خرج‌ها را تحلیل کن", icon: "chart-pie" },
+    { id: "business-caption", label: "کپشن", prompt: "کپشن بنویس" },
+    { id: "legal-lease", label: "اجاره", prompt: "قرارداد اجاره" },
+  ];
+  const result = starterSuggestions({ now: new Date(now), pathStarters: path });
+  assert.deepEqual(
+    result.map((item) => item.id),
+    ["finance-spending", "business-caption", "news", "today-plan"],
+  );
+  // Only the StarterSuggestion fields are kept.
+  assert.deepEqual(result[0], {
+    id: "finance-spending",
+    label: "خرج‌ها",
+    prompt: "خرج‌ها را تحلیل کن",
+  });
+  // Empty paths change nothing.
+  assert.deepEqual(ids(now, { pathStarters: [] }), ids(now));
+});
+
+test("path starters never duplicate a usual starter by id or label", () => {
+  const now = "2026-10-07T09:30:00Z";
+  const sameLabel = { id: "office-prices", label: "قیمت امروز دلار، سکه و طلا", prompt: "قیمت" };
+  const sameId = { id: "calendar", label: "تقویم من", prompt: "تقویم" };
+  const result = starterSuggestions({ now: new Date(now), pathStarters: [sameLabel, sameId] });
+  assert.deepEqual(
+    result.map((item) => item.id),
+    ["office-prices", "calendar", "news", "letter"],
+  );
+  assert.equal(result[1].label, "تقویم من");
+  assert.equal(new Set(result.map((item) => item.label)).size, 4);
+});
+
 test("changelog: unseen entries are those newer than the saved id", () => {
   assert.equal(new Set(CHANGELOG.map((entry) => entry.id)).size, CHANGELOG.length);
   assert.equal(unseenChangelog(null).length, CHANGELOG.length);

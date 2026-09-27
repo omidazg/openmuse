@@ -1,7 +1,6 @@
 import { useThreads } from "@copilotkit/react-native/headless";
 import {
   Archive,
-  Brain,
   CalendarDays,
   FileText,
   Keyboard,
@@ -14,6 +13,7 @@ import {
   RefreshCw,
   Settings2,
   Share2,
+  SlidersHorizontal,
   Tag,
   Users,
 } from "lucide-react-native";
@@ -28,12 +28,15 @@ import {
 } from "react";
 import { ActivityIndicator, Pressable, Text, View } from "react-native";
 import { BRAND } from "../../../packages/domain/src/brand";
+import { type PathShortcut, pathShortcuts } from "../../../packages/domain/src/paths";
 import type { MuseApi } from "./api";
 import { hasPhysicalKeyboard } from "./composer-shortcuts";
 import { DisplayMenuRows } from "./display-settings";
 import { faNumber } from "./locale";
+import { PathShortcutGrid } from "./path-settings";
 import { PersonaList } from "./personal";
 import { usePreferences } from "./preferences";
+import { useProfile } from "./profile";
 import { useSession } from "./session";
 import { ShareSheet, useShareThreadId } from "./share-sheet";
 import {
@@ -281,8 +284,13 @@ export function ThreadsSheet({
     select,
     start,
   } = useMuseThread();
-  const { workspace, open, navigate, refresh, api } = useWorkspace();
+  const { workspace, open, navigate, refresh, api, ask } = useWorkspace();
   const { me, logout, openAdmin, refreshMe } = useSession();
+  const { profile } = useProfile();
+  // Ready-made assistants need separate conversations, so without them only prompts are offered.
+  const shortcuts = profile
+    ? pathShortcuts(profile, 4).filter((item) => enabled || item.prompt)
+    : [];
   const { unseenCount, openWhatsNew } = usePreferences();
   // Usage changes with every message; refresh it whenever the menu opens.
   useEffect(() => refreshMe(), [refreshMe]);
@@ -352,6 +360,14 @@ export function ThreadsSheet({
       setError(e instanceof Error ? e.message : String(e));
     }
   }
+  /** A new conversation (with its assistant, if any) whose first message is the prompt. */
+  function runShortcut(item: PathShortcut) {
+    void mutate(async () => {
+      if (enabled) await start(item.personaId);
+      if (item.prompt) ask(item.prompt);
+      onClose();
+    });
+  }
   function go(section: "calendar" | "files" | "apps") {
     onClose();
     navigate(section);
@@ -364,6 +380,7 @@ export function ThreadsSheet({
       drawer
     >
       <View style={{ gap: 14 }}>
+        <PathShortcutGrid shortcuts={shortcuts} onPick={runShortcut} />
         {enabled && !loading && <SearchBox value={query} onChange={setQuery} />}
         {enabled && loading ? (
           <>
@@ -531,9 +548,9 @@ export function ThreadsSheet({
         <LinkRow icon={CalendarDays} title="تقویم" onPress={() => go("calendar")} />
         <LinkRow icon={FileText} title="فایل‌ها" onPress={() => go("files")} />
         <LinkRow
-          icon={Brain}
-          title="حافظه"
-          detail="دستورهای سفارشی و نکته‌های ذخیره‌شده"
+          icon={SlidersHorizontal}
+          title="شخصی‌سازی"
+          detail="مسیرهای من، دستورهای سفارشی و حافظه"
           onPress={() => {
             onClose();
             open({ type: "memory" });

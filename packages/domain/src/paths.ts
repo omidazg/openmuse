@@ -57,6 +57,8 @@ export interface PathOption {
   id: string;
   /** Persian chip label. */
   label: string;
+  /** Persian phrase that makes sense without the question, e.g. «مشمول ارزش افزوده». */
+  summary?: string;
 }
 
 /** One optional follow-up question; ids are globally unique ("<path>.<name>"). */
@@ -111,10 +113,10 @@ export interface PathDefinition {
   defaultLength?: PathResponseLength;
 }
 
-const YES_NO_UNKNOWN: PathOption[] = [
-  { id: "yes", label: "هستم" },
-  { id: "no", label: "نیستم" },
-  { id: "unknown", label: "نمی‌دانم" },
+const VAT_OPTIONS: PathOption[] = [
+  { id: "yes", label: "هستم", summary: "مشمول ارزش افزوده" },
+  { id: "no", label: "نیستم", summary: "غیرمشمول ارزش افزوده" },
+  { id: "unknown", label: "نمی‌دانم", summary: "وضعیت ارزش افزوده نامعلوم" },
 ];
 
 export const PATHS: readonly PathDefinition[] = [
@@ -176,13 +178,13 @@ export const PATHS: readonly PathDefinition[] = [
           { id: "both", label: "هر دو" },
         ],
       },
-      { id: "finance.vat", label: "مشمول مالیات بر ارزش افزوده هستید؟", options: YES_NO_UNKNOWN },
+      { id: "finance.vat", label: "مشمول مالیات بر ارزش افزوده هستید؟", options: VAT_OPTIONS },
       {
         id: "finance.employees",
         label: "کارمند بیمه‌شده دارید؟",
         options: [
-          { id: "yes", label: "دارم" },
-          { id: "no", label: "ندارم" },
+          { id: "yes", label: "دارم", summary: "کارمند بیمه‌شده دارد" },
+          { id: "no", label: "ندارم", summary: "بدون کارمند بیمه‌شده" },
         ],
       },
     ],
@@ -428,7 +430,8 @@ export const PATHS: readonly PathDefinition[] = [
         id: "university-translate",
         label: "ترجمهٔ تخصصی",
         icon: "languages",
-        prompt: "این متن تخصصی را دقیق و روان ترجمه کن و اصطلاحات را توضیح بده:",
+        prompt:
+          "یک متن تخصصی برایت می‌فرستم؛ آن را دقیق و روان ترجمه کن و اصطلاحات مهمش را توضیح بده.",
       },
     ],
     questions: [
@@ -515,7 +518,7 @@ export const PATHS: readonly PathDefinition[] = [
       {
         id: "developer-error",
         label: "این خطا را توضیح بده",
-        prompt: "این پیام خطا را برایت می‌فرستم؛ علتش را توضیح بده و راه رفع آن را با کد نشان بده:",
+        prompt: "یک پیام خطا برایت می‌فرستم؛ علتش را توضیح بده و راه رفع آن را با کد نشان بده.",
         icon: "bug",
       },
       {
@@ -531,7 +534,8 @@ export const PATHS: readonly PathDefinition[] = [
         id: "developer-review",
         label: "بازبینی کد",
         icon: "code",
-        prompt: "این کد را بازبینی کن؛ اشکال‌ها، خطرهای امنیتی و راه ساده‌تر را بگو:",
+        prompt:
+          "یک تکه کد برایت می‌فرستم؛ بازبینی‌اش کن و اشکال‌ها، خطرهای امنیتی و راه ساده‌تر را بگو.",
       },
     ],
     questions: [
@@ -568,7 +572,10 @@ export const PATHS: readonly PathDefinition[] = [
 export interface UserProfile {
   /** Chosen paths in the order picked; empty means «عمومی». */
   paths: PathId[];
-  /** Follow-up answers: question id → chosen option ids. */
+  /**
+   * Follow-up answers: question id → chosen option ids. Answers of a path that was switched off
+   * are kept so switching it on again restores them; only selected paths are ever used.
+   */
   details: Record<string, string[]>;
   /** Deadline reminders (e.g. tax returns) on the chat screen. */
   reminders: boolean;
@@ -605,22 +612,19 @@ export function selectedPaths(profile: Pick<UserProfile, "paths">): PathDefiniti
 }
 
 /**
- * Keeps only known paths (deduplicated, at most PATH_MAX) and answers to questions of the
- * selected paths with known options (single-choice questions keep one).
+ * Keeps only known paths (deduplicated, at most PATH_MAX) and answers with known options to known
+ * questions of any path (single-choice questions keep one).
  */
 export function sanitizeProfile(input: Partial<UserProfile> | undefined | null): UserProfile {
   const paths = [
     ...new Set((input?.paths ?? []).filter((id): id is PathId => Boolean(findPath(id)))),
   ].slice(0, PATH_MAX);
   const details: Record<string, string[]> = {};
-  for (const path of paths.map(findPath)) {
-    for (const question of path?.questions ?? []) {
-      const known = new Set(question.options.map((option) => option.id));
-      const answers = [...new Set(input?.details?.[question.id] ?? [])].filter((id) =>
-        known.has(id),
-      );
-      if (answers.length) details[question.id] = question.multi ? answers : answers.slice(0, 1);
-    }
+  for (const question of PATHS.flatMap((path) => path.questions)) {
+    const known = new Set(question.options.map((option) => option.id));
+    const raw = input?.details?.[question.id];
+    const answers = [...new Set(Array.isArray(raw) ? raw : [])].filter((id) => known.has(id));
+    if (answers.length) details[question.id] = question.multi ? answers : answers.slice(0, 1);
   }
   return {
     paths,
@@ -634,6 +638,15 @@ export function sanitizeProfile(input: Partial<UserProfile> | undefined | null):
 
 function answered(profile: UserProfile, questionId: string, optionId: string) {
   return (profile.details[questionId] ?? []).includes(optionId);
+}
+
+/** Chosen answers of one path as short Persian phrases (option summary, else its label). */
+export function answerSummary(profile: Pick<UserProfile, "details">, pathId: PathId): string[] {
+  return (findPath(pathId)?.questions ?? []).flatMap((question) =>
+    question.options
+      .filter((option) => (profile.details[question.id] ?? []).includes(option.id))
+      .map((option) => option.summary ?? option.label),
+  );
 }
 
 /** Up to `count` starters, one per path in turn (first path first). */
@@ -730,7 +743,7 @@ export interface DeadlineRule {
   /** Jalali month (1–12) and day; "end" is the last day of that month. Empty months = every month. */
   months: number[];
   day: number | "end";
-  /** Applies only when this follow-up answer was chosen. */
+  /** Applies only when this follow-up answer was chosen; an unanswered question counts as «unknown». */
   when?: { question: string; anyOf: string[] };
 }
 
@@ -813,7 +826,12 @@ export function upcomingDeadlines(
   for (const rule of DEADLINE_RULES) {
     if (!profile.paths.includes(rule.pathId)) continue;
     const when = rule.when;
-    if (when && !when.anyOf.some((id) => answered(profile, when.question, id))) continue;
+    const answers = profile.details[when?.question ?? ""] ?? [];
+    if (
+      when &&
+      !when.anyOf.some((id) => answers.includes(id) || (id === "unknown" && !answers.length))
+    )
+      continue;
     const months = rule.months.length ? rule.months : [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
     for (const jy of [year, year + 1])
       for (const jm of months) {

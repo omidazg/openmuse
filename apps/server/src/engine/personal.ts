@@ -9,6 +9,7 @@ import { createHash } from "node:crypto";
 import { defineTool } from "@copilotkit/runtime/v2";
 import { z } from "zod";
 import type { AgentMemory } from "../../../../packages/domain/src/agent.ts";
+import { pathPrompt, type UserProfile } from "../../../../packages/domain/src/paths.ts";
 import {
   CUSTOM_INSTRUCTION_MAX,
   DEFAULT_PERSONAL_SETTINGS,
@@ -23,6 +24,7 @@ import {
 import type { Store } from "../db.ts";
 import { AppError } from "../errors.ts";
 import { AUTO_MODEL, type ModelCatalog, modelOptions } from "../models.ts";
+import { readProfile } from "../profile.ts";
 
 const MEMORIES = "memories";
 const SETTINGS_KIND = "agent-settings";
@@ -126,6 +128,8 @@ export interface PersonalPromptInput {
   settings: PersonalSettings;
   memories: AgentMemory[];
   persona?: Persona;
+  /** «مسیرهای من»: app-defined path hints plus the chosen option labels (trusted). */
+  profile?: UserProfile;
   /** Chat turns have remember/forget tools; delegated tasks only read memory. */
   memoryTools?: boolean;
 }
@@ -135,6 +139,7 @@ export function personalInstructions({
   settings,
   memories,
   persona,
+  profile,
   memoryTools = true,
 }: PersonalPromptInput): string {
   const parts: string[] = [];
@@ -142,6 +147,9 @@ export function personalInstructions({
     parts.push(
       ` ACTIVE ASSISTANT (chosen by the user for this conversation, defined by the app): you are acting as «${persona.name}». ${persona.instructions} All earlier rules (language, safety, tools, approvals) still apply.`,
     );
+  // Built only from PATHS definitions and option labels, so it sits with the trusted text.
+  const focus = profile ? pathPrompt(profile) : "";
+  if (focus) parts.push(focus);
   if (!settings.memoryEnabled)
     parts.push(
       " LONG-TERM MEMORY IS OFF: the user turned memory off. Do not save or recall facts across conversations and do not claim you will remember anything; if asked to remember, say memory is off and can be turned on in «حافظه»." +
@@ -210,10 +218,11 @@ export async function personalContext(
   owner: string,
   options: { threadId?: string; catalog?: ModelCatalog; memoryTools?: boolean } = {},
 ): Promise<{ prompt: string; model?: string }> {
-  const [settings, memories, persona] = await Promise.all([
+  const [settings, memories, persona, profile] = await Promise.all([
     readPersonal(db, owner),
     db.list<AgentMemory>(owner, MEMORIES),
     options.threadId ? threadPersona(db, owner, options.threadId) : undefined,
+    readProfile(db, owner),
   ]);
   const preferred = persona?.preferredModel;
   const model =
@@ -228,6 +237,7 @@ export async function personalContext(
       settings,
       memories,
       persona,
+      profile,
       memoryTools: options.memoryTools,
     }),
     model,

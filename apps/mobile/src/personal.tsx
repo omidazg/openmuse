@@ -22,6 +22,7 @@ import {
 } from "../../../packages/domain/src/personal";
 import { useAgentWorkspace } from "./agent-workspace";
 import { faDateTime, faNumber, fw } from "./locale";
+import { PathSettings } from "./path-settings";
 import { Button, Card, CheckRow, colors, ErrorNotice, Field, LinkRow, Sheet, s } from "./ui";
 import { useWorkspace } from "./workspace";
 
@@ -45,7 +46,9 @@ function Counter({ value, max }: { value: string; max: number }) {
   );
 }
 
-/** «حافظه»: custom instructions, the memory toggle and the saved memory list. */
+/**
+ * «شخصی‌سازی»: «مسیرهای من», custom instructions, the memory toggle and the saved memory list.
+ */
 export function MemorySheet() {
   const { close, notify } = useWorkspace();
   const { data, mutate } = useAgentWorkspace();
@@ -79,11 +82,12 @@ export function MemorySheet() {
   const enabled = personal?.memoryEnabled !== false;
   return (
     <Sheet
-      title="حافظه"
-      subtitle="آنچه دستیار دربارهٔ شما می‌داند و روشی که دوست دارید پاسخ بگیرید."
+      title="شخصی‌سازی"
+      subtitle="مسیرهای کاری شما، آنچه دستیار دربارهٔ شما می‌داند و روشی که دوست دارید پاسخ بگیرید."
       onClose={close}
     >
       <View style={{ gap: 16 }}>
+        <PathSettings />
         <ErrorNotice error={error} />
         <Card style={{ gap: 4 }}>
           <Text style={s.heading}>دستورهای سفارشی</Text>
